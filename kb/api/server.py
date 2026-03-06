@@ -28,6 +28,9 @@ logging.basicConfig(
     format="[%(levelname)s] [%(name)s] %(message)s",
     stream=sys.stderr,
 )
+# Silence noisy HTTP client loggers (httpx logs every POST at INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _load_timeout_from_env(name: str, default: float) -> float:

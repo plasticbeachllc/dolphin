@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -220,14 +221,28 @@ def add_repo(
     # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
     if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
-            typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
             try:
-                pipeline.index(name, dry_run=False, force=False)
-                typer.echo(f"⛵ Indexing complete for {name}")
-            except Exception as e:
-                _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
-                typer.echo(f"🚩 Indexing failed: {e}", err=True)
+                _run_index_with_progress(
+                    pipeline,
+                    name,
+                    config,
+                    cancel_hint=f"Repository '{name}' was registered. Run 'dolphin index {name}' to resume.",
+                )
+            except typer.Exit as e:
+                if e.exit_code == 130:
+                    # Registration succeeded; the user only cancelled the optional indexing step.
+                    return
+                raise
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except Exception:
+                # Repo was already registered — don't crash the CLI on indexing failure.
+                # _run_index_with_progress already printed the error and traceback.
+                typer.echo(
+                    f"Repository '{name}' was registered. Run 'dolphin index {name}' to retry indexing.", err=True
+                )
+                raise typer.Exit(code=1)
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
@@ -281,64 +296,61 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
     return progress, _rich_callback
 
 
-@app.command()
-def index(
-    name: str = typer.Argument(..., help="Name of the repository to index."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
-    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
-    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
-    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
-    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
-) -> None:
-    """Run the full indexing pipeline for the specified repository.
+def _run_index_with_progress(
+    pipeline: IngestionPipeline,
+    name: str,
+    config: KBConfig,
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+    full_reindex: bool = False,
+    parallel: bool = True,
+    max_workers: int | None = None,
+    cancel_hint: str | None = None,
+) -> dict[str, Any]:
+    """Run indexing with progress display, SIGINT handling, prune, and server reload.
 
-    Requirements:
-      - The repository MUST already be registered in the metadata store.
-        Register once with: uv run dolphin add-repo <name> <abs/repo/path>
+    Shared by both ``add-repo`` (when the user confirms indexing) and the
+    standalone ``index`` command so they stay in sync.
+
+    On failure the error and traceback are printed to stderr before re-raising,
+    so callers can catch the exception without duplicating output.
+
+    Args:
+        cancel_hint: If provided, replaces the default "Run the same command
+            again" guidance shown when the user cancels with Ctrl-C.
     """
-    config = load_config()
-
-    # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
-    metadata.initialize()
-    repo_record = metadata.get_repo_by_name(name)
-    if not repo_record:
-        typer.echo(
-            "Error: Repository not registered. Register once with: uv run dolphin add-repo <name> <abs/repo/path>",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-
-    pipeline = _build_pipeline(config)
+    from .pipeline import _CancelledError
 
     # Crash recovery: abort any sessions left running from a prior CLI invocation
-    # (the server does this on startup, but CLI callers need it too)
-    aborted = metadata.abort_stale_sessions(
-        repo_id=int(repo_record["id"]),
-        reason="Aborted on CLI startup: previous indexing session did not complete cleanly",
-    )
-    if aborted:
-        typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
+    metadata = pipeline.metadata
+    repo_record = metadata.get_repo_by_name(name)
+    if repo_record:
+        aborted = metadata.abort_stale_sessions(
+            repo_id=int(repo_record["id"]),
+            reason="Aborted on CLI startup: previous indexing session did not complete cleanly",
+        )
+        if aborted:
+            typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
 
-    # Install SIGINT handler so Ctrl-C stops cleanly between files
     _original_sigint = signal.getsignal(signal.SIGINT)
 
-    def _sigint_handler(signum, frame):
+    def _sigint_handler(signum: int, frame: object) -> None:
         typer.echo("\nInterrupt received — stopping after current files…")
         pipeline.request_cancel()
-
-    signal.signal(signal.SIGINT, _sigint_handler)
 
     progress_display, progress_callback = _create_progress_display()
 
     mode = "parallel" if parallel else "sequential"
-    ctx: dict[str, object] = {"mode": mode}
+    status_ctx: dict[str, object] = {"mode": mode}
     if parallel:
-        ctx["workers"] = workers or "auto"
-    print_status(f"Indexing {name}", level="step", context=ctx)
+        status_ctx["workers"] = max_workers or "auto"
+    print_status(f"Indexing {name}", level="step", context=status_ctx)
 
     t0 = time.monotonic()
+    result: dict[str, Any] = {}
     progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
+    signal.signal(signal.SIGINT, _sigint_handler)
     try:
         with progress_ctx:
             if parallel:
@@ -347,8 +359,8 @@ def index(
                         name,
                         dry_run=dry_run,
                         force=force,
-                        full_reindex=full,
-                        max_workers=workers,
+                        full_reindex=full_reindex,
+                        max_workers=max_workers,
                         progress_callback=progress_callback,
                     )
                 )
@@ -357,20 +369,17 @@ def index(
                     name,
                     dry_run=dry_run,
                     force=force,
-                    full_reindex=full,
+                    full_reindex=full_reindex,
                     progress_callback=progress_callback,
                 )
 
+    except (KeyboardInterrupt, _CancelledError):
+        typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
+        hint = cancel_hint or "Run the same command again to continue from where you left off."
+        typer.echo(hint)
+        raise typer.Exit(code=130)
     except Exception as e:
-        from .pipeline import _CancelledError
-
-        if isinstance(e, (KeyboardInterrupt, _CancelledError)):
-            typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
-            typer.echo("Run the same command again to continue from where you left off.")
-            raise typer.Exit(code=130)
-        typer.echo(f"Indexing failed: {e}")
-        import traceback
-
+        typer.echo(f"Indexing failed: {e}", err=True)
         traceback.print_exc()
         raise
     finally:
@@ -415,6 +424,55 @@ def index(
 
     # Notify server to reload
     _notify_server_reload(config)
+
+    return result
+
+
+@app.command()
+def index(
+    name: str = typer.Argument(..., help="Name of the repository to index."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
+    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
+) -> None:
+    """Run the full indexing pipeline for the specified repository.
+
+    Requirements:
+      - The repository MUST already be registered in the metadata store.
+        Register once with: uv run dolphin add-repo <name> <abs/repo/path>
+    """
+    config = load_config()
+
+    # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
+    metadata.initialize()
+    repo_record = metadata.get_repo_by_name(name)
+    if not repo_record:
+        typer.echo(
+            "Error: Repository not registered. Register once with: uv run dolphin add-repo <name> <abs/repo/path>",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    pipeline = _build_pipeline(config)
+    try:
+        _run_index_with_progress(
+            pipeline,
+            name,
+            config,
+            dry_run=dry_run,
+            force=force,
+            full_reindex=full,
+            parallel=parallel,
+            max_workers=workers,
+        )
+    except (typer.Exit, SystemExit, KeyboardInterrupt):
+        raise
+    except Exception:
+        # _run_index_with_progress already printed the error and traceback
+        raise typer.Exit(code=1)
 
 
 def _notify_server_reload(config: KBConfig) -> None:
@@ -544,10 +602,6 @@ def _prune_ignored_files(
     if repo_level_exceptions:
         ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
     ignore_patterns.update(extra_security)
-
-    # Manually add bun.lock patterns to test
-    ignore_patterns.add("bun.lock")
-    ignore_patterns.add("**/bun.lock")
 
     ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 
