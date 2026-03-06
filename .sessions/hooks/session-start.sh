@@ -4,6 +4,16 @@ set -uo pipefail
 WORKSPACE="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$WORKSPACE"
 
+# Diagnostics — remove after confirming the hook works
+echo "=== session-start diagnostics ==="
+echo "pwd: $(pwd)"
+echo "uname: $(uname -sm)"
+echo "CLAUDE_ENV_FILE: ${CLAUDE_ENV_FILE:-<unset>}"
+for cmd in curl git uv bun just; do
+  printf "%-6s %s\n" "$cmd:" "$(command -v $cmd 2>/dev/null || echo 'NOT FOUND')"
+done
+echo "================================="
+
 # Claude Code sets CLAUDE_ENV_FILE for SessionStart hooks; write exports there
 # to persist env vars across the session.
 append_env() { [ -n "${CLAUDE_ENV_FILE:-}" ] && echo "$1" >> "$CLAUDE_ENV_FILE" || true; }
