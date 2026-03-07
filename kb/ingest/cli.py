@@ -646,9 +646,7 @@ def _prune_ignored_files(
     # Rebuild FTS5 indexes after bulk deletes to prevent corruption
     if not dry_run and pruned_files:
         _log.debug("Rebuilding FTS5 tables after pruning %d files", len(pruned_files))
-        _FTS_TABLES = ("chunks_fts", "code_nodes_fts")
-        for table in _FTS_TABLES:
-            assert table in _FTS_TABLES  # safeguard: only known FTS table names
+        for table in ("chunks_fts", "code_nodes_fts"):
             try:
                 with metadata._connect() as conn:
                     cur = conn.cursor()

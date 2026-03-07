@@ -621,7 +621,8 @@ class SQLiteMetadataStore:
 
         Returns True if rebuild succeeded, False otherwise.
         """
-        assert table_name in self._KNOWN_FTS_TABLES, f"Unexpected FTS table: {table_name}"
+        if table_name not in self._KNOWN_FTS_TABLES:
+            raise ValueError(f"Unexpected FTS table: {table_name}")
         try:
             with self._connect() as conn:
                 cur = conn.cursor()
@@ -645,12 +646,17 @@ class SQLiteMetadataStore:
             if integrity_result and integrity_result[0] != "ok":
                 msg = integrity_result[0]
                 # Check if this is FTS5-specific corruption that we can auto-repair
-                if "fts" in msg.lower():
+                if "malformed inverted index for fts5 table" in msg.lower():
                     logger.warning(f"[SQLiteMeta] FTS5 integrity issue detected: {msg}")
                     # Try to rebuild all FTS5 tables (each opens its own connection)
+                    rebuild_ok = True
                     for table in self._KNOWN_FTS_TABLES:
                         if self._table_exists(cur, table):
-                            self._rebuild_fts_table(table)
+                            if not self._rebuild_fts_table(table):
+                                rebuild_ok = False
+                                logger.warning(f"[SQLiteMeta] Failed to rebuild FTS5 table {table}")
+                    if not rebuild_ok:
+                        raise RuntimeError(f"Database integrity check failed: FTS5 rebuild failed for {msg}")
                     # Re-check integrity after rebuild
                     cur.execute("PRAGMA integrity_check")
                     recheck = cur.fetchone()

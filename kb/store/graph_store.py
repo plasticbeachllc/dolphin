@@ -552,14 +552,15 @@ class GraphStore:
                     (file_id,),
                 )
 
-                # Delete nodes
+                # Delete nodes (plain DELETE — rowcount is reliable here)
                 cur.execute("DELETE FROM code_nodes WHERE file_id = ?", (file_id,))
                 deleted = cur.rowcount
 
-                # Always rebuild FTS5 index after bulk deletes to prevent corruption.
-                # rowcount is unreliable with CTE-based DELETEs, so rebuild unconditionally
-                # (the operation is idempotent).
-                cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                # Rebuild FTS5 index after bulk deletes to prevent corruption.
+                # Guard on `deleted` (the plain DELETE rowcount) to avoid unnecessary
+                # O(n) rebuilds when no nodes existed for this file.
+                if deleted > 0:
+                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
 
                 conn.commit()
                 return deleted
@@ -590,14 +591,15 @@ class GraphStore:
                     (repo_id,),
                 )
 
-                # Delete nodes
+                # Delete nodes (plain DELETE — rowcount is reliable here)
                 cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
                 deleted = cur.rowcount
 
-                # Always rebuild FTS5 index after bulk deletes to prevent corruption.
-                # rowcount is unreliable with CTE-based DELETEs, so rebuild unconditionally
-                # (the operation is idempotent).
-                cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                # Rebuild FTS5 index after bulk deletes to prevent corruption.
+                # Guard on `deleted` (the plain DELETE rowcount) to avoid unnecessary
+                # O(n) rebuilds when no nodes existed for this repo.
+                if deleted > 0:
+                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
 
                 conn.commit()
                 return deleted
