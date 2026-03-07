@@ -611,14 +611,48 @@ class SQLiteMetadataStore:
             # FTS5 support already checked, so this is a different error
             raise RuntimeError(f"Failed to create code_nodes_fts table: {e}")
 
+    def _rebuild_fts_table(self, cur: sqlite3.Cursor, conn: sqlite3.Connection, table_name: str) -> bool:
+        """Rebuild an FTS5 table's inverted index.
+
+        Returns True if rebuild succeeded, False otherwise.
+        """
+        try:
+            cur.execute(f"INSERT INTO {table_name}({table_name}, rank) VALUES('rebuild', -1)")  # noqa: S608
+            conn.commit()
+            logger.info(f"[SQLiteMeta] Successfully rebuilt FTS5 table {table_name}")
+            return True
+        except Exception as e:
+            logger.error(f"[SQLiteMeta] Failed to rebuild FTS5 table {table_name}: {e}")
+            conn.rollback()
+            return False
+
     def _validate_database_integrity(self) -> None:
-        """Perform comprehensive database integrity validation."""
+        """Perform comprehensive database integrity validation.
+
+        For FTS5 corruption, attempts auto-repair via index rebuild before failing.
+        """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Check database integrity
             cur.execute("PRAGMA integrity_check")
             integrity_result = cur.fetchone()
             if integrity_result and integrity_result[0] != "ok":
-                raise RuntimeError(f"Database integrity check failed: {integrity_result[0]}")
+                msg = integrity_result[0]
+                # Check if this is FTS5-specific corruption that we can auto-repair
+                if "fts" in msg.lower():
+                    logger.warning(f"[SQLiteMeta] FTS5 integrity issue detected: {msg}")
+                    # Try to rebuild all FTS5 tables
+                    fts_tables = ["chunks_fts", "code_nodes_fts"]
+                    for table in fts_tables:
+                        if self._table_exists(cur, table):
+                            self._rebuild_fts_table(cur, conn, table)
+                    # Re-check integrity after rebuild
+                    cur.execute("PRAGMA integrity_check")
+                    recheck = cur.fetchone()
+                    if recheck and recheck[0] != "ok":
+                        raise RuntimeError(f"Database integrity check failed after FTS5 rebuild: {recheck[0]}")
+                    logger.info("[SQLiteMeta] FTS5 integrity restored after rebuild")
+                else:
+                    raise RuntimeError(f"Database integrity check failed: {msg}")
 
             # Check for orphaned records
             orphaned_checks = [
@@ -2651,6 +2685,19 @@ class SQLiteMetadataStore:
                     raise RuntimeError(f"Cleanup validation failed: {post_cleanup_counts}")
 
                 conn.commit()
+
+                # Rebuild FTS5 indexes after bulk deletes to prevent corruption
+                fts_tables_to_rebuild = []
+                if fts_cleanup_stats.get("by_content_id", 0) + fts_cleanup_stats.get("by_repo_name", 0) > 0:
+                    fts_tables_to_rebuild.append("chunks_fts")
+                if code_nodes_fts_deleted > 0:
+                    fts_tables_to_rebuild.append("code_nodes_fts")
+                for table in fts_tables_to_rebuild:
+                    try:
+                        cur.execute(f"INSERT INTO {table}({table}, rank) VALUES('rebuild', -1)")  # noqa: S608
+                        conn.commit()
+                    except Exception as e:
+                        logger.warning(f"Failed to rebuild FTS5 table {table} after repo removal: {e}")
 
             except Exception as e:
                 conn.rollback()
