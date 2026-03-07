@@ -55,13 +55,19 @@ jobs:
       - name: Audit JS dependencies (${{ matrix.project }})
         if: steps.install.outputs.found == 'true'
         working-directory: ${{ matrix.project }}
-        # No ignored vulnerabilities. All previously known issues are resolved via overrides
-        # in root package.json:
+        # All previously known issues are resolved via overrides in root package.json:
         #   - hono >=4.12.5: fixes GHSA-5pq2-9x2x-5p6w, GHSA-p6xx-57qc-3wxr, GHSA-q5qw-h33p-qvwr
         #   - @hono/node-server 1.19.11: fixes GHSA-wc8c-qw6v-h7f6
         #   - express-rate-limit 8.3.0: fixes GHSA-46wh-pxpv-q5gq
         #   - minimatch >=10.2.3: fixes ReDoS vulnerabilities
         #   - qs 6.15.0, body-parser 2.2.2: fixes prototype pollution
-        #   - ajv GHSA-2g4f-4pwh-qvx6 (ReDoS): resolved transitively — dependency updates
-        #     pulled ajv 6.14.0 (the fix version) for the previously-vulnerable ajv <6.14.0 path
-        run: bun audit
+        #
+        # GHSA-2g4f-4pwh-qvx6 (CVE-2025-69873): ajv ReDoS when using $data option
+        # - Severity: MODERATE
+        # - Affects: ajv <6.14.0 (transitive dep from @modelcontextprotocol/sdk and eslint)
+        # - Reason for ignoring: Cannot use a global "ajv" override because eslint internally
+        #   depends on ajv@8.x and the override causes API incompatibility. The $data option
+        #   (required to trigger the vulnerability) is not used in our JSON schema validation.
+        # - Upstream fix: requires @modelcontextprotocol/sdk and eslint to update their
+        #   transitive ajv@6.x dependency. Monitor for updates.
+        run: bun audit --ignore=GHSA-2g4f-4pwh-qvx6
