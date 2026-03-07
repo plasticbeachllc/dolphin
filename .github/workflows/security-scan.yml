@@ -3,6 +3,8 @@ name: Security Scan
 on:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly on Monday at 8am UTC
 
 permissions:
   contents: read
@@ -70,4 +72,5 @@ jobs:
         #   (required to trigger the vulnerability) is not used in our JSON schema validation.
         # - Upstream fix: requires @modelcontextprotocol/sdk and eslint to update their
         #   transitive ajv@6.x dependency. Monitor for updates.
+        # - Added: 2026-03-06
         run: bun audit --ignore=GHSA-2g4f-4pwh-qvx6
