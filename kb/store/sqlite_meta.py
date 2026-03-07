@@ -611,7 +611,7 @@ class SQLiteMetadataStore:
             # FTS5 support already checked, so this is a different error
             raise RuntimeError(f"Failed to create code_nodes_fts table: {e}")
 
-    _KNOWN_FTS_TABLES = frozenset({"chunks_fts", "code_nodes_fts"})
+    _KNOWN_FTS_TABLES = ("chunks_fts", "code_nodes_fts")
 
     def _rebuild_fts_table(self, table_name: str) -> bool:
         """Rebuild an FTS5 table's inverted index using its own connection.

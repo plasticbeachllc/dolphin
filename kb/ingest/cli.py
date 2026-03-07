@@ -646,14 +646,8 @@ def _prune_ignored_files(
     # Rebuild FTS5 indexes after bulk deletes to prevent corruption
     if not dry_run and pruned_files:
         _log.debug("Rebuilding FTS5 tables after pruning %d files", len(pruned_files))
-        for table in ("chunks_fts", "code_nodes_fts"):
-            try:
-                with metadata._connect() as conn:
-                    cur = conn.cursor()
-                    cur.execute(f"INSERT INTO {table}({table}, rank) VALUES('rebuild', -1)")  # noqa: S608
-                    conn.commit()
-            except Exception as e:
-                _log.warning(f"Failed to rebuild FTS5 table {table}: {e}")
+        for table in metadata._KNOWN_FTS_TABLES:
+            metadata._rebuild_fts_table(table)
 
     return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
 

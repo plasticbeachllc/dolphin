@@ -552,15 +552,15 @@ class GraphStore:
                     (file_id,),
                 )
 
-                # Delete nodes (plain DELETE — rowcount is reliable here)
+                # Delete nodes
                 cur.execute("DELETE FROM code_nodes WHERE file_id = ?", (file_id,))
                 deleted = cur.rowcount
 
-                # Rebuild FTS5 index after bulk deletes to prevent corruption.
-                # Guard on `deleted` (the plain DELETE rowcount) to avoid unnecessary
-                # O(n) rebuilds when no nodes existed for this file.
-                if deleted > 0:
-                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                # NOTE: No FTS5 rebuild here. Per-file deletes are called in tight loops
+                # during re-indexing, and O(n) rebuilds per file would be catastrophically
+                # slow. FTS integrity is maintained by:
+                # - delete_nodes_for_repo() which rebuilds after bulk repo-level deletes
+                # - _validate_database_integrity() auto-repair on server startup
 
                 conn.commit()
                 return deleted
