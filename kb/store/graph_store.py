@@ -551,15 +551,15 @@ class GraphStore:
                     ),
                     (file_id,),
                 )
-                fts_deleted = cur.rowcount
 
                 # Delete nodes
                 cur.execute("DELETE FROM code_nodes WHERE file_id = ?", (file_id,))
                 deleted = cur.rowcount
 
-                # Rebuild FTS5 index after bulk deletes to prevent corruption
-                if fts_deleted > 0:
-                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                # Always rebuild FTS5 index after bulk deletes to prevent corruption.
+                # rowcount is unreliable with CTE-based DELETEs, so rebuild unconditionally
+                # (the operation is idempotent).
+                cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
 
                 conn.commit()
                 return deleted
@@ -589,15 +589,15 @@ class GraphStore:
                     ),
                     (repo_id,),
                 )
-                fts_deleted = cur.rowcount
 
                 # Delete nodes
                 cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
                 deleted = cur.rowcount
 
-                # Rebuild FTS5 index after bulk deletes to prevent corruption
-                if fts_deleted > 0:
-                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                # Always rebuild FTS5 index after bulk deletes to prevent corruption.
+                # rowcount is unreliable with CTE-based DELETEs, so rebuild unconditionally
+                # (the operation is idempotent).
+                cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
 
                 conn.commit()
                 return deleted

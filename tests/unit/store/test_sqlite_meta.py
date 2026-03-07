@@ -522,15 +522,18 @@ class TestErrorPathLogging:
         mock_cur.__enter__ = MagicMock(return_value=mock_cur)
         mock_cur.__exit__ = MagicMock(return_value=False)
 
-        # fetchone is called: 1) first integrity_check, 2) second integrity_check after rebuild,
-        # then 4 times for orphaned record checks
+        # The exact fetchone() call sequence in _validate_database_integrity is:
+        #   1. PRAGMA integrity_check   → returns FTS corruption message
+        #   2. PRAGMA integrity_check   → re-check after rebuild returns "ok"
+        #   3-6. Four orphaned record COUNT(*) queries (chunk_locations, chunk_content, files, sessions)
+        # If _validate_database_integrity gains/loses orphaned checks, update this list.
         mock_cur.fetchone.side_effect = [
-            ("malformed inverted index for FTS5 table main.code_nodes_fts",),  # First check
-            ("ok",),  # After rebuild
-            (0,),  # orphaned chunk_locations
-            (0,),  # orphaned chunk_content
-            (0,),  # orphaned files
-            (0,),  # orphaned sessions
+            ("malformed inverted index for FTS5 table main.code_nodes_fts",),  # 1. initial integrity check
+            ("ok",),  # 2. re-check after rebuild
+            (0,),  # 3. orphaned chunk_locations
+            (0,),  # 4. orphaned chunk_content
+            (0,),  # 5. orphaned files
+            (0,),  # 6. orphaned sessions
         ]
 
         with patch.object(store, "_connect", return_value=mock_conn):
@@ -597,26 +600,18 @@ class TestErrorPathLogging:
         store = SQLiteMetadataStore(db_path)
         store.initialize()
 
-        with store._connect() as conn:
-            from contextlib import closing
-
-            with closing(conn.cursor()) as cur:
-                result = store._rebuild_fts_table(cur, conn, "chunks_fts")
-                assert result is True
+        result = store._rebuild_fts_table("chunks_fts")
+        assert result is True
 
     def test_rebuild_fts_table_failure(self, tmp_path, caplog):
-        """_rebuild_fts_table returns False and logs on failure."""
+        """_rebuild_fts_table returns False and logs on failure for unknown table."""
         db_path = tmp_path / "rebuild_fail.db"
         store = SQLiteMetadataStore(db_path)
         store.initialize()
 
-        with store._connect() as conn:
-            from contextlib import closing
-
-            with closing(conn.cursor()) as cur:
-                with caplog.at_level("ERROR"):
-                    result = store._rebuild_fts_table(cur, conn, "nonexistent_table")
-                assert result is False
+        # Assertion guard rejects unknown table names
+        with pytest.raises(AssertionError, match="Unexpected FTS table"):
+            store._rebuild_fts_table("nonexistent_table")
 
 
 # ---------------------------------------------------------------------------
