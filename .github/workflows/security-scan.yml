@@ -23,12 +23,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Run pip-audit
-        # CVE-2026-0994 / GHSA-7gcm-g887-7qv7: Protobuf JSON recursion DoS vulnerability
-        # - Affects: protobuf up to 6.33.4
-        # - Impact: JSON parsing can be exploited to cause denial-of-service through uncontrolled recursion
-        # - Reason for ignoring: We require OTLP support which depends on protobuf. No fix available yet from upstream.
-        #   We accept this risk for the critical observability functionality provided by OTLP.
-        run: uv run pip-audit --local --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-0994 --ignore-vuln GHSA-7gcm-g887-7qv7
+        # No ignored vulnerabilities. CVE-2026-0994 (protobuf) was resolved by upgrading to 6.33.5.
+        run: uv run pip-audit --local --skip-editable --progress-spinner=off
 
 
   node-audit:
@@ -59,11 +55,11 @@ jobs:
       - name: Audit JS dependencies (${{ matrix.project }})
         if: steps.install.outputs.found == 'true'
         working-directory: ${{ matrix.project }}
-        # minimatch ReDoS vulnerabilities resolved via "minimatch": ">=10.2.3" override in root package.json.
-        #
-        # GHSA-2g4f-4pwh-qvx6 (CVE-2025-69873): ajv ReDoS when using $data option
-        # - Severity: MODERATE
-        # - Affects: ajv <6.14.0
-        # - Reason for ignoring: transitive dep from @modelcontextprotocol/sdk and eslint.
-        #   The $data option is not used in our project's JSON schema validation, limiting exposure.
-        run: bun audit --ignore=GHSA-2g4f-4pwh-qvx6
+        # No ignored vulnerabilities. All previously known issues are resolved via overrides
+        # in root package.json:
+        #   - hono >=4.12.5: fixes GHSA-5pq2-9x2x-5p6w, GHSA-p6xx-57qc-3wxr, GHSA-q5qw-h33p-qvwr
+        #   - @hono/node-server 1.19.11: fixes GHSA-wc8c-qw6v-h7f6
+        #   - express-rate-limit 8.3.0: fixes GHSA-46wh-pxpv-q5gq
+        #   - minimatch >=10.2.3: fixes ReDoS vulnerabilities
+        #   - qs 6.15.0, body-parser 2.2.2: fixes prototype pollution
+        run: bun audit
