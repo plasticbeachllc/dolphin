@@ -25,8 +25,8 @@
     "@modelcontextprotocol/sdk>express>qs": "6.15.0",
     "@modelcontextprotocol/sdk>hono": "^4.12.5",
     "@modelcontextprotocol/sdk>qs": "6.15.0",
-    "@hono/node-server": "1.19.11",
-    "express-rate-limit": "8.3.0",
+    "@hono/node-server": "^1.19.11",
+    "express-rate-limit": "^8.3.0",
     "hono": "^4.12.5",
     "qs": "^6.15.0",
     "minimatch": ">=10.2.3"
