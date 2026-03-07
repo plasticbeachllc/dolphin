@@ -600,7 +600,10 @@ class GraphStore:
                 # Guard on `deleted` (the plain DELETE rowcount) to avoid unnecessary
                 # O(n) rebuilds when no nodes existed for this repo.
                 if deleted > 0:
-                    cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                    try:
+                        cur.execute("INSERT INTO code_nodes_fts(code_nodes_fts, rank) VALUES('rebuild', -1)")
+                    except Exception as e:
+                        logger.warning("Failed to rebuild code_nodes_fts after repo deletion: %s", e)
 
                 conn.commit()
                 return deleted

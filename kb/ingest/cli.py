@@ -647,7 +647,8 @@ def _prune_ignored_files(
     # Prune only deletes chunks/files — code_nodes_fts is not affected.
     if not dry_run and pruned_files:
         _log.debug("Rebuilding chunks_fts after pruning %d files", len(pruned_files))
-        metadata._rebuild_fts_table("chunks_fts")
+        if not metadata._rebuild_fts_table("chunks_fts"):
+            _log.warning("chunks_fts rebuild failed after pruning")
 
     return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
 
