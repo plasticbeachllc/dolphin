@@ -59,8 +59,8 @@ jobs:
         working-directory: ${{ matrix.project }}
         # All previously known issues are resolved via overrides in root package.json:
         #   - hono >=4.12.5: fixes GHSA-5pq2-9x2x-5p6w, GHSA-p6xx-57qc-3wxr, GHSA-q5qw-h33p-qvwr
-        #   - @hono/node-server 1.19.11: fixes GHSA-wc8c-qw6v-h7f6
-        #   - express-rate-limit 8.3.0: fixes GHSA-46wh-pxpv-q5gq
+        #   - @hono/node-server ^1.19.11: fixes GHSA-wc8c-qw6v-h7f6
+        #   - express-rate-limit ^8.3.0: fixes GHSA-46wh-pxpv-q5gq
         #   - minimatch >=10.2.3: fixes ReDoS vulnerabilities
         #   - qs 6.15.0, body-parser 2.2.2: fixes prototype pollution
         #
