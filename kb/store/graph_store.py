@@ -558,9 +558,10 @@ class GraphStore:
 
                 # NOTE: No FTS5 rebuild here. Per-file deletes are called in tight loops
                 # during re-indexing, and O(n) rebuilds per file would be catastrophically
-                # slow. FTS integrity is maintained by:
-                # - delete_nodes_for_repo() which rebuilds after bulk repo-level deletes
-                # - _validate_database_integrity() auto-repair on server startup
+                # slow. Callers doing bulk file re-indexing should prefer
+                # delete_nodes_for_repo() (which rebuilds FTS after the batch) over
+                # calling this method in a loop. FTS integrity is also maintained by
+                # _validate_database_integrity() auto-repair on server startup.
 
                 conn.commit()
                 return deleted

@@ -523,9 +523,11 @@ class TestErrorPathLogging:
         mock_cur.__exit__ = MagicMock(return_value=False)
 
         # The exact fetchone() call sequence in _validate_database_integrity is:
-        #   1. PRAGMA integrity_check   → returns FTS corruption message
-        #   2. PRAGMA integrity_check   → re-check after rebuild returns "ok"
-        #   3-6. Four orphaned record COUNT(*) queries (chunk_locations, chunk_content, files, sessions)
+        #   1. PRAGMA integrity_check (initial conn) → returns FTS corruption message
+        #   2. PRAGMA integrity_check (fresh conn for re-check) → returns "ok"
+        #   3-6. Four orphaned record COUNT(*) queries on initial conn
+        # Both connections return the same mock_conn (via patched _connect),
+        # so fetchone side effects are consumed in order.
         # If _validate_database_integrity gains/loses orphaned checks, update this list.
         mock_cur.fetchone.side_effect = [
             ("malformed inverted index for FTS5 table main.code_nodes_fts",),  # 1. initial integrity check

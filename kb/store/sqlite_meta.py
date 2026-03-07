@@ -657,9 +657,11 @@ class SQLiteMetadataStore:
                                 logger.warning(f"[SQLiteMeta] Failed to rebuild FTS5 table {table}")
                     if not rebuild_ok:
                         raise RuntimeError(f"Database integrity check failed: FTS5 rebuild failed for {msg}")
-                    # Re-check integrity after rebuild
-                    cur.execute("PRAGMA integrity_check")
-                    recheck = cur.fetchone()
+
+                    # Re-check integrity on a fresh connection to avoid stale WAL snapshots
+                    with self._connect() as fresh_conn, closing(fresh_conn.cursor()) as fresh_cur:
+                        fresh_cur.execute("PRAGMA integrity_check")
+                        recheck = fresh_cur.fetchone()
                     if recheck and recheck[0] != "ok":
                         raise RuntimeError(f"Database integrity check failed after FTS5 rebuild: {recheck[0]}")
                     logger.info("[SQLiteMeta] FTS5 integrity restored after rebuild")
@@ -2702,15 +2704,15 @@ class SQLiteMetadataStore:
                 conn.rollback()
                 raise RuntimeError(f"Repository removal failed: {e}")
 
-        # Rebuild FTS5 indexes after bulk deletes to prevent corruption.
+        # Rebuild only the FTS5 tables that had deletes to avoid unnecessary O(n) work.
         # Done outside the transaction block so each rebuild uses its own connection.
-        fts_deleted_any = (
-            fts_cleanup_stats.get("by_content_id", 0) + fts_cleanup_stats.get("by_repo_name", 0) > 0
-            or code_nodes_fts_deleted > 0
-        )
-        if fts_deleted_any:
-            for table in self._KNOWN_FTS_TABLES:
-                self._rebuild_fts_table(table)
+        chunks_fts_deleted = fts_cleanup_stats.get("by_content_id", 0) + fts_cleanup_stats.get("by_repo_name", 0)
+        if chunks_fts_deleted > 0:
+            if not self._rebuild_fts_table("chunks_fts"):
+                logger.warning("[SQLiteMeta] chunks_fts rebuild failed after repo removal")
+        if code_nodes_fts_deleted > 0:
+            if not self._rebuild_fts_table("code_nodes_fts"):
+                logger.warning("[SQLiteMeta] code_nodes_fts rebuild failed after repo removal")
 
         # Return detailed stats
         return {

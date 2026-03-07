@@ -643,11 +643,11 @@ def _prune_ignored_files(
                 file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
 
-    # Rebuild FTS5 indexes after bulk deletes to prevent corruption
+    # Rebuild chunks_fts after bulk deletes to prevent corruption.
+    # Prune only deletes chunks/files — code_nodes_fts is not affected.
     if not dry_run and pruned_files:
-        _log.debug("Rebuilding FTS5 tables after pruning %d files", len(pruned_files))
-        for table in metadata._KNOWN_FTS_TABLES:
-            metadata._rebuild_fts_table(table)
+        _log.debug("Rebuilding chunks_fts after pruning %d files", len(pruned_files))
+        metadata._rebuild_fts_table("chunks_fts")
 
     return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
 
