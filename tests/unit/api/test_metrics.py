@@ -443,10 +443,11 @@ class TestVersionInfo:
         assert len(version) > 0
 
     def test_get_app_version_fallback_on_package_not_found(self):
-        """_get_app_version falls back to 'dev' when package is not installed."""
+        """_get_app_version falls back when package is not installed."""
         from importlib.metadata import PackageNotFoundError
 
-        with patch("importlib.metadata.version", side_effect=PackageNotFoundError("pb-dolphin")):
+        with patch("kb.version._pkg_version", side_effect=PackageNotFoundError("pb-dolphin")):
+            # _get_app_version is now get_version from kb.version; default fallback is "dev"
             version = _get_app_version()
             assert version == "dev"
 

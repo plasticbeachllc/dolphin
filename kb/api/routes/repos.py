@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import kb.api.app as _app_mod
 
+from ...constants.retrieval_config import RETRIEVAL_PARAMS
 from ..app import (
     DriftDetectionResponse,
     IndexResponse,
@@ -30,9 +31,6 @@ from ..utils import normalize_repo_registration_path
 _log = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# ---- Constants re-used for token estimation ----
-ESTIMATED_TOKENS_PER_CHUNK = 200
 
 
 @router.get("/v1/repos")
@@ -123,7 +121,7 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             chunks_count = cur.fetchone()[0]
 
             # Sum token counts (from LanceDB metadata or estimate)
-            total_tokens = chunks_count * ESTIMATED_TOKENS_PER_CHUNK
+            total_tokens = chunks_count * RETRIEVAL_PARAMS.ESTIMATED_TOKENS_PER_CHUNK
 
             # Get last successful session timestamp
             cur.execute(

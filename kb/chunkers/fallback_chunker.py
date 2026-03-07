@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 
-from .token_utils import count_tokens, get_tokenizer, window_text_by_tokens
+from .token_utils import get_tokenizer, trim_and_tokenize as _trim_and_tokenize, window_text_by_tokens
 from .types import Chunk
 
 
@@ -83,18 +83,3 @@ def _offset_to_line(line_offsets: list[int], offset: int) -> int:
     """Convert a character offset to a 1-based line number using binary search."""
     line_idx = bisect.bisect_right(line_offsets, offset) - 1
     return line_idx + 1
-
-
-def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
-    """Trim leading/trailing newlines and compute token_count.
-
-    Returns: (trimmed_text, token_count, lead_trim, trail_trim)
-    where lead_trim and trail_trim are the number of newlines removed.
-    """
-    lead_trim = len(raw_text) - len(raw_text.lstrip("\n"))
-    trail_trim = len(raw_text) - len(raw_text.rstrip("\n"))
-    trimmed = raw_text.strip("\n")
-    if not trimmed:
-        return "", 0, lead_trim, trail_trim
-    token_count = count_tokens(trimmed, tokenizer)
-    return trimmed, token_count, lead_trim, trail_trim

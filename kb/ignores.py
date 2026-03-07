@@ -67,6 +67,23 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
 )
 
 
+# Supplemental security patterns — not exhaustive.  These catch the most common
+# credential and secret files.  Repository-specific rules should be added to
+# .dolphin/config.toml under [indexing] extra_ignore_patterns.
+SECURITY_IGNORE_PATTERNS: frozenset[str] = frozenset(
+    {
+        "**/id_rsa",
+        "**/*.pem",
+        "**/.aws/**",
+        "**/gcloud/**",
+        "**/secrets/**",
+        "**/*keys.json",
+        "**/*service_account.json",
+        "**/*auth.json",
+    }
+)
+
+
 def build_ignore_set(extra: Iterable[str] | None = None, exceptions: Iterable[str] | None = None) -> set[str]:
     """Return the default ignore patterns merged with any extras, excluding exceptions."""
     patterns = set(DEFAULT_IGNORE_PATTERNS)
@@ -178,18 +195,6 @@ def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Itera
     Returns:
         PathSpec object ready for matching files
     """
-    # Extra security patterns to always ignore
-    extra_security = {
-        "**/id_rsa",
-        "**/*.pem",
-        "**/.aws/**",
-        "**/gcloud/**",
-        "**/secrets/**",
-        "**/*keys.json",
-        "**/*service_account.json",
-        "**/*auth.json",
-    }
-
     # Build base ignore patterns
     ignore_patterns = build_ignore_set(config_ignore, config_exceptions)
 
@@ -203,6 +208,6 @@ def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Itera
         ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
 
     # Add security patterns
-    ignore_patterns.update(extra_security)
+    ignore_patterns.update(SECURITY_IGNORE_PATTERNS)
 
     return PathSpec.from_lines("gitignore", ignore_patterns)

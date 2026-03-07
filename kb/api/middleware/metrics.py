@@ -11,6 +11,8 @@ from fastapi import Request
 from fastapi.responses import Response as FastAPIResponse
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, Info, generate_latest
 
+from ...version import get_version as _get_app_version
+
 # ============================================================================
 # Metrics Definitions
 # ============================================================================
@@ -84,16 +86,7 @@ indexed_chunks_total = Gauge("kb_indexed_chunks_total", "Total number of indexed
 kb_info = Info("kb_api", "Knowledge Bank API information")
 
 
-def _get_app_version() -> str:
-    try:
-        from importlib.metadata import PackageNotFoundError, version as _pkg_version
-
-        return _pkg_version("pb-dolphin")
-    except PackageNotFoundError:
-        return "dev"
-
-
-kb_info.info({"version": _get_app_version(), "python_version": platform.python_version()})
+kb_info.info({"version": _get_app_version(fallback="dev"), "python_version": platform.python_version()})
 
 # ============================================================================
 # Middleware

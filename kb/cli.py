@@ -31,16 +31,7 @@ from kb.ingest.cli import (
 from kb.observability import StructuredLogger
 from kb.store import SQLiteMetadataStore
 from kb.terminal import print_hint, print_status
-
-
-def get_version() -> str:
-    """Get installed package version."""
-    try:
-        from importlib.metadata import version
-
-        return version("pb-dolphin")
-    except Exception:
-        return "unknown"  # Fallback version
+from kb.version import get_version
 
 
 def version_callback(version: bool = False) -> None:
