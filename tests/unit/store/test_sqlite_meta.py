@@ -506,6 +506,138 @@ class TestErrorPathLogging:
                 with pytest.raises(RuntimeError, match="integrity boom"):
                     store2.initialize()
 
+    def test_fts5_corruption_auto_repair(self, tmp_path, caplog):
+        """FTS5 corruption triggers auto-rebuild and succeeds."""
+        from unittest.mock import MagicMock, patch
+
+        db_path = tmp_path / "fts_repair.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value = mock_cur
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_cur.__enter__ = MagicMock(return_value=mock_cur)
+        mock_cur.__exit__ = MagicMock(return_value=False)
+
+        # The exact fetchone() call sequence in _validate_database_integrity is:
+        #   1. PRAGMA integrity_check (initial conn) → returns FTS corruption message
+        #   2. PRAGMA integrity_check (fresh conn for re-check) → returns "ok"
+        #   3-6. Four orphaned record COUNT(*) queries on initial conn
+        # Both connections return the same mock_conn (via patched _connect),
+        # so fetchone side effects are consumed in order.
+        # If _validate_database_integrity gains/loses orphaned checks, update this list.
+        mock_cur.fetchone.side_effect = [
+            ("malformed inverted index for FTS5 table main.code_nodes_fts",),  # 1. initial integrity check
+            ("ok",),  # 2. re-check after rebuild
+            (0,),  # 3. orphaned chunk_locations
+            (0,),  # 4. orphaned chunk_content
+            (0,),  # 5. orphaned files
+            (0,),  # 6. orphaned sessions
+        ]
+
+        with patch.object(store, "_connect", return_value=mock_conn):
+            with patch.object(store, "_table_exists", return_value=True):
+                with patch.object(store, "_rebuild_fts_table", return_value=True) as mock_rebuild:
+                    with caplog.at_level("WARNING"):
+                        store._validate_database_integrity()
+
+        # Verify rebuild was called for both FTS tables
+        assert mock_rebuild.call_count == 2
+
+    def test_fts5_non_fts_corruption_raises(self, tmp_path):
+        """Non-FTS corruption still raises RuntimeError."""
+        from unittest.mock import MagicMock, patch
+
+        db_path = tmp_path / "non_fts.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value = mock_cur
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_cur.fetchone.return_value = ("database disk image is malformed",)
+        mock_cur.__enter__ = MagicMock(return_value=mock_cur)
+        mock_cur.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(store, "_connect", return_value=mock_conn):
+            with pytest.raises(RuntimeError, match="Database integrity check failed"):
+                store._validate_database_integrity()
+
+    def test_fts5_corruption_rebuild_returns_false_raises(self, tmp_path):
+        """FTS5 corruption raises immediately when _rebuild_fts_table returns False."""
+        from unittest.mock import MagicMock, patch
+
+        db_path = tmp_path / "fts_fail.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value = mock_cur
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_cur.__enter__ = MagicMock(return_value=mock_cur)
+        mock_cur.__exit__ = MagicMock(return_value=False)
+
+        mock_cur.fetchone.return_value = ("malformed inverted index for FTS5 table main.chunks_fts",)
+
+        with patch.object(store, "_connect", return_value=mock_conn):
+            with patch.object(store, "_table_exists", return_value=True):
+                with patch.object(store, "_rebuild_fts_table", return_value=False):
+                    with pytest.raises(RuntimeError, match="FTS5 rebuild failed"):
+                        store._validate_database_integrity()
+
+    def test_fts5_corruption_rebuild_succeeds_but_recheck_fails_raises(self, tmp_path):
+        """FTS5 corruption raises when rebuild succeeds but integrity re-check still fails."""
+        from unittest.mock import MagicMock, patch
+
+        db_path = tmp_path / "fts_recheck.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value = mock_cur
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_cur.__enter__ = MagicMock(return_value=mock_cur)
+        mock_cur.__exit__ = MagicMock(return_value=False)
+
+        # Both integrity checks return FTS corruption (rebuild succeeded but didn't fix it)
+        mock_cur.fetchone.side_effect = [
+            ("malformed inverted index for FTS5 table main.chunks_fts",),
+            ("malformed inverted index for FTS5 table main.chunks_fts",),
+        ]
+
+        with patch.object(store, "_connect", return_value=mock_conn):
+            with patch.object(store, "_table_exists", return_value=True):
+                with patch.object(store, "_rebuild_fts_table", return_value=True):
+                    with pytest.raises(RuntimeError, match="after FTS5 rebuild"):
+                        store._validate_database_integrity()
+
+    def test_rebuild_fts_table_success(self, tmp_path):
+        """_rebuild_fts_table returns True on success."""
+        db_path = tmp_path / "rebuild_ok.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        result = store._rebuild_fts_table("chunks_fts")
+        assert result is True
+
+    def test_rebuild_fts_table_rejects_unknown_table(self, tmp_path):
+        """_rebuild_fts_table raises ValueError for unknown table names."""
+        db_path = tmp_path / "rebuild_fail.db"
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        with pytest.raises(ValueError, match="Unexpected FTS table"):
+            store._rebuild_fts_table("nonexistent_table")
+
 
 # ---------------------------------------------------------------------------
 # Tests for BM25 query preprocessing (OR conversion) and FTS content enrichment
