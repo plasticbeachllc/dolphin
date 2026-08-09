@@ -252,7 +252,7 @@ def _prune_stale_install_files_locked(install_fd: int) -> None:
 
 def _acquire_install_lock(install_fd: int) -> None:
     try:
-        fcntl.flock(install_fd, fcntl.LOCK_SH)
+        fcntl.flock(install_fd, fcntl.LOCK_EX)
     except OSError:
         raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
 
@@ -274,6 +274,13 @@ def _release_install_lock(install_fd: int) -> None:
         raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
 
 
+def _acquire_read_lock(install_fd: int) -> None:
+    try:
+        fcntl.flock(install_fd, fcntl.LOCK_SH)
+    except OSError:
+        raise ArtifactStoreUnavailable("Dolphin chunk artifact read lock is unavailable") from None
+
+
 def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
     format_fd = _open_existing_private_directory(artifacts_fd, _FORMAT_DIRECTORY)
     if format_fd is None:
@@ -285,9 +292,15 @@ def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, 
         try:
             install_fd = _open_existing_private_directory(shard_fd, _INSTALL_DIRECTORY)
             if install_fd is not None:
+                locked = False
                 try:
                     _prune_stale_install_files(install_fd)
+                    _acquire_read_lock(install_fd)
+                    locked = True
+                    return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
                 finally:
+                    if locked:
+                        _release_install_lock(install_fd)
                     os.close(install_fd)
             return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
         finally:

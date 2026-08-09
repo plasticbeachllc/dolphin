@@ -5,9 +5,10 @@ from __future__ import annotations
 import fcntl
 import os
 import stat
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import sha256
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -284,17 +285,58 @@ def test_artifact_store_cleanup_does_not_interfere_with_an_active_installer_lock
     active.chmod(0o600)
     os.utime(active, ns=(1, 1))
     lock_fd = os.open(install_directory, os.O_RDONLY)
+    cleanup_fd = os.open(install_directory, os.O_RDONLY)
 
     try:
-        fcntl.flock(lock_fd, fcntl.LOCK_SH)
-        store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="locked shard seed"))
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        implementation._prune_stale_install_files(cleanup_fd)
         assert active.exists()
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(cleanup_fd)
         os.close(lock_fd)
 
-    store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="locked shard seed"))
+    cleanup_fd = os.open(install_directory, os.O_RDONLY)
+    try:
+        implementation._prune_stale_install_files(cleanup_fd)
+    finally:
+        os.close(cleanup_fd)
     assert not active.exists()
+
+
+def test_artifact_store_read_waits_for_the_link_install_window(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    text = "do not expose the temporary hard-link state"
+    artifact = identify_chunk_text(text)
+    real_unlink = os.unlink
+    link_created = Event()
+    allow_unlink = Event()
+    paused = False
+
+    def pause_before_installer_unlink(path: str, *, dir_fd: int | None = None) -> None:
+        nonlocal paused
+        if not paused and path.startswith("install-"):
+            paused = True
+            link_created.set()
+            if not allow_unlink.wait(timeout=5):
+                raise AssertionError("timed out waiting to finish the injected install window")
+        real_unlink(path, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "unlink", pause_before_installer_unlink)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        write = executor.submit(store.put_exact_text, text)
+        assert link_created.wait(timeout=5)
+        read = executor.submit(store.read_verified, artifact.artifact_id)
+        with pytest.raises(TimeoutError):
+            read.result(timeout=0.05)
+        allow_unlink.set()
+        assert write.result(timeout=5) == artifact
+        assert read.result(timeout=5) == text
 
 
 def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path: Path) -> None:
