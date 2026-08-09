@@ -11,12 +11,16 @@ from kb.runtime.storage import macos_storage_layout
 from kb.services.lifecycle_read import OperationStatusService, RepoListService
 from kb.services.status import StatusService
 from kb.services.workspace_registry import WorkspaceRegistry
+from kb.services.workspace_resolution import WorkspaceSessionScope
 
 
-def default_mcp_handlers() -> dict[str, Callable[[BaseModel], Awaitable[BaseModel]]]:
-    """Return the currently available 0.3.0 application-service handlers."""
+def default_mcp_handlers(
+    *,
+    session_scope: WorkspaceSessionScope,
+) -> dict[str, Callable[[BaseModel], Awaitable[BaseModel]]]:
+    """Build handlers for one caller-owned MCP connection scope."""
     registry = WorkspaceRegistry(macos_storage_layout())
-    status = StatusService(registry=registry)
+    status = StatusService(registry=registry, session_scope=session_scope)
     repo_list = RepoListService(registry)
     operation_status = OperationStatusService(registry)
 

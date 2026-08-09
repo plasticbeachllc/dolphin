@@ -158,6 +158,7 @@ def repository_boundary_summary(boundary: RepositoryBoundary) -> RepositoryBound
         expected_commit=boundary.expected_commit,
         observed_commit=boundary.observed_commit,
         dirty=boundary.dirty,
+        workspace_id=boundary.workspace_id,
         next_actions=[],
     )
 

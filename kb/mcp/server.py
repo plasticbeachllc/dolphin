@@ -116,15 +116,19 @@ def create_adapter(
 
 def run_stdio() -> None:
     """Run Dolphin's installed stdio transport with the application composition root."""
-    from kb.services import default_mcp_handlers
-
-    server = create_server(default_mcp_handlers())
-    asyncio.run(_serve_stdio(server))
+    asyncio.run(_serve_stdio())
 
 
-async def _serve_stdio(server: Server) -> None:
+async def _serve_stdio() -> None:
     """Own exactly one stdio connection for the foreground Dolphin process."""
+    from kb.services import WorkspaceSessionScope, default_mcp_handlers
+
     async with stdio_server() as (read_stream, write_stream):
+        # MCP 2026-07-28 has no client-roots request surface. Keep the
+        # connection-owned scope here; root snapshots can join this boundary
+        # when the transport exposes them again.
+        session_scope = WorkspaceSessionScope()
+        server = create_server(default_mcp_handlers(session_scope=session_scope))
         await server.run(
             read_stream,
             write_stream,

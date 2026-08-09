@@ -56,6 +56,7 @@ class RepositoryBoundary:
     dirty: bool | None = None
     common_git_dir_identity: str | None = None
     worktree_git_dir_identity: str | None = None
+    workspace_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

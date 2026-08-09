@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import subprocess
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -518,7 +520,10 @@ async def test_sqlite_contention_is_reported_as_a_registry_error(tmp_path: Path)
 
 
 @pytest.mark.asyncio
-async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp_path: Path) -> None:
+async def test_repo_add_service_coordinates_registration_and_operation_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     _commit_repository(worktree_root / "nested")
     home = tmp_path / "home"
@@ -529,12 +534,25 @@ async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp
     cleanup_receipt = _cleanup_receipt("repo-add-service")
     first = await service.submit(worktree_root, cleanup_receipt)
     second = await service.submit(worktree_root, cleanup_receipt)
+    statements: list[str] = []
+    read_connection = registry._read_connection
+
+    @contextmanager
+    def traced_read_connection() -> Iterator[sqlite3.Connection]:
+        with read_connection() as connection:
+            connection.set_trace_callback(statements.append)
+            yield connection
+
+    monkeypatch.setattr(registry, "_read_connection", traced_read_connection)
 
     assert first.registration.created is True
     assert first.parent_scan.excluded_subtrees == frozenset({"nested"})
     persisted = registry.list_workspaces(None).items[0]
     assert len(persisted.repository_boundaries) == 1
     assert persisted.repository_boundaries[0].relative_path == "nested"
+    assert not any(
+        "SELECT workspace_id FROM workspace_registrations WHERE root" in statement for statement in statements
+    )
     assert first.registration.cleanup_receipt is not None
     assert first.operation.created is True
     assert second.registration.created is False

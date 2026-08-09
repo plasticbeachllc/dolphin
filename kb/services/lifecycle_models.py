@@ -10,7 +10,7 @@ from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH, HEAD_COMMIT_MAX_LENGTH
 from kb.services.repository_boundaries import RepositoryBoundaryKind, RepositoryBoundaryState
 
 type BoundaryKey = Annotated[str, StringConstraints(min_length=1, max_length=64)]
-type ActionArgumentValue = Annotated[str, StringConstraints(max_length=4_096)]
+type ActionArgumentValue = Annotated[str, StringConstraints(max_length=4_096)] | None
 type NextActionArguments = Annotated[dict[BoundaryKey, ActionArgumentValue], Field(max_length=8)]
 
 

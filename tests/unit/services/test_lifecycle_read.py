@@ -148,18 +148,23 @@ async def test_lifecycle_reads_report_persisted_nested_repository_boundaries(tmp
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    await RepoAddService(registry).submit(worktree_root, _cleanup_receipt("boundary-read"))
+    parent_submission = await RepoAddService(registry).submit(worktree_root, _cleanup_receipt("boundary-read"))
+    child_submission = await RepoAddService(registry).submit(nested_root, _cleanup_receipt("boundary-child"))
 
     repo_list = await RepoListService(registry)(RepoListInput(cursor=None))
     status = await StatusService(cwd=worktree_root, environment={}, registry=registry)(StatusInput())
 
-    repo_boundary = repo_list.items[0].repository_boundaries[0]
+    parent_item = next(
+        item for item in repo_list.items if item.workspace.id == parent_submission.registration.workspace_id
+    )
+    repo_boundary = parent_item.repository_boundaries[0]
     status_boundary = status.current_repository_boundaries[0]
     assert repo_boundary == status_boundary
     assert repo_boundary.kind is RepositoryBoundaryKind.NESTED_GIT
     assert repo_boundary.state is RepositoryBoundaryState.ENROLLABLE
     assert repo_boundary.relative_path == "nested"
     assert repo_boundary.root == str(nested_root)
+    assert repo_boundary.workspace_id == child_submission.registration.workspace_id
     assert repo_boundary.next_actions == []
 
 
