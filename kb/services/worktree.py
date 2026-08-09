@@ -22,6 +22,7 @@ class GitWorktree:
 
     root: Path
     common_git_dir: Path
+    common_git_dir_identity: str
     head_commit: str
     branch: str | None
 
@@ -37,55 +38,52 @@ def _discover_git_worktree(path: Path) -> GitWorktree:
     if not path.is_dir():
         raise WorktreeDiscoveryError("WORKTREE_PATH_INVALID")
 
-    root, common_git_dir, head_commit = _git_snapshot(path)
-    branch = _git_optional_value(path, "symbolic-ref", "--quiet", "--short", "HEAD")
-    if _git_value(path, "rev-parse", "--verify", "HEAD") != head_commit:
+    snapshot = _git_snapshot(path)
+    root, common_git_dir, _head_commit, _branch = snapshot
+    root_path = Path(root)
+    common_git_dir_path = Path(common_git_dir)
+    common_git_dir_identity = _directory_identity(common_git_dir_path)
+    if _git_snapshot(root_path) != snapshot or _directory_identity(common_git_dir_path) != common_git_dir_identity:
         raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED")
 
     return GitWorktree(
-        root=Path(root),
-        common_git_dir=Path(common_git_dir),
-        head_commit=head_commit,
-        branch=branch,
+        root=root_path,
+        common_git_dir=common_git_dir_path,
+        common_git_dir_identity=common_git_dir_identity,
+        head_commit=_head_commit,
+        branch=_branch,
     )
 
 
-def _git_snapshot(path: Path) -> tuple[str, str, str]:
-    """Read the path and commit identity from Git's one-command snapshot."""
+def _git_snapshot(path: Path) -> tuple[str, str, str, str | None]:
+    """Read one complete worktree identity snapshot from a single Git invocation."""
     result = _run_git(
         path,
         "rev-parse",
         "--path-format=absolute",
         "--show-toplevel",
         "--git-common-dir",
-        "--verify",
+        "HEAD",
+        "--symbolic-full-name",
         "HEAD",
     )
     if result.returncode != 0:
         raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
     values = result.stdout.splitlines()
-    if len(values) != 3 or any(not value for value in values):
+    if len(values) != 4 or any(not value for value in values):
         raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
-    return values[0], values[1], values[2]
+    symbolic_head = values[3]
+    branch = None if symbolic_head == "HEAD" else symbolic_head.removeprefix("refs/heads/")
+    return values[0], values[1], values[2], branch
 
 
-def _git_value(path: Path, *arguments: str) -> str:
-    result = _run_git(path, *arguments)
-    if result.returncode != 0:
-        raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
-    value = _single_git_line(result.stdout)
-    if not value:
-        raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
-    return value
-
-
-def _git_optional_value(path: Path, *arguments: str) -> str | None:
-    result = _run_git(path, *arguments)
-    if result.returncode == 1:
-        return None
-    if result.returncode != 0:
-        raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
-    return _single_git_line(result.stdout) or None
+def _directory_identity(path: Path) -> str:
+    """Bind an on-disk Git directory, not merely its reusable pathname."""
+    try:
+        status = path.stat()
+    except OSError as exc:
+        raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED") from exc
+    return f"{status.st_dev}:{status.st_ino}"
 
 
 def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -103,8 +101,3 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_TIMEOUT") from exc
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_FAILED") from exc
-
-
-def _single_git_line(output: str) -> str:
-    """Remove Git's protocol terminator without altering valid path whitespace."""
-    return output.removesuffix("\n")

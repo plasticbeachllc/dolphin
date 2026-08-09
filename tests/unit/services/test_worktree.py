@@ -49,22 +49,38 @@ async def test_discovery_rejects_a_head_that_changes_during_the_probe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    caller_path = tmp_path / "caller"
+    caller_path.mkdir()
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / ".git").mkdir()
+    calls: list[Path] = []
     responses = iter(
         [
             subprocess.CompletedProcess(
                 [],
                 0,
-                f"{tmp_path}\n{tmp_path / '.git'}\ninitial-head\n",
+                f"{root}\n{root / '.git'}\ninitial-head\nrefs/heads/main\n",
                 "",
             ),
-            subprocess.CompletedProcess([], 0, "main\n", ""),
-            subprocess.CompletedProcess([], 0, "replacement-head\n", ""),
+            subprocess.CompletedProcess(
+                [],
+                0,
+                f"{root}\n{root / '.git'}\nreplacement-head\nrefs/heads/main\n",
+                "",
+            ),
         ]
     )
-    monkeypatch.setattr(worktree_module, "_run_git", lambda *_args: next(responses))
+
+    def run_git(path: Path, *_args: str) -> subprocess.CompletedProcess[str]:
+        calls.append(path)
+        return next(responses)
+
+    monkeypatch.setattr(worktree_module, "_run_git", run_git)
 
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
-        await discover_git_worktree(tmp_path)
+        await discover_git_worktree(caller_path)
+    assert calls == [caller_path, root]
 
 
 def _commit_repository(path: Path) -> None:

@@ -21,6 +21,9 @@ class WorkspaceRegistryError(RuntimeError):
     """The local workspace registry cannot complete a safe transaction."""
 
 
+_SCHEMA_VERSION = 2
+
+
 class OperationState(StrEnum):
     """Durable lifecycle states for correctness-preserving indexing work."""
 
@@ -237,10 +240,10 @@ class WorkspaceRegistry:
                 return
             version_row = connection.execute("PRAGMA user_version").fetchone()
             version = int(version_row[0]) if version_row is not None else 0
-            if version == 1:
+            if version == _SCHEMA_VERSION:
                 self._initialized = True
                 return
-            if version > 1:
+            if version > _SCHEMA_VERSION:
                 raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
 
             # Only an uninitialized database needs a write lock and DDL. Once the
@@ -250,51 +253,60 @@ class WorkspaceRegistry:
             try:
                 version_row = connection.execute("PRAGMA user_version").fetchone()
                 version = int(version_row[0]) if version_row is not None else 0
-                if version == 1:
+                if version == _SCHEMA_VERSION:
                     connection.commit()
                     self._initialized = True
                     return
-                if version > 1:
+                if version > _SCHEMA_VERSION:
                     raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS workspace_registrations (
-                        workspace_id TEXT PRIMARY KEY,
-                        repository_id TEXT NOT NULL,
-                        root TEXT NOT NULL UNIQUE,
-                        common_git_dir TEXT NOT NULL,
-                        branch TEXT,
-                        head_commit TEXT NOT NULL,
-                        registration_epoch TEXT NOT NULL,
-                        cleanup_receipt_hash TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    ) STRICT
-                    """
-                )
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS workspace_operations (
-                        operation_id TEXT PRIMARY KEY,
-                        workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
-                        kind TEXT NOT NULL CHECK (kind IN ('initial_index', 'sync', 'recovery')),
-                        state TEXT NOT NULL CHECK (state IN (
-                            'queued', 'running', 'awaiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'
-                        )),
-                        target_head_commit TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    ) STRICT
-                    """
-                )
-                connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
-                connection.execute(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
-                    ON workspace_operations (workspace_id, kind, target_head_commit)
-                    """
-                )
-                connection.execute("PRAGMA user_version = 1")
+                if version == 0:
+                    connection.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS workspace_registrations (
+                            workspace_id TEXT PRIMARY KEY,
+                            repository_id TEXT NOT NULL,
+                            root TEXT NOT NULL UNIQUE,
+                            common_git_dir TEXT NOT NULL,
+                            common_git_dir_identity TEXT NOT NULL,
+                            branch TEXT,
+                            head_commit TEXT NOT NULL,
+                            registration_epoch TEXT NOT NULL,
+                            cleanup_receipt_hash TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS workspace_operations (
+                            operation_id TEXT PRIMARY KEY,
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
+                            kind TEXT NOT NULL CHECK (kind IN ('initial_index', 'sync', 'recovery')),
+                            state TEXT NOT NULL CHECK (state IN (
+                                'queued', 'running', 'awaiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'
+                            )),
+                            target_head_commit TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        ) STRICT
+                        """
+                    )
+                    connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
+                    connection.execute(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
+                        ON workspace_operations (workspace_id, kind, target_head_commit)
+                        """
+                    )
+                elif version == 1:
+                    connection.execute(
+                        """
+                        ALTER TABLE workspace_registrations
+                        ADD COLUMN common_git_dir_identity TEXT NOT NULL DEFAULT ''
+                        """
+                    )
+                connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except Exception:
                 connection.rollback()
                 raise
@@ -305,7 +317,7 @@ class WorkspaceRegistry:
         root = str(worktree.root)
         existing = connection.execute(
             """
-            SELECT workspace_id, repository_id, branch, head_commit
+            SELECT workspace_id, repository_id, common_git_dir, common_git_dir_identity
             FROM workspace_registrations
             WHERE root = ?
             """,
@@ -313,14 +325,20 @@ class WorkspaceRegistry:
         ).fetchone()
         now = datetime.now(UTC).isoformat()
         if existing is not None:
-            workspace_id, repository_id, _branch, _head_commit = existing
+            workspace_id, repository_id, common_git_dir, common_git_dir_identity = existing
+            if (
+                common_git_dir != str(worktree.common_git_dir)
+                or common_git_dir_identity != worktree.common_git_dir_identity
+                or repository_id != _repository_id(worktree)
+            ):
+                raise WorkspaceRegistryError("Dolphin workspace root belongs to a different Git repository")
             connection.execute(
                 """
                 UPDATE workspace_registrations
-                SET branch = ?, head_commit = ?, common_git_dir = ?, updated_at = ?
+                SET branch = ?, head_commit = ?, updated_at = ?
                 WHERE workspace_id = ?
                 """,
-                (worktree.branch, worktree.head_commit, str(worktree.common_git_dir), now, workspace_id),
+                (worktree.branch, worktree.head_commit, now, workspace_id),
             )
             return WorkspaceRegistration(
                 workspace_id=workspace_id,
@@ -338,15 +356,16 @@ class WorkspaceRegistry:
         connection.execute(
             """
             INSERT INTO workspace_registrations (
-                workspace_id, repository_id, root, common_git_dir, branch,
-                head_commit, registration_epoch, cleanup_receipt_hash, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                workspace_id, repository_id, root, common_git_dir, common_git_dir_identity,
+                branch, head_commit, registration_epoch, cleanup_receipt_hash, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 workspace_id,
                 repository_id,
                 root,
                 str(worktree.common_git_dir),
+                worktree.common_git_dir_identity,
                 worktree.branch,
                 worktree.head_commit,
                 f"epoch_{uuid.uuid4().hex}",
@@ -431,7 +450,8 @@ class WorkspaceRegistry:
 
 def _repository_id(worktree: GitWorktree) -> str:
     """Derive a stable local repository-family key without a caller-controlled name."""
-    digest = hashlib.sha256(str(worktree.common_git_dir).encode("utf-8")).hexdigest()
+    identity = f"{worktree.common_git_dir}\0{worktree.common_git_dir_identity}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return f"repo_{digest[:24]}"
 
 

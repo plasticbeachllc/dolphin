@@ -212,6 +212,25 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
 
 
 @pytest.mark.asyncio
+async def test_register_rejects_a_replacement_repository_at_the_same_root(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration = registry.register(await discover_git_worktree(worktree_root))
+    operation = registry.submit_initial_index(registration)
+    replacement = replace(
+        await discover_git_worktree(worktree_root),
+        common_git_dir_identity="replacement-repository-identity",
+    )
+
+    with pytest.raises(WorkspaceRegistryError, match="different Git repository"):
+        registry.register(replacement)
+
+    assert registry.get_operation(operation.operation_id) is not None
+
+
+@pytest.mark.asyncio
 async def test_new_registry_reads_an_initialized_database_without_a_write_lock(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
