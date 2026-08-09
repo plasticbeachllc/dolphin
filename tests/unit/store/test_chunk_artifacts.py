@@ -339,6 +339,63 @@ def test_artifact_store_read_waits_for_the_link_install_window(
         assert read.result(timeout=5) == text
 
 
+def test_first_install_reader_rechecks_coordination_after_observing_no_install_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    layout.ensure_private_directories()
+    store = ChunkArtifactStore(layout)
+    text = "coordinate the very first artifact install"
+    artifact = identify_chunk_text(text)
+    shard_directory = layout.artifacts / "dolphin-chunk-text-v1" / artifact.artifact_id[:2]
+    shard_directory.mkdir(parents=True, mode=0o700)
+    shard_directory.parent.chmod(0o700)
+    shard_directory.chmod(0o700)
+    real_open_directory = implementation._open_existing_private_directory
+    real_unlink = os.unlink
+    missing_install_observed = Event()
+    allow_unlocked_read = Event()
+    link_created = Event()
+    allow_unlink = Event()
+    paused_open = False
+    paused_unlink = False
+
+    def pause_after_missing_install(parent_fd: int, name: str) -> int | None:
+        nonlocal paused_open
+        if name == ".install" and not paused_open:
+            paused_open = True
+            missing_install_observed.set()
+            if not allow_unlocked_read.wait(timeout=5):
+                raise AssertionError("timed out waiting to continue the injected first-read window")
+            return None
+        return real_open_directory(parent_fd, name)
+
+    def pause_before_installer_unlink(path: str, *, dir_fd: int | None = None) -> None:
+        nonlocal paused_unlink
+        if not paused_unlink and path.startswith("install-"):
+            paused_unlink = True
+            link_created.set()
+            if not allow_unlink.wait(timeout=5):
+                raise AssertionError("timed out waiting to finish the injected first-install window")
+        real_unlink(path, dir_fd=dir_fd)
+
+    monkeypatch.setattr(implementation, "_open_existing_private_directory", pause_after_missing_install)
+    monkeypatch.setattr(os, "unlink", pause_before_installer_unlink)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        read = executor.submit(store.read_verified, artifact.artifact_id)
+        assert missing_install_observed.wait(timeout=5)
+        write = executor.submit(store.put_exact_text, text)
+        assert link_created.wait(timeout=5)
+        allow_unlocked_read.set()
+        with pytest.raises(TimeoutError):
+            read.result(timeout=0.05)
+        allow_unlink.set()
+        assert write.result(timeout=5) == artifact
+        assert read.result(timeout=5) == text
+
+
 def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path: Path) -> None:
     layout = macos_storage_layout(home=tmp_path)
     store = ChunkArtifactStore(layout)
