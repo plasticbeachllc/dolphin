@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from kb.services import worktree as worktree_module
 from kb.services.worktree import WorktreeDiscoveryError, discover_git_worktree
 
 
@@ -40,6 +41,29 @@ async def test_discovery_rejects_relative_and_non_git_paths(tmp_path: Path) -> N
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_PATH_NOT_ABSOLUTE"):
         await discover_git_worktree(Path("."))
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_NOT_GIT"):
+        await discover_git_worktree(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_discovery_rejects_a_head_that_changes_during_the_probe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    responses = iter(
+        [
+            subprocess.CompletedProcess(
+                [],
+                0,
+                f"{tmp_path}\n{tmp_path / '.git'}\ninitial-head\n",
+                "",
+            ),
+            subprocess.CompletedProcess([], 0, "main\n", ""),
+            subprocess.CompletedProcess([], 0, "replacement-head\n", ""),
+        ]
+    )
+    monkeypatch.setattr(worktree_module, "_run_git", lambda *_args: next(responses))
+
+    with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
         await discover_git_worktree(tmp_path)
 
 

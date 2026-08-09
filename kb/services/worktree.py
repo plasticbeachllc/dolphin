@@ -37,17 +37,36 @@ def _discover_git_worktree(path: Path) -> GitWorktree:
     if not path.is_dir():
         raise WorktreeDiscoveryError("WORKTREE_PATH_INVALID")
 
-    root = Path(_git_value(path, "rev-parse", "--show-toplevel"))
-    common_git_dir = Path(_git_value(path, "rev-parse", "--path-format=absolute", "--git-common-dir"))
-    head_commit = _git_value(path, "rev-parse", "--verify", "HEAD")
+    root, common_git_dir, head_commit = _git_snapshot(path)
     branch = _git_optional_value(path, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if _git_value(path, "rev-parse", "--verify", "HEAD") != head_commit:
+        raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED")
 
     return GitWorktree(
-        root=root,
-        common_git_dir=common_git_dir,
+        root=Path(root),
+        common_git_dir=Path(common_git_dir),
         head_commit=head_commit,
         branch=branch,
     )
+
+
+def _git_snapshot(path: Path) -> tuple[str, str, str]:
+    """Read the path and commit identity from Git's one-command snapshot."""
+    result = _run_git(
+        path,
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+        "--verify",
+        "HEAD",
+    )
+    if result.returncode != 0:
+        raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
+    values = result.stdout.splitlines()
+    if len(values) != 3 or any(not value for value in values):
+        raise WorktreeDiscoveryError("WORKTREE_NOT_GIT")
+    return values[0], values[1], values[2]
 
 
 def _git_value(path: Path, *arguments: str) -> str:

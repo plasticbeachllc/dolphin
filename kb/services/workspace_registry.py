@@ -33,6 +33,25 @@ class OperationState(StrEnum):
     CANCELLED = "cancelled"
 
 
+_ALLOWED_OPERATION_TRANSITIONS: dict[OperationState, frozenset[OperationState]] = {
+    OperationState.QUEUED: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
+    OperationState.RUNNING: frozenset(
+        {
+            OperationState.AWAITING_APPROVAL,
+            OperationState.PAUSED,
+            OperationState.SUCCEEDED,
+            OperationState.FAILED,
+            OperationState.CANCELLED,
+        }
+    ),
+    OperationState.AWAITING_APPROVAL: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
+    OperationState.PAUSED: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
+    OperationState.SUCCEEDED: frozenset(),
+    OperationState.FAILED: frozenset(),
+    OperationState.CANCELLED: frozenset(),
+}
+
+
 @dataclass(frozen=True, slots=True)
 class WorkspaceRegistration:
     """The bounded durable result of one explicit worktree enrollment attempt."""
@@ -129,24 +148,68 @@ class WorkspaceRegistry:
             created=False,
         )
 
-    def set_operation_state(self, operation_id: str, state: OperationState) -> WorkspaceOperation | None:
-        """Record a worker-owned state transition and return its updated source-free snapshot."""
+    def set_operation_state(
+        self,
+        operation_id: str,
+        state: OperationState,
+        *,
+        expected_state: OperationState | None = None,
+    ) -> WorkspaceOperation | None:
+        """Compare-and-swap one operation through a permitted lifecycle transition."""
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                row = connection.execute(
+                    """
+                    SELECT workspace_id, kind, state, target_head_commit
+                    FROM workspace_operations
+                    WHERE operation_id = ?
+                    """,
+                    (operation_id,),
+                ).fetchone()
+                if row is None:
+                    connection.commit()
+                    return None
+                workspace_id, kind, stored_state, target_head_commit = row
+                current_state = OperationState(stored_state)
+                if expected_state is not None and current_state is not expected_state:
+                    raise WorkspaceRegistryError("Dolphin operation state no longer matches the worker snapshot")
+                if current_state is state:
+                    connection.commit()
+                    return WorkspaceOperation(
+                        operation_id=operation_id,
+                        workspace_id=workspace_id,
+                        kind=kind,
+                        state=current_state,
+                        target_head_commit=target_head_commit,
+                        created=False,
+                    )
+                if state not in _ALLOWED_OPERATION_TRANSITIONS[current_state]:
+                    raise WorkspaceRegistryError(
+                        f"Dolphin operation transition from {current_state.value} to {state.value} is not allowed"
+                    )
                 updated = connection.execute(
                     """
                     UPDATE workspace_operations
                     SET state = ?, updated_at = ?
-                    WHERE operation_id = ?
+                    WHERE operation_id = ? AND state = ?
                     """,
-                    (state.value, datetime.now(UTC).isoformat(), operation_id),
+                    (state.value, datetime.now(UTC).isoformat(), operation_id, current_state.value),
                 ).rowcount
+                if not updated:
+                    raise WorkspaceRegistryError("Dolphin operation state changed before this transition could commit")
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
-        return self.get_operation(operation_id) if updated else None
+        return WorkspaceOperation(
+            operation_id=operation_id,
+            workspace_id=workspace_id,
+            kind=kind,
+            state=state,
+            target_head_commit=target_head_commit,
+            created=False,
+        )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:

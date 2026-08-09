@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import pytest
 
 from kb.runtime.storage import macos_storage_layout
 from kb.services.repo_add import RepoAddService
-from kb.services.workspace_registry import OperationState, WorkspaceRegistry, WorkspaceRegistryError
+from kb.services.workspace_registry import OperationState, WorkspaceOperation, WorkspaceRegistry, WorkspaceRegistryError
 from kb.services.worktree import discover_git_worktree
 
 
@@ -84,7 +85,10 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
     registration = registry.register(await discover_git_worktree(worktree_root))
 
     first = registry.submit_initial_index(registration)
-    terminal = registry.set_operation_state(first.operation_id, OperationState.SUCCEEDED)
+    registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
+    terminal = registry.set_operation_state(
+        first.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    )
     repeated = registry.submit_initial_index(registration)
 
     assert terminal is not None
@@ -92,6 +96,58 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
     assert repeated.created is False
     assert repeated.operation_id == first.operation_id
     assert repeated.state is OperationState.SUCCEEDED
+
+
+@pytest.mark.asyncio
+async def test_terminal_operation_cannot_be_restarted(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration = registry.register(await discover_git_worktree(worktree_root))
+    operation = registry.submit_initial_index(registration)
+
+    running = registry.set_operation_state(
+        operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED
+    )
+    succeeded = registry.set_operation_state(
+        operation.operation_id,
+        OperationState.SUCCEEDED,
+        expected_state=OperationState.RUNNING,
+    )
+
+    assert running is not None
+    assert succeeded is not None
+    with pytest.raises(WorkspaceRegistryError, match="not allowed"):
+        registry.set_operation_state(
+            operation.operation_id, OperationState.RUNNING, expected_state=OperationState.SUCCEEDED
+        )
+
+
+@pytest.mark.asyncio
+async def test_competing_state_transitions_allow_only_one_observed_state(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration = registry.register(await discover_git_worktree(worktree_root))
+    operation = registry.submit_initial_index(registration)
+
+    def transition(state: OperationState) -> WorkspaceOperation | None:
+        return registry.set_operation_state(operation.operation_id, state, expected_state=OperationState.QUEUED)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(transition, OperationState.RUNNING),
+            executor.submit(transition, OperationState.CANCELLED),
+        ]
+        results = [future.result() if future.exception() is None else future.exception() for future in futures]
+
+    assert sum(isinstance(result, WorkspaceOperation) for result in results) == 1
+    assert sum(isinstance(result, WorkspaceRegistryError) for result in results) == 1
+    loaded = registry.get_operation(operation.operation_id)
+    assert loaded is not None
+    assert loaded.state in {OperationState.RUNNING, OperationState.CANCELLED}
 
 
 @pytest.mark.asyncio
