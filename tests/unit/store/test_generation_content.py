@@ -20,7 +20,7 @@ from kb.generation_content import (
     StagedChunkMembership,
 )
 from kb.runtime.storage import StorageLayout, macos_storage_layout
-from kb.services.workspace_registry import OperationLease, WorkspaceRegistry
+from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
@@ -91,6 +91,53 @@ def test_manifest_deduplicates_shared_artifacts_without_collapsing_membership(
     assert manifest.artifact_count == 1
     assert manifest.metadata_item_count == 2
     assert manifest.artifact_utf8_bytes == len(b"shared exact bytes")
+
+
+def test_same_chunk_instance_id_can_be_staged_in_later_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="stable", text="stable chunk identity")
+    first_manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.registry.finish_operation(
+        context.lease,
+        OperationState.FAILED,
+        observed_at=context.generation.created_at,
+    )
+
+    _registration, retry = context.registry.register_and_submit_initial_index(
+        context.worktree,
+        cleanup_receipt=_cleanup_receipt("generation-content"),
+    )
+    retry_now = context.generation.created_at + timedelta(seconds=1)
+    retry_lease = context.registry.claim_next_operation(
+        runtime_id=context.lease.runtime_id,
+        process_start_identity="start-generation-content",
+        pipeline_key="generation-pipeline-v1",
+        now=retry_now,
+        expires_at=retry_now + timedelta(seconds=15),
+    )
+    assert retry_lease is not None
+    assert retry_lease.operation.operation_id == retry.operation_id
+    retry_coordinator = SQLiteGenerationCoordinator(context.layout, clock=lambda: retry_now)
+    retry_generation = retry_coordinator.create_staging(retry_lease)
+    retry_content = SQLiteGenerationContentStore(context.layout, context.artifacts, clock=lambda: retry_now)
+
+    second_manifest = retry_content.stage_manifest(retry_lease, retry_generation, [membership])
+
+    assert second_manifest.generation_id != first_manifest.generation_id
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        rows = connection.execute(
+            """
+            SELECT generation_id
+            FROM generation_chunk_memberships
+            WHERE chunk_instance_id = ?
+            ORDER BY generation_id
+            """,
+            (membership.chunk_instance_id,),
+        ).fetchall()
+    assert rows == sorted([(first_manifest.generation_id,), (second_manifest.generation_id,)])
 
 
 def test_readiness_rejects_unpersisted_or_incomplete_membership(
@@ -297,6 +344,7 @@ class _GenerationContext:
     artifacts: ChunkArtifactStore
     lease: OperationLease
     generation: StagingGeneration
+    worktree: GitWorktree
 
 
 def _generation_context(
@@ -310,16 +358,17 @@ def _generation_context(
     layout = macos_storage_layout(home=home)
     registry = WorkspaceRegistry(layout)
     monkeypatch.setattr("kb.services.workspace_registry.validate_git_worktree_snapshot", lambda _worktree: None)
+    worktree = GitWorktree(
+        root=root,
+        common_git_dir=root / ".git",
+        common_git_dir_identity="common-generation-content",
+        worktree_git_dir=root / ".git",
+        worktree_git_dir_identity="worktree-generation-content",
+        head_commit="a" * 40,
+        branch="develop",
+    )
     _registration, _operation = registry.register_and_submit_initial_index(
-        GitWorktree(
-            root=root,
-            common_git_dir=root / ".git",
-            common_git_dir_identity="common-generation-content",
-            worktree_git_dir=root / ".git",
-            worktree_git_dir_identity="worktree-generation-content",
-            head_commit="a" * 40,
-            branch="develop",
-        ),
+        worktree,
         cleanup_receipt=_cleanup_receipt("generation-content"),
     )
     now = datetime(2026, 8, 9, 12, tzinfo=UTC)
@@ -351,6 +400,7 @@ def _generation_context(
         artifacts=artifacts,
         lease=lease,
         generation=coordinator.create_staging(lease),
+        worktree=worktree,
     )
 
 

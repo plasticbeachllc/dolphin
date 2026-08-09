@@ -1574,7 +1574,7 @@ class WorkspaceRegistry:
                     connection.execute(
                         """
                         CREATE TABLE generation_chunk_memberships (
-                            chunk_instance_id TEXT PRIMARY KEY,
+                            chunk_instance_id TEXT NOT NULL,
                             generation_id TEXT NOT NULL REFERENCES generations(generation_id)
                                 ON DELETE CASCADE,
                             artifact_id TEXT NOT NULL CHECK (length(artifact_id) = 64),
@@ -1593,7 +1593,7 @@ class WorkspaceRegistry:
                             chunker_key TEXT NOT NULL CHECK (length(chunker_key) BETWEEN 1 AND 256),
                             embedding_cache_key TEXT NOT NULL CHECK (length(embedding_cache_key) = 64),
                             membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
-                            UNIQUE (generation_id, chunk_instance_id)
+                            PRIMARY KEY (generation_id, chunk_instance_id)
                         ) STRICT
                         """
                     )
