@@ -8,7 +8,6 @@ sequential scanning.
 from __future__ import annotations
 
 import multiprocessing as mp
-import stat
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
@@ -20,7 +19,7 @@ from kb.services.repository_boundaries import path_is_within_boundary
 
 from ._helpers import worker_ignore_sigint
 from .lang import classify_language
-from .scanner import FileCandidate, ScannerError, _is_binary
+from .scanner import FileCandidate, ScannerError, _inspect_candidate_file
 
 
 def _process_file_batch(
@@ -51,20 +50,12 @@ def _process_file_batch(
         if spec.match_file(rel):
             continue
 
-        abs_path = root.joinpath(*Path(rel).parts)
-        try:
-            path_status = abs_path.stat(follow_symlinks=False)
-        except OSError:
+        inspection = _inspect_candidate_file(root, rel)
+        if inspection is None:
             continue
-        if not stat.S_ISREG(path_status.st_mode):
-            continue
-
-        # Binary detection
-        is_bin = _is_binary(abs_path)
+        size, is_bin = inspection
         if is_bin:
             continue
-
-        size = path_status.st_size
 
         # Language
         _, language = classify_language(Path(rel))
@@ -74,7 +65,6 @@ def _process_file_batch(
             FileCandidate(
                 repo_root=root,
                 rel_path=rel,
-                abs_path=abs_path,
                 ext=ext,
                 language=language,
                 size_bytes=size,

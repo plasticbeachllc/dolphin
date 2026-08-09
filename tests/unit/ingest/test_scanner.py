@@ -1,11 +1,12 @@
 """Unit tests for repository scanning and file enumeration."""
 
+import os
 import subprocess
 
 import pytest
 
 from kb.ignores import build_ignore_set
-from kb.ingest.scanner import ScannerError, scan_repo
+from kb.ingest.scanner import ScannerError, _inspect_candidate_file, scan_repo
 from tests.conftest import init_test_git_repo
 
 
@@ -142,6 +143,27 @@ class TestScannerBasic:
             scan_repo(repo_path, build_ignore_set())
 
         assert "Not a git repository" in str(exc_info.value)
+
+
+def test_candidate_inspection_rejects_a_file_replaced_by_a_symlink(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    candidate = tmp_path / "candidate.py"
+    outside = tmp_path / "outside.py"
+    candidate.write_text("print('inside')\n")
+    outside.write_text("print('outside')\n")
+    real_open = os.open
+
+    def replace_before_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == "candidate.py" and dir_fd is not None:
+            candidate.unlink()
+            candidate.symlink_to(outside)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    assert _inspect_candidate_file(tmp_path, "candidate.py") is None
 
 
 class TestIgnorePatterns:

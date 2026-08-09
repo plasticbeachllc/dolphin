@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import stat
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -23,7 +24,6 @@ from .lang import classify_language
 class FileCandidate:
     repo_root: Path
     rel_path: str  # POSIX
-    abs_path: Path
     ext: str | None
     language: str
     size_bytes: int
@@ -86,18 +86,47 @@ def _build_pathspec(ignores: Iterable[str]) -> PathSpec:
     return PathSpec.from_lines("gitignore", patterns)
 
 
-def _is_binary(path: Path, sniff_bytes: int = 65536) -> bool:
+def _chunk_is_binary(chunk: bytes) -> bool:
     try:
-        with path.open("rb") as f:
-            chunk = f.read(sniff_bytes)
         # Fast NUL-byte heuristic
         if b"\x00" in chunk:
             return True
         # UTF-8 decode check
         chunk.decode("utf-8")
         return False
-    except Exception:
+    except UnicodeDecodeError:
         return True
+
+
+def _inspect_candidate_file(root: Path, rel_path: str, sniff_bytes: int = 65_536) -> tuple[int, bool] | None:
+    """Inspect one repository-relative file without following any symlink component."""
+    parts = PurePosixPath(rel_path).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    file_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+    directory_fd: int | None = None
+    file_fd: int | None = None
+    try:
+        directory_fd = os.open(root, directory_flags)
+        for part in parts[:-1]:
+            next_directory_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_directory_fd
+
+        file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+        file_status = os.fstat(file_fd)
+        if not stat.S_ISREG(file_status.st_mode):
+            return None
+        return file_status.st_size, _chunk_is_binary(os.read(file_fd, sniff_bytes))
+    except OSError:
+        return None
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
@@ -124,18 +153,12 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
         # Skip by pathspec
         if spec.match_file(rel):
             continue
-        abs_path = root.joinpath(*PurePosixPath(rel).parts)
-        try:
-            path_status = abs_path.stat(follow_symlinks=False)
-        except OSError:
+        inspection = _inspect_candidate_file(root, rel)
+        if inspection is None:
             continue
-        if not stat.S_ISREG(path_status.st_mode):
-            continue
-        # Binary detection
-        is_bin = _is_binary(abs_path)
+        size, is_bin = inspection
         if is_bin:
             continue
-        size = path_status.st_size
         # Language
         _, language = classify_language(Path(rel))
         ext = Path(rel).suffix.lower() or None
@@ -143,7 +166,6 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
             FileCandidate(
                 repo_root=root,
                 rel_path=rel,
-                abs_path=abs_path,
                 ext=ext,
                 language=language,
                 size_bytes=size,
