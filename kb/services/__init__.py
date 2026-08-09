@@ -1,6 +1,12 @@
 """Transport-independent application services for Dolphin 0.3.0."""
 
 from kb.services.mcp_application import default_mcp_handlers
+from kb.services.operation_runtime import (
+    OperationRuntime,
+    OperationRuntimeError,
+    ProcessStartProbe,
+    probe_process_start_identity,
+)
 from kb.services.repo_add import RepoAddService, RepoAddSubmission
 from kb.services.repository_boundaries import (
     ParentScanPlan,
@@ -12,7 +18,12 @@ from kb.services.repository_boundaries import (
 )
 from kb.services.status import StatusResult, StatusService
 from kb.services.workspace_registry import (
+    OperationCheckpoint,
+    OperationCountersSnapshot,
+    OperationLease,
     OperationState,
+    RuntimeOwner,
+    RuntimeStatusSnapshot,
     WorkspaceOperation,
     WorkspaceRegistration,
     WorkspaceRegistry,
@@ -36,6 +47,11 @@ from kb.services.worktree import (
 __all__ = [
     "GitWorktree",
     "MCPRootSnapshot",
+    "OperationCheckpoint",
+    "OperationCountersSnapshot",
+    "OperationLease",
+    "OperationRuntime",
+    "OperationRuntimeError",
     "OperationState",
     "ParentScanPlan",
     "RepoAddService",
@@ -44,6 +60,9 @@ __all__ = [
     "RepositoryBoundaryError",
     "RepositoryBoundaryKind",
     "RepositoryBoundaryState",
+    "ProcessStartProbe",
+    "RuntimeOwner",
+    "RuntimeStatusSnapshot",
     "StatusResult",
     "StatusService",
     "WorktreeDiscoveryError",
@@ -59,5 +78,6 @@ __all__ = [
     "default_mcp_handlers",
     "discover_git_worktree",
     "plan_parent_scan",
+    "probe_process_start_identity",
     "validate_git_worktree_snapshot",
 ]

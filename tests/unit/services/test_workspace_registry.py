@@ -20,6 +20,7 @@ from kb.runtime.storage import macos_storage_layout
 from kb.services import repo_add as repo_add_module, workspace_registry as workspace_registry_module
 from kb.services.repo_add import RepoAddService
 from kb.services.workspace_registry import (
+    OperationLease,
     OperationState,
     RepoListCursorExpired,
     RepoListCursorInvalid,
@@ -64,7 +65,7 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert common_git_dir == str(worktree_root / ".git")
     assert common_git_dir_identity == worktree_git_dir_identity
     assert worktree_git_dir == common_git_dir
-    assert version == 6
+    assert version == 7
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
@@ -137,9 +138,11 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
         worktree,
         cleanup_receipt=cleanup_receipt,
     )
-    registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-    terminal = registry.set_operation_state(
-        first.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    lease = _claim_operation(registry, first)
+    terminal = registry.finish_operation(
+        lease,
+        OperationState.SUCCEEDED,
+        observed_at=datetime.now(UTC),
     )
     _, repeated = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
 
@@ -165,11 +168,11 @@ async def test_failed_or_cancelled_initial_index_is_retried_as_a_new_attempt(
 
     cleanup_receipt = _cleanup_receipt(f"retry-{terminal_state.value}")
     _, first = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
-    if terminal_state is OperationState.FAILED:
-        registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-        registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.RUNNING)
-    else:
-        registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.QUEUED)
+    registry.finish_operation(
+        _claim_operation(registry, first),
+        terminal_state,
+        observed_at=datetime.now(UTC),
+    )
 
     _, retry = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
     _, repeated = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
@@ -198,21 +201,25 @@ async def test_terminal_operation_cannot_be_restarted(tmp_path: Path) -> None:
         cleanup_receipt=_cleanup_receipt("terminal-operation"),
     )
 
-    running = registry.set_operation_state(
-        operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED
-    )
-    succeeded = registry.set_operation_state(
-        operation.operation_id,
+    lease = _claim_operation(registry, operation)
+    succeeded = registry.finish_operation(
+        lease,
         OperationState.SUCCEEDED,
-        expected_state=OperationState.RUNNING,
+        observed_at=datetime.now(UTC),
     )
 
-    assert running is not None
     assert succeeded is not None
-    with pytest.raises(WorkspaceRegistryError, match="not allowed"):
-        registry.set_operation_state(
-            operation.operation_id, OperationState.RUNNING, expected_state=OperationState.SUCCEEDED
+    runtime = _register_operation_runtime(registry, operation, suffix="terminal-retry")
+    assert (
+        registry.claim_next_operation(
+            runtime_id=runtime.runtime_id,
+            process_start_identity=runtime.process_start_identity,
+            pipeline_key="test-pipeline-v1",
+            now=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(seconds=15),
         )
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -226,21 +233,31 @@ async def test_competing_state_transitions_allow_only_one_observed_state(tmp_pat
         cleanup_receipt=_cleanup_receipt("competing-transition"),
     )
 
-    def transition(state: OperationState) -> WorkspaceOperation | None:
-        return registry.set_operation_state(operation.operation_id, state, expected_state=OperationState.QUEUED)
+    first = _register_operation_runtime(registry, operation, suffix="first")
+    second = _register_operation_runtime(registry, operation, suffix="second")
+
+    def transition(runtime_id: str, process_start_identity: str) -> OperationLease | None:
+        now = datetime.now(UTC)
+        return registry.claim_next_operation(
+            runtime_id=runtime_id,
+            process_start_identity=process_start_identity,
+            pipeline_key="test-pipeline-v1",
+            now=now,
+            expires_at=now + timedelta(seconds=15),
+        )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [
-            executor.submit(transition, OperationState.RUNNING),
-            executor.submit(transition, OperationState.CANCELLED),
+            executor.submit(transition, first.runtime_id, first.process_start_identity),
+            executor.submit(transition, second.runtime_id, second.process_start_identity),
         ]
-        results = [future.result() if future.exception() is None else future.exception() for future in futures]
+        results = [future.result() for future in futures]
 
-    assert sum(isinstance(result, WorkspaceOperation) for result in results) == 1
-    assert sum(isinstance(result, WorkspaceRegistryError) for result in results) == 1
+    assert sum(isinstance(result, OperationLease) for result in results) == 1
+    assert results.count(None) == 1
     loaded = registry.get_operation(operation.operation_id)
     assert loaded is not None
-    assert loaded.state in {OperationState.RUNNING, OperationState.CANCELLED}
+    assert loaded.state is OperationState.RUNNING
 
 
 @pytest.mark.asyncio
@@ -601,9 +618,10 @@ def test_workspace_snapshot_counts_effective_states_and_resolves_exact_root(
     )
 
     indexing = registry.read_workspace_snapshot(worktree.root)
-    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-    registry.set_operation_state(
-        operation.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    registry.finish_operation(
+        _claim_operation(registry, operation),
+        OperationState.SUCCEEDED,
+        observed_at=datetime.now(UTC),
     )
     ready = registry.read_workspace_snapshot(worktree.root)
 
@@ -688,9 +706,10 @@ def test_operation_snapshot_expires_terminal_status_without_extending_it(
         _fake_worktree(tmp_path / "repositories", 1),
         cleanup_receipt=_cleanup_receipt("operation-expiry"),
     )
-    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-    registry.set_operation_state(
-        operation.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    registry.finish_operation(
+        _claim_operation(registry, operation),
+        OperationState.SUCCEEDED,
+        observed_at=datetime.now(UTC),
     )
     snapshot = registry.inspect_operation(operation.operation_id)
 
@@ -753,6 +772,38 @@ def _commit_repository(path: Path) -> Path:
 def _cleanup_receipt(seed: str) -> str:
     token = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:43]
     return f"dolphin-cleanup-v1_{token}"
+
+
+def _register_operation_runtime(
+    registry: WorkspaceRegistry,
+    operation: WorkspaceOperation,
+    *,
+    suffix: str = "worker",
+):
+    now = datetime.now(UTC)
+    return registry.register_runtime(
+        runtime_id=f"runtime_{operation.operation_id[3:19]}_{suffix}",
+        pid=100,
+        process_start_identity=f"start-{operation.operation_id}-{suffix}",
+        mode="mcp",
+        operation_capable=True,
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+
+
+def _claim_operation(registry: WorkspaceRegistry, operation: WorkspaceOperation) -> OperationLease:
+    runtime = _register_operation_runtime(registry, operation)
+    now = datetime.now(UTC)
+    lease = registry.claim_next_operation(
+        runtime_id=runtime.runtime_id,
+        process_start_identity=runtime.process_start_identity,
+        pipeline_key="test-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    assert lease is not None
+    return lease
 
 
 def _fake_worktree(parent: Path, index: int) -> GitWorktree:

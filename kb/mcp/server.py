@@ -121,23 +121,27 @@ def run_stdio() -> None:
 
 async def _serve_stdio() -> None:
     """Own exactly one stdio connection for the foreground Dolphin process."""
-    from kb.services import WorkspaceSessionScope, default_mcp_handlers
+    from kb.runtime.storage import macos_storage_layout
+    from kb.services import WorkspaceRegistry, WorkspaceSessionScope, default_mcp_handlers
+    from kb.services.operation_runtime import OperationRuntime
 
     async with stdio_server() as (read_stream, write_stream):
         # MCP 2026-07-28 has no client-roots request surface. Keep the
         # connection-owned scope here; root snapshots can join this boundary
         # when the transport exposes them again.
         session_scope = WorkspaceSessionScope()
-        server = create_server(default_mcp_handlers(session_scope=session_scope))
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="dolphin",
-                server_version=get_version(),
-                capabilities=server.get_capabilities(notification_options=NotificationOptions()),
-            ),
-        )
+        registry = WorkspaceRegistry(macos_storage_layout())
+        async with OperationRuntime(registry, mode="mcp", operation_capable=False):
+            server = create_server(default_mcp_handlers(session_scope=session_scope, registry=registry))
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="dolphin",
+                    server_version=get_version(),
+                    capabilities=server.get_capabilities(notification_options=NotificationOptions()),
+                ),
+            )
 
 
 def _complete_handlers(

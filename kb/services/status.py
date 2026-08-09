@@ -16,7 +16,12 @@ from kb.mcp.contracts import StatusInput
 from kb.services.lifecycle_models import NextAction, RepositoryBoundarySummary, WorkspaceSummary
 from kb.services.lifecycle_read import repository_boundary_summary, workspace_summary
 from kb.services.repository_boundaries import RepositoryBoundaryKind, RepositoryBoundaryState
-from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
+from kb.services.workspace_registry import (
+    RuntimeStatusSnapshot,
+    WorkspaceReadSnapshot,
+    WorkspaceRegistry,
+    WorkspaceRegistryError,
+)
 from kb.services.workspace_resolution import (
     MCP_ROOT_LIMIT,
     MCPRootSnapshot,
@@ -52,12 +57,18 @@ class ToolAvailability(_ResultModel):
     open_ref: Literal["available", "unavailable"]
 
 
+class RuntimeHealth(_ResultModel):
+    active_processes: int = Field(ge=0, le=1_024)
+    operation_executors: int = Field(ge=0, le=1_024)
+
+
 class StatusResult(_ResultModel):
     version: str
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
     tool_availability: ToolAvailability
+    runtime: RuntimeHealth
     workspace_counts: EffectiveWorkspaceCounts
     current_workspace_resolution: Literal["resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"]
     current_workspace: WorkspaceSummary | None = None
@@ -94,6 +105,7 @@ class StatusService:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
         probe = await asyncio.to_thread(_probe_worktree, self._cwd)
         registry_snapshot = WorkspaceReadSnapshot(registered=0, indexing=0, ready=0, failed=0, current_workspace=None)
+        runtime_snapshot = RuntimeStatusSnapshot(active_processes=0, operation_executors=0)
         scope_resolution: WorkspaceResolution | None = None
         storage_available = True
         if self._registry is not None:
@@ -103,6 +115,7 @@ class StatusService:
                     if not await asyncio.to_thread(self._registry.schema_is_current):
                         raise WorkspaceRegistryError("Dolphin metadata storage requires initialization")
                     registry_snapshot = await asyncio.to_thread(self._registry.read_workspace_snapshot)
+                    runtime_snapshot = await asyncio.to_thread(self._registry.read_runtime_status)
                     mcp_roots = await _probe_mcp_roots(self._mcp_roots)
                     resolver = WorkspaceResolver(self._registry, session_scope=self._session_scope)
                     scope_resolution = await asyncio.to_thread(
@@ -157,6 +170,10 @@ class StatusService:
             credential_present=credential_present,
             credential_variable="DOLPHIN_OPENAI_API_KEY",
             tool_availability=_tool_availability(storage_available),
+            runtime=RuntimeHealth(
+                active_processes=runtime_snapshot.active_processes,
+                operation_executors=runtime_snapshot.operation_executors,
+            ),
             workspace_counts=EffectiveWorkspaceCounts(
                 registered=registry_snapshot.registered,
                 indexing=registry_snapshot.indexing,

@@ -14,6 +14,17 @@ Dolphin is a semantic code retrieval platform built around:
 - A TypeScript MCP bridge for AI client integrations
 - Shared TypeScript utilities
 
+### 0.3.0 development path
+
+The `develop` branch is replacing the bridge/API hop with a foreground Python stdio MCP runtime. Its prerelease lifecycle authority lives under `~/Library/Application Support/Dolphin/` and currently provides:
+
+- one private SQLite authority for explicit worktree registrations, repository boundaries, operations, runtime owners, execution leases, and source-free checkpoints;
+- capability-bearing runtime records with PID plus process-start identity, 15-second leases renewed every five seconds, and fail-closed stale-owner reconciliation;
+- atomic operation claiming, pipeline-compatible resume, monotonic phase/counter checkpoints, and immediate graceful handoff on MCP shutdown; and
+- aggregate runtime health in `status` plus durable checkpoint progress in `operation_status`.
+
+The installed MCP process is intentionally recorded as non-executing until the new indexing adapter is connected. Consequently, `repo_add`, mutation tools, and search remain explicitly unavailable rather than accepting work that cannot progress. The TypeScript bridge and REST architecture below continue to describe the current 0.2.2 release while the clean-break 0.3.0 runtime is completed.
+
 ## System Architecture
 
 ```text

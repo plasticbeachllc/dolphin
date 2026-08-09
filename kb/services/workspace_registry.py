@@ -40,6 +40,7 @@ from kb.services.repository_boundaries import (
     validate_parent_scan,
 )
 from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
+from kb.version import get_version
 
 
 class WorkspaceRegistryError(RuntimeError):
@@ -54,7 +55,7 @@ class RepoListCursorExpired(ValueError):
     """The repository-list cursor names an obsolete actionable-list revision."""
 
 
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 _MAX_BOUNDARIES_PER_READ = 8
 _MAX_STORED_BOUNDARIES = 100_000
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
@@ -65,6 +66,23 @@ _REGISTRATION_LOCK_MAX_BACKOFF_SECONDS = 0.5
 
 type OperationKind = Literal["initial_index", "sync", "recovery"]
 type WorkspaceEffectiveState = Literal["registered", "indexing", "ready", "failed"]
+type RuntimeMode = Literal["mcp", "foreground_cli"]
+type RuntimeState = Literal["active", "draining", "stopped"]
+type OperationPhase = Literal["preflight", "scan", "chunk", "embed", "store", "publish"]
+type OperationPauseReason = Literal[
+    "runtime_absent",
+    "credential_missing",
+    "disk_pressure",
+    "awaiting_approval",
+    "shutdown",
+]
+
+_OPERATION_PHASES: tuple[OperationPhase, ...] = ("preflight", "scan", "chunk", "embed", "store", "publish")
+_RUNTIME_ID_MAX_LENGTH = 64
+_PROCESS_IDENTITY_MAX_LENGTH = 256
+_PIPELINE_KEY_MAX_LENGTH = 256
+_TARGET_FINGERPRINT_MAX_LENGTH = 256
+_MAX_ACTIVE_RUNTIMES = 64
 
 
 class OperationState(StrEnum):
@@ -77,25 +95,6 @@ class OperationState(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
-
-_ALLOWED_OPERATION_TRANSITIONS: dict[OperationState, frozenset[OperationState]] = {
-    OperationState.QUEUED: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
-    OperationState.RUNNING: frozenset(
-        {
-            OperationState.AWAITING_APPROVAL,
-            OperationState.PAUSED,
-            OperationState.SUCCEEDED,
-            OperationState.FAILED,
-            OperationState.CANCELLED,
-        }
-    ),
-    OperationState.AWAITING_APPROVAL: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
-    OperationState.PAUSED: frozenset({OperationState.RUNNING, OperationState.CANCELLED}),
-    OperationState.SUCCEEDED: frozenset(),
-    OperationState.FAILED: frozenset(),
-    OperationState.CANCELLED: frozenset(),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +187,73 @@ class OperationSnapshot:
     created_at: datetime
     updated_at: datetime
     terminal_at: datetime | None
+    phase: OperationPhase | None = None
+    counters: OperationCountersSnapshot | None = None
+    pause_reason: OperationPauseReason | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OperationCountersSnapshot:
+    """Bounded source-free progress counters persisted with an operation checkpoint."""
+
+    known_eligible_files: int | None = None
+    processed_files: int = 0
+    parsed_files: int = 0
+    reused_chunks: int = 0
+    embedding_cache_hits: int = 0
+    embedding_cache_misses: int = 0
+    embedded_chunks: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class OperationCheckpoint:
+    """Normalized resumable state for one leased operation."""
+
+    operation_id: str
+    workspace_id: str
+    target_fingerprint: str
+    pipeline_key: str
+    phase: OperationPhase
+    counters: OperationCountersSnapshot
+    checkpointed_at: datetime
+    pause_reason: OperationPauseReason | None = None
+    staging_generation_id: str | None = None
+    completed_manifest_id: str | None = None
+    resume_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOwner:
+    """One visible foreground process recorded as a bounded runtime owner."""
+
+    runtime_id: str
+    pid: int
+    process_start_identity: str
+    mode: RuntimeMode
+    operation_capable: bool
+    state: RuntimeState
+    started_at: datetime
+    heartbeat_at: datetime
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeStatusSnapshot:
+    """Aggregate-only active runtime health for status output."""
+
+    active_processes: int
+    operation_executors: int
+
+
+@dataclass(frozen=True, slots=True)
+class OperationLease:
+    """Exclusive expiring authority to advance one durable operation."""
+
+    lease_id: str
+    runtime_id: str
+    operation: WorkspaceOperation
+    checkpoint: OperationCheckpoint
+    expires_at: datetime
 
 
 class WorkspaceRegistry:
@@ -371,10 +437,13 @@ class WorkspaceRegistry:
         with self._read_connection() as connection:
             row = connection.execute(
                 """
-                SELECT operation_id, workspace_id, kind, state, target_head_commit, attempt,
-                       created_at, updated_at, terminal_at
-                FROM workspace_operations
-                WHERE operation_id = ?
+                SELECT o.operation_id, o.workspace_id, o.kind, o.state, o.target_head_commit, o.attempt,
+                       o.created_at, o.updated_at, o.terminal_at, c.phase, c.known_eligible_files,
+                       c.processed_files, c.parsed_files, c.reused_chunks, c.embedding_cache_hits,
+                       c.embedding_cache_misses, c.embedded_chunks, c.pause_reason
+                FROM workspace_operations AS o
+                LEFT JOIN operation_checkpoints AS c ON c.operation_id = o.operation_id
+                WHERE o.operation_id = ?
                 """,
                 (operation_id,),
             ).fetchone()
@@ -386,6 +455,649 @@ class WorkspaceRegistry:
         if terminal_at is not None and observed_at >= terminal_at + _OPERATION_STATUS_RETENTION:
             return None
         return snapshot
+
+    def register_runtime(
+        self,
+        *,
+        runtime_id: str,
+        pid: int,
+        process_start_identity: str,
+        mode: RuntimeMode,
+        operation_capable: bool,
+        now: datetime,
+        expires_at: datetime,
+    ) -> RuntimeOwner:
+        """Create one active foreground runtime record after process identity is proven."""
+        _validate_runtime_identity(runtime_id, pid, process_start_identity)
+        _validate_lease_window(now, expires_at)
+        if mode not in {"mcp", "foreground_cli"}:
+            raise WorkspaceRegistryError("Dolphin runtime mode is invalid")
+        if not isinstance(operation_capable, bool):
+            raise WorkspaceRegistryError("Dolphin runtime capability is invalid")
+        encoded_now = _utc_timestamp(now).isoformat()
+        encoded_expiry = _utc_timestamp(expires_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    """
+                    DELETE FROM runtime_instances
+                    WHERE state = 'stopped'
+                      AND runtime_id NOT IN (SELECT runtime_id FROM operation_leases)
+                    """
+                )
+                active_count = connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM runtime_instances
+                    WHERE state = 'active' AND expires_at > ?
+                    """,
+                    (encoded_now,),
+                ).fetchone()
+                if active_count is None or not isinstance(active_count[0], int):
+                    raise WorkspaceRegistryError("Dolphin runtime ownership metadata is invalid")
+                if active_count[0] >= _MAX_ACTIVE_RUNTIMES:
+                    raise WorkspaceRegistryError("Dolphin has too many active runtime processes")
+                connection.execute(
+                    """
+                    INSERT INTO runtime_instances (
+                        runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                        dolphin_version, schema_version, started_at, heartbeat_at, expires_at
+                    ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        runtime_id,
+                        pid,
+                        process_start_identity,
+                        mode,
+                        int(operation_capable),
+                        _runtime_version(),
+                        _SCHEMA_VERSION,
+                        encoded_now,
+                        encoded_now,
+                        encoded_expiry,
+                    ),
+                )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return RuntimeOwner(
+            runtime_id=runtime_id,
+            pid=pid,
+            process_start_identity=process_start_identity,
+            mode=mode,
+            operation_capable=operation_capable,
+            state="active",
+            started_at=_utc_timestamp(now),
+            heartbeat_at=_utc_timestamp(now),
+            expires_at=_utc_timestamp(expires_at),
+        )
+
+    def list_runtime_owners(self) -> tuple[RuntimeOwner, ...]:
+        """Return bounded source-free owner records for startup reconciliation."""
+        with self._read_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                       started_at, heartbeat_at, expires_at
+                FROM runtime_instances
+                WHERE state != 'stopped'
+                ORDER BY started_at, runtime_id
+                LIMIT ?
+                """,
+                (_MAX_ACTIVE_RUNTIMES + 1,),
+            ).fetchall()
+        if len(rows) > _MAX_ACTIVE_RUNTIMES:
+            raise WorkspaceRegistryError("Dolphin has too many runtime owners to reconcile safely")
+        return tuple(_runtime_owner_from_row(row) for row in rows)
+
+    def read_runtime_status(self, *, now: datetime | None = None) -> RuntimeStatusSnapshot:
+        """Read aggregate active runtime ownership without mutating expiry state."""
+        observed_at = _utc_timestamp(now or datetime.now(UTC)).isoformat()
+        with self._read_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*), COALESCE(SUM(operation_capable), 0)
+                FROM runtime_instances
+                WHERE state = 'active' AND expires_at > ?
+                """,
+                (observed_at,),
+            ).fetchone()
+        if row is None or not all(isinstance(value, int) for value in row):
+            raise WorkspaceRegistryError("Dolphin runtime ownership metadata is invalid")
+        return RuntimeStatusSnapshot(active_processes=row[0], operation_executors=row[1])
+
+    def heartbeat_runtime(
+        self,
+        *,
+        runtime_id: str,
+        process_start_identity: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> RuntimeOwner:
+        """Renew one active runtime and every operation lease it still owns."""
+        _validate_runtime_identity(runtime_id, 1, process_start_identity, validate_pid=False)
+        _validate_lease_window(now, expires_at)
+        encoded_now = _utc_timestamp(now).isoformat()
+        encoded_expiry = _utc_timestamp(expires_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    """
+                    SELECT runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                           started_at, heartbeat_at, expires_at
+                    FROM runtime_instances
+                    WHERE runtime_id = ?
+                    """,
+                    (runtime_id,),
+                ).fetchone()
+                if row is None:
+                    raise WorkspaceRegistryError("Dolphin runtime ownership is unavailable")
+                owner = _runtime_owner_from_row(row)
+                if (
+                    owner.process_start_identity != process_start_identity
+                    or owner.state != "active"
+                    or owner.expires_at <= _utc_timestamp(now)
+                ):
+                    raise WorkspaceRegistryError("Dolphin runtime ownership no longer matches this process")
+                connection.execute(
+                    """
+                    UPDATE runtime_instances
+                    SET heartbeat_at = ?, expires_at = ?
+                    WHERE runtime_id = ? AND process_start_identity = ? AND state = 'active'
+                    """,
+                    (encoded_now, encoded_expiry, runtime_id, process_start_identity),
+                )
+                connection.execute(
+                    """
+                    UPDATE operation_leases
+                    SET heartbeat_at = ?, expires_at = ?
+                    WHERE runtime_id = ?
+                    """,
+                    (encoded_now, encoded_expiry, runtime_id),
+                )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return replace(owner, heartbeat_at=_utc_timestamp(now), expires_at=_utc_timestamp(expires_at))
+
+    def reconcile_stale_runtime(
+        self,
+        *,
+        runtime_id: str,
+        process_start_identity: str,
+        observed_at: datetime,
+        stale_identity_proven: bool,
+    ) -> int:
+        """Pause work only when expiry or a PID/start-identity mismatch proves an owner stale."""
+        _validate_runtime_identity(runtime_id, 1, process_start_identity, validate_pid=False)
+        encoded_now = _utc_timestamp(observed_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    """
+                    SELECT process_start_identity, expires_at, state
+                    FROM runtime_instances
+                    WHERE runtime_id = ?
+                    """,
+                    (runtime_id,),
+                ).fetchone()
+                if row is None or row[0] != process_start_identity or row[2] == "stopped":
+                    connection.commit()
+                    return 0
+                expires_at = _parse_registry_timestamp(row[1], label="runtime expiry timestamp")
+                if not stale_identity_proven and _utc_timestamp(observed_at) < expires_at:
+                    connection.commit()
+                    return 0
+                paused = self._pause_runtime_operations(
+                    connection,
+                    runtime_id=runtime_id,
+                    pause_reason="runtime_absent",
+                    transitioned_at=encoded_now,
+                )
+                connection.execute(
+                    """
+                    UPDATE runtime_instances
+                    SET state = 'stopped', heartbeat_at = ?, expires_at = ?
+                    WHERE runtime_id = ? AND process_start_identity = ?
+                    """,
+                    (encoded_now, encoded_now, runtime_id, process_start_identity),
+                )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return paused
+
+    def claim_next_operation(
+        self,
+        *,
+        runtime_id: str,
+        process_start_identity: str,
+        pipeline_key: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> OperationLease | None:
+        """Atomically claim the oldest compatible queued or resumable paused operation."""
+        _validate_runtime_identity(runtime_id, 1, process_start_identity, validate_pid=False)
+        _validate_bounded_key(pipeline_key, label="pipeline key", maximum=_PIPELINE_KEY_MAX_LENGTH)
+        _validate_lease_window(now, expires_at)
+        encoded_now = _utc_timestamp(now).isoformat()
+        encoded_expiry = _utc_timestamp(expires_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._require_active_runtime(
+                    connection,
+                    runtime_id=runtime_id,
+                    process_start_identity=process_start_identity,
+                    observed_at=encoded_now,
+                    require_operation_capable=True,
+                )
+                self._reconcile_expired_operation_leases(connection, transitioned_at=encoded_now)
+                row = connection.execute(
+                    """
+                    SELECT o.operation_id, o.workspace_id, o.kind, o.state, o.target_head_commit, o.attempt,
+                           c.target_fingerprint, c.pipeline_key, c.phase, c.known_eligible_files,
+                           c.processed_files, c.parsed_files, c.reused_chunks, c.embedding_cache_hits,
+                           c.embedding_cache_misses, c.embedded_chunks, c.pause_reason,
+                           c.staging_generation_id, c.completed_manifest_id, c.checkpointed_at, c.resume_count
+                    FROM workspace_operations AS o
+                    LEFT JOIN operation_checkpoints AS c ON c.operation_id = o.operation_id
+                    LEFT JOIN operation_leases AS l ON l.operation_id = o.operation_id
+                    WHERE l.operation_id IS NULL
+                      AND (
+                          o.state = 'queued'
+                          OR (o.state = 'paused' AND c.pause_reason IN ('runtime_absent', 'shutdown'))
+                      )
+                      AND (c.pipeline_key IS NULL OR c.pipeline_key = ?)
+                    ORDER BY o.created_at, o.operation_id
+                    LIMIT 1
+                    """,
+                    (pipeline_key,),
+                ).fetchone()
+                if row is None:
+                    connection.commit()
+                    return None
+                operation = _workspace_operation_from_claim_row(row)
+                checkpoint = _checkpoint_from_claim_row(row, pipeline_key=pipeline_key, checkpointed_at=now)
+                if row[6] is None:
+                    self._insert_checkpoint(connection, checkpoint)
+                else:
+                    checkpoint = replace(
+                        checkpoint,
+                        pause_reason=None,
+                        resume_count=checkpoint.resume_count + (1 if operation.state is OperationState.PAUSED else 0),
+                        checkpointed_at=_utc_timestamp(now),
+                    )
+                    self._update_checkpoint(connection, checkpoint)
+                updated = connection.execute(
+                    """
+                    UPDATE workspace_operations
+                    SET state = 'running', updated_at = ?, terminal_at = NULL
+                    WHERE operation_id = ? AND state = ?
+                    """,
+                    (encoded_now, operation.operation_id, operation.state.value),
+                ).rowcount
+                if updated != 1:
+                    raise WorkspaceRegistryError("Dolphin operation changed before its lease could be claimed")
+                lease_id = f"lease_{uuid.uuid4().hex}"
+                connection.execute(
+                    """
+                    INSERT INTO operation_leases (
+                        operation_id, lease_id, runtime_id, acquired_at, heartbeat_at, expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (operation.operation_id, lease_id, runtime_id, encoded_now, encoded_now, encoded_expiry),
+                )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return OperationLease(
+            lease_id=lease_id,
+            runtime_id=runtime_id,
+            operation=replace(operation, state=OperationState.RUNNING),
+            checkpoint=checkpoint,
+            expires_at=_utc_timestamp(expires_at),
+        )
+
+    def checkpoint_operation(
+        self,
+        lease: OperationLease,
+        checkpoint: OperationCheckpoint,
+        *,
+        observed_at: datetime,
+    ) -> OperationCheckpoint:
+        """Replace one checkpoint under its unexpired execution lease."""
+        _validate_checkpoint(checkpoint)
+        if (
+            checkpoint.operation_id != lease.operation.operation_id
+            or checkpoint.workspace_id != lease.operation.workspace_id
+        ):
+            raise WorkspaceRegistryError("Dolphin checkpoint belongs to another operation")
+        encoded_now = _utc_timestamp(observed_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._require_operation_lease(connection, lease, observed_at=encoded_now)
+                stored = self._read_checkpoint(connection, checkpoint.operation_id)
+                if stored is None:
+                    raise WorkspaceRegistryError("Dolphin operation checkpoint is unavailable")
+                _validate_checkpoint_progress(stored, checkpoint)
+                persisted = replace(checkpoint, checkpointed_at=_utc_timestamp(observed_at))
+                self._update_checkpoint(connection, persisted)
+                connection.execute(
+                    "UPDATE workspace_operations SET updated_at = ? WHERE operation_id = ?",
+                    (encoded_now, checkpoint.operation_id),
+                )
+                if current[0] != "running":
+                    raise WorkspaceRegistryError("Dolphin operation is not running")
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return persisted
+
+    def finish_operation(
+        self,
+        lease: OperationLease,
+        state: OperationState,
+        *,
+        observed_at: datetime,
+    ) -> WorkspaceOperation:
+        """Commit a terminal outcome and release its execution lease atomically."""
+        if state not in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}:
+            raise WorkspaceRegistryError("Dolphin operation finish state is not terminal")
+        encoded_now = _utc_timestamp(observed_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._require_operation_lease(connection, lease, observed_at=encoded_now)
+                updated = connection.execute(
+                    """
+                    UPDATE workspace_operations
+                    SET state = ?, updated_at = ?, terminal_at = ?
+                    WHERE operation_id = ? AND state = 'running'
+                    """,
+                    (state.value, encoded_now, encoded_now, lease.operation.operation_id),
+                ).rowcount
+                if updated != 1:
+                    raise WorkspaceRegistryError("Dolphin operation changed before completion")
+                connection.execute("DELETE FROM operation_leases WHERE lease_id = ?", (lease.lease_id,))
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return replace(lease.operation, state=state)
+
+    def pause_operation(
+        self,
+        lease: OperationLease,
+        reason: OperationPauseReason,
+        *,
+        observed_at: datetime,
+    ) -> WorkspaceOperation:
+        """Checkpoint a blocked operation and release its execution lease."""
+        if reason not in {
+            "runtime_absent",
+            "credential_missing",
+            "disk_pressure",
+            "awaiting_approval",
+            "shutdown",
+        }:
+            raise WorkspaceRegistryError("Dolphin operation pause reason is invalid")
+        encoded_now = _utc_timestamp(observed_at).isoformat()
+        replacement_state = OperationState.AWAITING_APPROVAL if reason == "awaiting_approval" else OperationState.PAUSED
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._require_operation_lease(connection, lease, observed_at=encoded_now)
+                updated = connection.execute(
+                    """
+                    UPDATE workspace_operations
+                    SET state = ?, updated_at = ?, terminal_at = NULL
+                    WHERE operation_id = ? AND state = 'running'
+                    """,
+                    (replacement_state.value, encoded_now, lease.operation.operation_id),
+                ).rowcount
+                if updated != 1:
+                    raise WorkspaceRegistryError("Dolphin operation changed before it could be paused")
+                checkpoint_updated = connection.execute(
+                    """
+                    UPDATE operation_checkpoints
+                    SET pause_reason = ?, checkpointed_at = ?
+                    WHERE operation_id = ?
+                    """,
+                    (reason, encoded_now, lease.operation.operation_id),
+                ).rowcount
+                if checkpoint_updated != 1:
+                    raise WorkspaceRegistryError("Dolphin operation checkpoint is unavailable")
+                connection.execute("DELETE FROM operation_leases WHERE lease_id = ?", (lease.lease_id,))
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return replace(lease.operation, state=replacement_state)
+
+    def drain_runtime(
+        self,
+        *,
+        runtime_id: str,
+        process_start_identity: str,
+        observed_at: datetime,
+    ) -> int:
+        """Pause owned work, release leases, and stop one foreground runtime."""
+        _validate_runtime_identity(runtime_id, 1, process_start_identity, validate_pid=False)
+        encoded_now = _utc_timestamp(observed_at).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT process_start_identity, state FROM runtime_instances WHERE runtime_id = ?",
+                    (runtime_id,),
+                ).fetchone()
+                if row is None:
+                    connection.commit()
+                    return 0
+                if row[0] != process_start_identity:
+                    raise WorkspaceRegistryError("Dolphin runtime ownership no longer matches this process")
+                if row[1] == "stopped":
+                    connection.commit()
+                    return 0
+                connection.execute(
+                    "UPDATE runtime_instances SET state = 'draining' WHERE runtime_id = ?",
+                    (runtime_id,),
+                )
+                paused = self._pause_runtime_operations(
+                    connection,
+                    runtime_id=runtime_id,
+                    pause_reason="shutdown",
+                    transitioned_at=encoded_now,
+                )
+                connection.execute(
+                    """
+                    UPDATE runtime_instances
+                    SET state = 'stopped', heartbeat_at = ?, expires_at = ?
+                    WHERE runtime_id = ?
+                    """,
+                    (encoded_now, encoded_now, runtime_id),
+                )
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return paused
+
+    @staticmethod
+    def _require_active_runtime(
+        connection: sqlite3.Connection,
+        *,
+        runtime_id: str,
+        process_start_identity: str,
+        observed_at: str,
+        require_operation_capable: bool,
+    ) -> None:
+        row = connection.execute(
+            """
+            SELECT process_start_identity, operation_capable, state, expires_at
+            FROM runtime_instances
+            WHERE runtime_id = ?
+            """,
+            (runtime_id,),
+        ).fetchone()
+        if row is None or row[0] != process_start_identity or row[2] != "active" or row[3] <= observed_at:
+            raise WorkspaceRegistryError("Dolphin runtime ownership is inactive or expired")
+        if require_operation_capable and row[1] != 1:
+            raise WorkspaceRegistryError("Dolphin runtime is not configured to execute operations")
+
+    @staticmethod
+    def _require_operation_lease(
+        connection: sqlite3.Connection,
+        lease: OperationLease,
+        *,
+        observed_at: str,
+    ) -> tuple[str, str]:
+        row = connection.execute(
+            """
+            SELECT o.state, l.expires_at
+            FROM operation_leases AS l
+            JOIN workspace_operations AS o ON o.operation_id = l.operation_id
+            JOIN runtime_instances AS r ON r.runtime_id = l.runtime_id
+            WHERE l.operation_id = ? AND l.lease_id = ? AND l.runtime_id = ?
+              AND r.state = 'active' AND r.expires_at > ?
+            """,
+            (lease.operation.operation_id, lease.lease_id, lease.runtime_id, observed_at),
+        ).fetchone()
+        if row is None or row[1] <= observed_at:
+            raise WorkspaceRegistryError("Dolphin operation lease is unavailable or expired")
+        return str(row[0]), str(row[1])
+
+    @staticmethod
+    def _insert_checkpoint(connection: sqlite3.Connection, checkpoint: OperationCheckpoint) -> None:
+        _validate_checkpoint(checkpoint)
+        connection.execute(
+            """
+            INSERT INTO operation_checkpoints (
+                operation_id, schema_version, workspace_id, target_fingerprint, pipeline_key, phase,
+                staging_generation_id, completed_manifest_id, known_eligible_files, processed_files,
+                parsed_files, reused_chunks, embedding_cache_hits, embedding_cache_misses,
+                embedded_chunks, pause_reason, checkpointed_at, resume_count
+            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            _checkpoint_storage_values(checkpoint),
+        )
+
+    @staticmethod
+    def _update_checkpoint(connection: sqlite3.Connection, checkpoint: OperationCheckpoint) -> None:
+        _validate_checkpoint(checkpoint)
+        values = _checkpoint_storage_values(checkpoint)
+        updated = connection.execute(
+            """
+            UPDATE operation_checkpoints
+            SET workspace_id = ?, target_fingerprint = ?, pipeline_key = ?, phase = ?,
+                staging_generation_id = ?, completed_manifest_id = ?, known_eligible_files = ?,
+                processed_files = ?, parsed_files = ?, reused_chunks = ?, embedding_cache_hits = ?,
+                embedding_cache_misses = ?, embedded_chunks = ?, pause_reason = ?, checkpointed_at = ?,
+                resume_count = ?
+            WHERE operation_id = ? AND schema_version = 1
+            """,
+            (*values[1:], values[0]),
+        ).rowcount
+        if updated != 1:
+            raise WorkspaceRegistryError("Dolphin operation checkpoint changed before it could be replaced")
+
+    @staticmethod
+    def _read_checkpoint(connection: sqlite3.Connection, operation_id: str) -> OperationCheckpoint | None:
+        row = connection.execute(
+            """
+            SELECT operation_id, workspace_id, target_fingerprint, pipeline_key, phase,
+                   known_eligible_files, processed_files, parsed_files, reused_chunks,
+                   embedding_cache_hits, embedding_cache_misses, embedded_chunks, pause_reason,
+                   staging_generation_id, completed_manifest_id, checkpointed_at, resume_count
+            FROM operation_checkpoints
+            WHERE operation_id = ? AND schema_version = 1
+            """,
+            (operation_id,),
+        ).fetchone()
+        return None if row is None else _checkpoint_from_storage_row(row)
+
+    @staticmethod
+    def _reconcile_expired_operation_leases(
+        connection: sqlite3.Connection,
+        *,
+        transitioned_at: str,
+    ) -> int:
+        runtime_ids = [
+            str(row[0])
+            for row in connection.execute(
+                """
+                SELECT DISTINCT runtime_id
+                FROM operation_leases
+                WHERE expires_at <= ?
+                """,
+                (transitioned_at,),
+            ).fetchall()
+        ]
+        paused = 0
+        for runtime_id in runtime_ids:
+            paused += WorkspaceRegistry._pause_runtime_operations(
+                connection,
+                runtime_id=runtime_id,
+                pause_reason="runtime_absent",
+                transitioned_at=transitioned_at,
+                only_expired_at=transitioned_at,
+            )
+        return paused
+
+    @staticmethod
+    def _pause_runtime_operations(
+        connection: sqlite3.Connection,
+        *,
+        runtime_id: str,
+        pause_reason: OperationPauseReason,
+        transitioned_at: str,
+        only_expired_at: str | None = None,
+    ) -> int:
+        rows = connection.execute(
+            """
+            SELECT l.operation_id
+            FROM operation_leases AS l
+            JOIN workspace_operations AS o ON o.operation_id = l.operation_id
+            WHERE l.runtime_id = ? AND o.state = 'running'
+              AND (? IS NULL OR l.expires_at <= ?)
+            ORDER BY l.operation_id
+            """,
+            (runtime_id, only_expired_at, only_expired_at),
+        ).fetchall()
+        operation_ids = [str(row[0]) for row in rows]
+        for operation_id in operation_ids:
+            connection.execute(
+                """
+                UPDATE workspace_operations
+                SET state = 'paused', updated_at = ?, terminal_at = NULL
+                WHERE operation_id = ? AND state = 'running'
+                """,
+                (transitioned_at, operation_id),
+            )
+            connection.execute(
+                """
+                UPDATE operation_checkpoints
+                SET pause_reason = ?, checkpointed_at = ?
+                WHERE operation_id = ?
+                """,
+                (pause_reason, transitioned_at, operation_id),
+            )
+        if operation_ids:
+            connection.executemany(
+                "DELETE FROM operation_leases WHERE operation_id = ?",
+                ((operation_id,) for operation_id in operation_ids),
+            )
+        return len(operation_ids)
 
     def register(
         self,
@@ -465,80 +1177,6 @@ class WorkspaceRegistry:
             workspace_id=workspace_id,
             kind=kind,
             state=OperationState(state),
-            target_head_commit=target_head_commit,
-            attempt=attempt,
-            created=False,
-        )
-
-    def set_operation_state(
-        self,
-        operation_id: str,
-        state: OperationState,
-        *,
-        expected_state: OperationState | None = None,
-    ) -> WorkspaceOperation | None:
-        """Compare-and-swap one operation through a permitted lifecycle transition."""
-        with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                row = connection.execute(
-                    """
-                    SELECT workspace_id, kind, state, target_head_commit, attempt
-                    FROM workspace_operations
-                    WHERE operation_id = ?
-                    """,
-                    (operation_id,),
-                ).fetchone()
-                if row is None:
-                    connection.commit()
-                    return None
-                workspace_id, kind, stored_state, target_head_commit, attempt = row
-                current_state = OperationState(stored_state)
-                if expected_state is not None and current_state is not expected_state:
-                    raise WorkspaceRegistryError("Dolphin operation state no longer matches the worker snapshot")
-                if current_state is state:
-                    connection.commit()
-                    return WorkspaceOperation(
-                        operation_id=operation_id,
-                        workspace_id=workspace_id,
-                        kind=kind,
-                        state=current_state,
-                        target_head_commit=target_head_commit,
-                        attempt=attempt,
-                        created=False,
-                    )
-                if state not in _ALLOWED_OPERATION_TRANSITIONS[current_state]:
-                    raise WorkspaceRegistryError(
-                        f"Dolphin operation transition from {current_state.value} to {state.value} is not allowed"
-                    )
-                transitioned_at = datetime.now(UTC).isoformat()
-                updated = connection.execute(
-                    """
-                    UPDATE workspace_operations
-                    SET state = ?, updated_at = ?, terminal_at = ?
-                    WHERE operation_id = ? AND state = ?
-                    """,
-                    (
-                        state.value,
-                        transitioned_at,
-                        transitioned_at
-                        if state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
-                        else None,
-                        operation_id,
-                        current_state.value,
-                    ),
-                ).rowcount
-                if not updated:
-                    raise WorkspaceRegistryError("Dolphin operation state changed before this transition could commit")
-            except Exception:
-                connection.rollback()
-                raise
-            connection.commit()
-        return WorkspaceOperation(
-            operation_id=operation_id,
-            workspace_id=workspace_id,
-            kind=kind,
-            state=state,
             target_head_commit=target_head_commit,
             attempt=attempt,
             created=False,
@@ -686,9 +1324,82 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE TABLE runtime_instances (
+                            runtime_id TEXT PRIMARY KEY,
+                            pid INTEGER NOT NULL CHECK (pid > 0),
+                            process_start_identity TEXT NOT NULL,
+                            mode TEXT NOT NULL CHECK (mode IN ('mcp', 'foreground_cli')),
+                            operation_capable INTEGER NOT NULL CHECK (operation_capable IN (0, 1)),
+                            state TEXT NOT NULL CHECK (state IN ('active', 'draining', 'stopped')),
+                            dolphin_version TEXT NOT NULL,
+                            schema_version INTEGER NOT NULL,
+                            started_at TEXT NOT NULL,
+                            heartbeat_at TEXT NOT NULL,
+                            expires_at TEXT NOT NULL
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE operation_checkpoints (
+                            operation_id TEXT PRIMARY KEY REFERENCES workspace_operations(operation_id)
+                                ON DELETE CASCADE,
+                            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
+                            target_fingerprint TEXT NOT NULL,
+                            pipeline_key TEXT NOT NULL,
+                            phase TEXT NOT NULL CHECK (phase IN (
+                                'preflight', 'scan', 'chunk', 'embed', 'store', 'publish'
+                            )),
+                            staging_generation_id TEXT,
+                            completed_manifest_id TEXT,
+                            known_eligible_files INTEGER CHECK (
+                                known_eligible_files IS NULL OR known_eligible_files >= 0
+                            ),
+                            processed_files INTEGER NOT NULL CHECK (processed_files >= 0),
+                            parsed_files INTEGER NOT NULL CHECK (parsed_files >= 0),
+                            reused_chunks INTEGER NOT NULL CHECK (reused_chunks >= 0),
+                            embedding_cache_hits INTEGER NOT NULL CHECK (embedding_cache_hits >= 0),
+                            embedding_cache_misses INTEGER NOT NULL CHECK (embedding_cache_misses >= 0),
+                            embedded_chunks INTEGER NOT NULL CHECK (embedded_chunks >= 0),
+                            pause_reason TEXT CHECK (pause_reason IS NULL OR pause_reason IN (
+                                'runtime_absent', 'credential_missing', 'disk_pressure', 'awaiting_approval', 'shutdown'
+                            )),
+                            checkpointed_at TEXT NOT NULL,
+                            resume_count INTEGER NOT NULL CHECK (resume_count >= 0)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE operation_leases (
+                            operation_id TEXT PRIMARY KEY REFERENCES workspace_operations(operation_id)
+                                ON DELETE CASCADE,
+                            lease_id TEXT NOT NULL UNIQUE,
+                            runtime_id TEXT NOT NULL REFERENCES runtime_instances(runtime_id),
+                            acquired_at TEXT NOT NULL,
+                            heartbeat_at TEXT NOT NULL,
+                            expires_at TEXT NOT NULL
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX operation_leases_runtime
+                        ON operation_leases (runtime_id, expires_at)
+                        """
+                    )
+                    connection.execute(
+                        """
                         CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_reusable_target
                         ON workspace_operations (workspace_id, kind, target_head_commit)
                         WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused', 'succeeded')
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX workspace_operations_claimable
+                        ON workspace_operations (state, created_at, operation_id)
                         """
                     )
                     self._create_registry_metadata(connection)
@@ -1382,6 +2093,301 @@ def _decode_repo_list_cursor(
     return key[0], key[1], key[2], key[3]
 
 
+def _runtime_version() -> str:
+    version = get_version()
+    _validate_bounded_key(version, label="runtime version", maximum=64)
+    return version
+
+
+def _utc_timestamp(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise WorkspaceRegistryError("Dolphin runtime timestamp must include a timezone")
+    return value.astimezone(UTC)
+
+
+def _validate_lease_window(now: datetime, expires_at: datetime) -> None:
+    if _utc_timestamp(expires_at) <= _utc_timestamp(now):
+        raise WorkspaceRegistryError("Dolphin lease expiry must be later than its heartbeat")
+
+
+def _validate_bounded_key(value: str, *, label: str, maximum: int) -> None:
+    if not value or len(value) > maximum or "\x00" in value:
+        raise WorkspaceRegistryError(f"Dolphin {label} is invalid")
+
+
+def _validate_runtime_identity(
+    runtime_id: str,
+    pid: int,
+    process_start_identity: str,
+    *,
+    validate_pid: bool = True,
+) -> None:
+    _validate_bounded_key(runtime_id, label="runtime ID", maximum=_RUNTIME_ID_MAX_LENGTH)
+    _validate_bounded_key(
+        process_start_identity,
+        label="process start identity",
+        maximum=_PROCESS_IDENTITY_MAX_LENGTH,
+    )
+    if validate_pid and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0):
+        raise WorkspaceRegistryError("Dolphin runtime PID is invalid")
+
+
+def _runtime_owner_from_row(row: tuple[object, ...]) -> RuntimeOwner:
+    runtime_id = _bounded_registry_text(row[0], label="runtime ID", max_length=_RUNTIME_ID_MAX_LENGTH)
+    pid = row[1]
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise WorkspaceRegistryError("Dolphin runtime ownership metadata contains an invalid PID")
+    process_start_identity = _bounded_registry_text(
+        row[2],
+        label="process start identity",
+        max_length=_PROCESS_IDENTITY_MAX_LENGTH,
+    )
+    mode = _bounded_registry_text(row[3], label="runtime mode", max_length=32)
+    state = _bounded_registry_text(row[5], label="runtime state", max_length=32)
+    if mode not in {"mcp", "foreground_cli"} or state not in {"active", "draining", "stopped"}:
+        raise WorkspaceRegistryError("Dolphin runtime ownership metadata is invalid")
+    if row[4] not in {0, 1}:
+        raise WorkspaceRegistryError("Dolphin runtime capability metadata is invalid")
+    return RuntimeOwner(
+        runtime_id=runtime_id,
+        pid=pid,
+        process_start_identity=process_start_identity,
+        mode=cast(RuntimeMode, mode),
+        operation_capable=bool(row[4]),
+        state=cast(RuntimeState, state),
+        started_at=_parse_registry_timestamp(row[6], label="runtime start timestamp"),
+        heartbeat_at=_parse_registry_timestamp(row[7], label="runtime heartbeat timestamp"),
+        expires_at=_parse_registry_timestamp(row[8], label="runtime expiry timestamp"),
+    )
+
+
+def _workspace_operation_from_claim_row(row: tuple[object, ...]) -> WorkspaceOperation:
+    operation_id = _bounded_registry_text(row[0], label="operation ID", max_length=OPERATION_ID_MAX_LENGTH)
+    workspace_id = _bounded_registry_text(row[1], label="workspace ID", max_length=ENTITY_ID_MAX_LENGTH)
+    kind = _bounded_registry_text(row[2], label="operation kind", max_length=32)
+    if kind not in {"initial_index", "sync", "recovery"}:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid kind")
+    try:
+        state = OperationState(_bounded_registry_text(row[3], label="operation state", max_length=32))
+    except ValueError as exc:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid state") from exc
+    target_head_commit = _bounded_registry_text(
+        row[4],
+        label="operation target commit",
+        max_length=HEAD_COMMIT_MAX_LENGTH,
+    )
+    attempt = row[5]
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid attempt")
+    return WorkspaceOperation(
+        operation_id=operation_id,
+        workspace_id=workspace_id,
+        kind=cast(OperationKind, kind),
+        state=state,
+        target_head_commit=target_head_commit,
+        attempt=attempt,
+        created=False,
+    )
+
+
+def _checkpoint_from_claim_row(
+    row: tuple[object, ...],
+    *,
+    pipeline_key: str,
+    checkpointed_at: datetime,
+) -> OperationCheckpoint:
+    operation = _workspace_operation_from_claim_row(row)
+    if row[6] is None:
+        return OperationCheckpoint(
+            operation_id=operation.operation_id,
+            workspace_id=operation.workspace_id,
+            target_fingerprint=f"git-head-v1:{operation.target_head_commit}",
+            pipeline_key=pipeline_key,
+            phase="preflight",
+            counters=OperationCountersSnapshot(),
+            checkpointed_at=_utc_timestamp(checkpointed_at),
+        )
+    return _checkpoint_from_storage_row(
+        (
+            operation.operation_id,
+            operation.workspace_id,
+            *row[6:17],
+            row[17],
+            row[18],
+            row[19],
+            row[20],
+        )
+    )
+
+
+def _checkpoint_from_storage_row(row: tuple[object, ...]) -> OperationCheckpoint:
+    operation_id = _bounded_registry_text(row[0], label="operation ID", max_length=OPERATION_ID_MAX_LENGTH)
+    workspace_id = _bounded_registry_text(row[1], label="workspace ID", max_length=ENTITY_ID_MAX_LENGTH)
+    target_fingerprint = _bounded_registry_text(
+        row[2], label="target fingerprint", max_length=_TARGET_FINGERPRINT_MAX_LENGTH
+    )
+    pipeline_key = _bounded_registry_text(row[3], label="pipeline key", max_length=_PIPELINE_KEY_MAX_LENGTH)
+    phase = _bounded_registry_text(row[4], label="operation phase", max_length=32)
+    if phase not in _OPERATION_PHASES:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint contains an invalid phase")
+    counters = _operation_counters_from_values(row[5:12])
+    pause_reason = None if row[12] is None else _bounded_registry_text(row[12], label="pause reason", max_length=32)
+    if pause_reason is not None and pause_reason not in {
+        "runtime_absent",
+        "credential_missing",
+        "disk_pressure",
+        "awaiting_approval",
+        "shutdown",
+    }:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint contains an invalid pause reason")
+    staging_generation_id = (
+        None
+        if row[13] is None
+        else _bounded_registry_text(row[13], label="staging generation ID", max_length=ENTITY_ID_MAX_LENGTH)
+    )
+    completed_manifest_id = (
+        None
+        if row[14] is None
+        else _bounded_registry_text(row[14], label="completed manifest ID", max_length=ENTITY_ID_MAX_LENGTH)
+    )
+    resume_count = row[16]
+    if not isinstance(resume_count, int) or isinstance(resume_count, bool) or resume_count < 0:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint contains an invalid resume count")
+    checkpoint = OperationCheckpoint(
+        operation_id=operation_id,
+        workspace_id=workspace_id,
+        target_fingerprint=target_fingerprint,
+        pipeline_key=pipeline_key,
+        phase=cast(OperationPhase, phase),
+        counters=counters,
+        pause_reason=cast(OperationPauseReason | None, pause_reason),
+        staging_generation_id=staging_generation_id,
+        completed_manifest_id=completed_manifest_id,
+        checkpointed_at=_parse_registry_timestamp(row[15], label="operation checkpoint timestamp"),
+        resume_count=resume_count,
+    )
+    _validate_checkpoint(checkpoint)
+    return checkpoint
+
+
+def _operation_counters_from_values(values: Sequence[object]) -> OperationCountersSnapshot:
+    if len(values) != 7:
+        raise WorkspaceRegistryError("Dolphin operation counters are incomplete")
+    known = values[0]
+    if known is not None and (not isinstance(known, int) or isinstance(known, bool) or known < 0):
+        raise WorkspaceRegistryError("Dolphin operation counters are invalid")
+    remaining = values[1:]
+    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in remaining):
+        raise WorkspaceRegistryError("Dolphin operation counters are invalid")
+    counters = OperationCountersSnapshot(
+        known_eligible_files=cast(int | None, known),
+        processed_files=cast(int, remaining[0]),
+        parsed_files=cast(int, remaining[1]),
+        reused_chunks=cast(int, remaining[2]),
+        embedding_cache_hits=cast(int, remaining[3]),
+        embedding_cache_misses=cast(int, remaining[4]),
+        embedded_chunks=cast(int, remaining[5]),
+    )
+    if counters.known_eligible_files is not None and counters.processed_files > counters.known_eligible_files:
+        raise WorkspaceRegistryError("Dolphin operation counters exceed the known eligible file count")
+    if counters.parsed_files > counters.processed_files:
+        raise WorkspaceRegistryError("Dolphin parsed file count exceeds processed files")
+    return counters
+
+
+def _checkpoint_storage_values(checkpoint: OperationCheckpoint) -> tuple[object, ...]:
+    counters = checkpoint.counters
+    return (
+        checkpoint.operation_id,
+        checkpoint.workspace_id,
+        checkpoint.target_fingerprint,
+        checkpoint.pipeline_key,
+        checkpoint.phase,
+        checkpoint.staging_generation_id,
+        checkpoint.completed_manifest_id,
+        counters.known_eligible_files,
+        counters.processed_files,
+        counters.parsed_files,
+        counters.reused_chunks,
+        counters.embedding_cache_hits,
+        counters.embedding_cache_misses,
+        counters.embedded_chunks,
+        checkpoint.pause_reason,
+        _utc_timestamp(checkpoint.checkpointed_at).isoformat(),
+        checkpoint.resume_count,
+    )
+
+
+def _validate_checkpoint(checkpoint: OperationCheckpoint) -> None:
+    _validate_bounded_key(checkpoint.operation_id, label="operation ID", maximum=OPERATION_ID_MAX_LENGTH)
+    _validate_bounded_key(checkpoint.workspace_id, label="workspace ID", maximum=ENTITY_ID_MAX_LENGTH)
+    _validate_bounded_key(
+        checkpoint.target_fingerprint,
+        label="target fingerprint",
+        maximum=_TARGET_FINGERPRINT_MAX_LENGTH,
+    )
+    _validate_bounded_key(checkpoint.pipeline_key, label="pipeline key", maximum=_PIPELINE_KEY_MAX_LENGTH)
+    if checkpoint.phase not in _OPERATION_PHASES:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint phase is invalid")
+    if checkpoint.pause_reason is not None and checkpoint.pause_reason not in {
+        "runtime_absent",
+        "credential_missing",
+        "disk_pressure",
+        "awaiting_approval",
+        "shutdown",
+    }:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint pause reason is invalid")
+    for value, label in (
+        (checkpoint.staging_generation_id, "staging generation ID"),
+        (checkpoint.completed_manifest_id, "completed manifest ID"),
+    ):
+        if value is not None:
+            _validate_bounded_key(value, label=label, maximum=ENTITY_ID_MAX_LENGTH)
+    if checkpoint.resume_count < 0:
+        raise WorkspaceRegistryError("Dolphin operation checkpoint resume count is invalid")
+    _utc_timestamp(checkpoint.checkpointed_at)
+    _operation_counters_from_values(
+        (
+            checkpoint.counters.known_eligible_files,
+            checkpoint.counters.processed_files,
+            checkpoint.counters.parsed_files,
+            checkpoint.counters.reused_chunks,
+            checkpoint.counters.embedding_cache_hits,
+            checkpoint.counters.embedding_cache_misses,
+            checkpoint.counters.embedded_chunks,
+        )
+    )
+
+
+def _validate_checkpoint_progress(previous: OperationCheckpoint, replacement: OperationCheckpoint) -> None:
+    if (
+        previous.operation_id != replacement.operation_id
+        or previous.workspace_id != replacement.workspace_id
+        or previous.target_fingerprint != replacement.target_fingerprint
+        or previous.pipeline_key != replacement.pipeline_key
+    ):
+        raise WorkspaceRegistryError("Dolphin operation checkpoint identity cannot change")
+    if _OPERATION_PHASES.index(replacement.phase) < _OPERATION_PHASES.index(previous.phase):
+        raise WorkspaceRegistryError("Dolphin operation checkpoint phase cannot regress")
+    prior = previous.counters
+    current = replacement.counters
+    if prior.known_eligible_files is not None and (
+        current.known_eligible_files is None or current.known_eligible_files < prior.known_eligible_files
+    ):
+        raise WorkspaceRegistryError("Dolphin operation checkpoint counters cannot regress")
+    for old_value, new_value in (
+        (prior.processed_files, current.processed_files),
+        (prior.parsed_files, current.parsed_files),
+        (prior.reused_chunks, current.reused_chunks),
+        (prior.embedding_cache_hits, current.embedding_cache_hits),
+        (prior.embedding_cache_misses, current.embedding_cache_misses),
+        (prior.embedded_chunks, current.embedded_chunks),
+        (previous.resume_count, replacement.resume_count),
+    ):
+        if new_value < old_value:
+            raise WorkspaceRegistryError("Dolphin operation checkpoint counters cannot regress")
+
+
 def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
     operation_id = _bounded_registry_text(row[0], label="operation ID", max_length=OPERATION_ID_MAX_LENGTH)
     workspace_id = (
@@ -1411,6 +2417,26 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
     terminal = state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
     if terminal != (terminal_at is not None):
         raise WorkspaceRegistryError("Dolphin operation metadata has inconsistent terminal timestamps")
+    checkpoint_present = len(row) > 9 and row[9] is not None
+    phase = None
+    counters = None
+    pause_reason = None
+    if checkpoint_present:
+        phase_text = _bounded_registry_text(row[9], label="operation phase", max_length=32)
+        if phase_text not in _OPERATION_PHASES:
+            raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid phase")
+        phase = cast(OperationPhase, phase_text)
+        counters = _operation_counters_from_values(row[10:17])
+        pause_text = None if row[17] is None else _bounded_registry_text(row[17], label="pause reason", max_length=32)
+        if pause_text is not None and pause_text not in {
+            "runtime_absent",
+            "credential_missing",
+            "disk_pressure",
+            "awaiting_approval",
+            "shutdown",
+        }:
+            raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid pause reason")
+        pause_reason = cast(OperationPauseReason | None, pause_text)
     return OperationSnapshot(
         operation_id=operation_id,
         workspace_id=workspace_id,
@@ -1421,6 +2447,9 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
         created_at=created_at,
         updated_at=updated_at,
         terminal_at=terminal_at,
+        phase=phase,
+        counters=counters,
+        pause_reason=pause_reason,
     )
 
 

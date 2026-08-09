@@ -46,11 +46,16 @@ async def test_stdio_server_discovers_and_calls_lifecycle_reads(tmp_path: Path) 
     assert status.structured_content is not None
     assert status.structured_content["credential_variable"] == "DOLPHIN_OPENAI_API_KEY"
     assert status.structured_content["tool_availability"]["repo_list"] == "available"
+    assert status.structured_content["runtime"] == {"active_processes": 1, "operation_executors": 0}
     assert repo_list.is_error is False
     assert repo_list.structured_content == {"items": [], "next_cursor": None}
     assert operation_status.is_error is True
     assert operation_status.structured_content is not None
     assert operation_status.structured_content["code"] == "OPERATION_MISSING"
+    layout = macos_storage_layout(home=tmp_path / "home")
+    with sqlite3.connect(layout.metadata_db) as connection:
+        runtime_states = connection.execute("SELECT state FROM runtime_instances").fetchall()
+    assert runtime_states == [("stopped",)]
 
 
 @pytest.mark.integration
@@ -69,11 +74,28 @@ async def test_stdio_server_pages_populated_registry_and_expires_terminal_operat
         _fake_worktree(tmp_path / "repositories", 0),
         cleanup_receipt=_cleanup_receipt("0"),
     )
-    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-    registry.set_operation_state(
-        operation.operation_id,
+    now = datetime.now(UTC)
+    runtime = registry.register_runtime(
+        runtime_id="runtime_terminal_fixture",
+        pid=100,
+        process_start_identity="start-terminal-fixture",
+        mode="mcp",
+        operation_capable=True,
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    lease = registry.claim_next_operation(
+        runtime_id=runtime.runtime_id,
+        process_start_identity=runtime.process_start_identity,
+        pipeline_key="test-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    assert lease is not None
+    registry.finish_operation(
+        lease,
         OperationState.SUCCEEDED,
-        expected_state=OperationState.RUNNING,
+        observed_at=now,
     )
     for index in range(1, 26):
         registry.register(
