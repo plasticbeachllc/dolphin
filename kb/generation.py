@@ -47,7 +47,10 @@ class VerifiedVectorCommit(_GenerationModel):
 class VerifiedGenerationManifest(_GenerationModel):
     generation_id: str = Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     manifest_id: str = Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
-    manifest_digest: str = Field(min_length=1, max_length=256)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    artifact_set_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    artifact_count: int = Field(ge=0)
+    artifact_utf8_bytes: int = Field(ge=0)
     metadata_item_count: int = Field(ge=0)
     keyword_item_count: int = Field(ge=0)
     vector_row_count: int = Field(ge=0)
