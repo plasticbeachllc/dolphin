@@ -65,7 +65,7 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert common_git_dir == str(worktree_root / ".git")
     assert common_git_dir_identity == worktree_git_dir_identity
     assert worktree_git_dir == common_git_dir
-    assert version == 8
+    assert version == 9
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
@@ -475,13 +475,13 @@ async def test_registration_rolls_back_if_the_worktree_changes_before_commit(
         assert connection.execute("SELECT COUNT(*) FROM workspace_registrations").fetchone()[0] == 0
 
 
-def test_legacy_prerelease_schema_requires_clean_reenrollment(tmp_path: Path) -> None:
+def test_v8_prerelease_schema_requires_clean_reenrollment(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     layout = macos_storage_layout(home=home)
     layout.ensure_private_metadata_database()
     with sqlite3.connect(layout.metadata_db) as connection:
-        connection.execute("PRAGMA user_version = 4")
+        connection.execute("PRAGMA user_version = 8")
     registry = WorkspaceRegistry(layout)
 
     assert registry.schema_is_current() is False

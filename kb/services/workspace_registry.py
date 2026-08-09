@@ -30,6 +30,7 @@ from kb.lifecycle_limits import (
     REPO_LIST_CURSOR_MAX_LENGTH,
     REPO_LIST_PAGE_SIZE,
 )
+from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.repository_boundaries import (
     ParentScanPlan,
@@ -55,7 +56,7 @@ class RepoListCursorExpired(ValueError):
     """The repository-list cursor names an obsolete actionable-list revision."""
 
 
-_SCHEMA_VERSION = 8
+_SCHEMA_VERSION = METADATA_SCHEMA_VERSION
 _MAX_BOUNDARIES_PER_READ = 8
 _MAX_STORED_BOUNDARIES = 100_000
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
@@ -1448,6 +1449,147 @@ class WorkspaceRegistry:
                         """
                         CREATE INDEX workspace_operations_claimable
                         ON workspace_operations (state, created_at, operation_id)
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE generations (
+                            generation_id TEXT PRIMARY KEY,
+                            operation_id TEXT NOT NULL UNIQUE REFERENCES workspace_operations(operation_id),
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
+                            target_fingerprint TEXT NOT NULL,
+                            pipeline_key TEXT NOT NULL,
+                            state TEXT NOT NULL CHECK (state IN ('staging', 'ready', 'published')),
+                            vector_commit_token TEXT,
+                            vector_digest TEXT,
+                            vector_row_count INTEGER CHECK (vector_row_count IS NULL OR vector_row_count >= 0),
+                            vector_provider TEXT CHECK (vector_provider IS NULL OR vector_provider = 'openai'),
+                            vector_model TEXT CHECK (
+                                vector_model IS NULL OR vector_model = 'text-embedding-3-small'
+                            ),
+                            vector_dimensions INTEGER CHECK (
+                                vector_dimensions IS NULL OR vector_dimensions = 1536
+                            ),
+                            embedding_contract_version INTEGER CHECK (
+                                embedding_contract_version IS NULL OR embedding_contract_version = 1
+                            ),
+                            manifest_id TEXT UNIQUE,
+                            manifest_digest TEXT,
+                            metadata_item_count INTEGER CHECK (
+                                metadata_item_count IS NULL OR metadata_item_count >= 0
+                            ),
+                            keyword_item_count INTEGER CHECK (
+                                keyword_item_count IS NULL OR keyword_item_count >= 0
+                            ),
+                            publication_id TEXT UNIQUE,
+                            publication_revision INTEGER CHECK (
+                                publication_revision IS NULL OR publication_revision >= 1
+                            ),
+                            previous_generation_id TEXT,
+                            created_at TEXT NOT NULL,
+                            ready_at TEXT,
+                            published_at TEXT,
+                            CHECK (
+                                (
+                                    vector_commit_token IS NULL
+                                    AND vector_digest IS NULL
+                                    AND vector_row_count IS NULL
+                                    AND vector_provider IS NULL
+                                    AND vector_model IS NULL
+                                    AND vector_dimensions IS NULL
+                                    AND embedding_contract_version IS NULL
+                                )
+                                OR (
+                                    vector_commit_token IS NOT NULL
+                                    AND vector_digest IS NOT NULL
+                                    AND vector_row_count IS NOT NULL
+                                    AND vector_provider IS NOT NULL
+                                    AND vector_model IS NOT NULL
+                                    AND vector_dimensions IS NOT NULL
+                                    AND embedding_contract_version IS NOT NULL
+                                )
+                            ),
+                            CHECK (
+                                (
+                                    state = 'staging'
+                                    AND manifest_id IS NULL
+                                    AND manifest_digest IS NULL
+                                    AND metadata_item_count IS NULL
+                                    AND keyword_item_count IS NULL
+                                    AND ready_at IS NULL
+                                )
+                                OR (
+                                    state IN ('ready', 'published')
+                                    AND vector_commit_token IS NOT NULL
+                                    AND manifest_id IS NOT NULL
+                                    AND manifest_digest IS NOT NULL
+                                    AND metadata_item_count IS NOT NULL
+                                    AND keyword_item_count IS NOT NULL
+                                    AND ready_at IS NOT NULL
+                                )
+                            ),
+                            CHECK (
+                                (
+                                    state = 'published'
+                                    AND publication_id IS NOT NULL
+                                    AND publication_revision IS NOT NULL
+                                    AND published_at IS NOT NULL
+                                )
+                                OR (
+                                    state != 'published'
+                                    AND publication_id IS NULL
+                                    AND publication_revision IS NULL
+                                    AND previous_generation_id IS NULL
+                                    AND published_at IS NULL
+                                )
+                            ),
+                            UNIQUE (generation_id, publication_id),
+                            UNIQUE (workspace_id, generation_id)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX generations_workspace_state
+                        ON generations (workspace_id, state, created_at, generation_id)
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE workspace_publications (
+                            workspace_id TEXT PRIMARY KEY REFERENCES workspace_registrations(workspace_id),
+                            generation_id TEXT NOT NULL UNIQUE REFERENCES generations(generation_id),
+                            publication_id TEXT NOT NULL UNIQUE,
+                            revision INTEGER NOT NULL CHECK (revision >= 1),
+                            published_at TEXT NOT NULL,
+                            FOREIGN KEY (generation_id, publication_id)
+                                REFERENCES generations(generation_id, publication_id),
+                            FOREIGN KEY (workspace_id, generation_id)
+                                REFERENCES generations(workspace_id, generation_id)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE generation_reader_leases (
+                            lease_id TEXT PRIMARY KEY,
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
+                            generation_id TEXT NOT NULL,
+                            publication_id TEXT NOT NULL,
+                            acquired_at TEXT NOT NULL,
+                            expires_at TEXT NOT NULL,
+                            CHECK (expires_at > acquired_at),
+                            FOREIGN KEY (generation_id, publication_id)
+                                REFERENCES generations(generation_id, publication_id),
+                            FOREIGN KEY (workspace_id, generation_id)
+                                REFERENCES generations(workspace_id, generation_id)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX generation_reader_leases_expiry
+                        ON generation_reader_leases (expires_at, generation_id)
                         """
                     )
                     self._create_registry_metadata(connection)
