@@ -71,6 +71,7 @@ class StagingGeneration(_GenerationModel):
     manifest_digest: str | None = Field(default=None, min_length=1, max_length=256)
     metadata_item_count: int | None = Field(default=None, ge=0)
     keyword_item_count: int | None = Field(default=None, ge=0)
+    previous_generation_id: str | None = Field(default=None, min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     created_at: datetime
     ready_at: datetime | None = None
     published_at: datetime | None = None
@@ -112,6 +113,8 @@ class StagingGeneration(_GenerationModel):
             raise ValueError("ready generation requires verified components and a manifest")
         if (self.state == "published") != (self.published_at is not None):
             raise ValueError("published timestamp must match generation state")
+        if self.state != "published" and self.previous_generation_id is not None:
+            raise ValueError("only a published generation can record its predecessor")
         return self
 
 

@@ -74,6 +74,20 @@ def test_staging_and_component_readiness_remain_invisible_until_atomic_publicati
     assert current is not None
     assert current.generation_id == generation.generation_id
     assert current.revision == 1
+    assert (
+        coordinator.publish(
+            lease,
+            generation.generation_id,
+            expected_previous_generation_id=None,
+        )
+        == current
+    )
+    with pytest.raises(GenerationConflict, match="different predecessor"):
+        coordinator.publish(
+            lease,
+            generation.generation_id,
+            expected_previous_generation_id="gen_unrelated",
+        )
     operation = registry.inspect_operation(lease.operation.operation_id)
     assert operation is not None
     assert operation.phase == "publish"
@@ -222,6 +236,20 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
 
     assert second.revision == 2
     assert coordinator.current_snapshot(first.workspace_id) == second
+    assert (
+        coordinator.publish(
+            second_lease,
+            second_generation,
+            expected_previous_generation_id=first.generation_id,
+        )
+        == second
+    )
+    with pytest.raises(GenerationConflict, match="different predecessor"):
+        coordinator.publish(
+            second_lease,
+            second_generation,
+            expected_previous_generation_id=None,
+        )
     assert coordinator.snapshot_for_lease(read_lease.lease_id) == first
     clock.current = read_lease.expires_at
     with pytest.raises(GenerationReadLeaseUnavailable, match="expired"):

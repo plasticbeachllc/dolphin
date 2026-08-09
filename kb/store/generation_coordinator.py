@@ -218,6 +218,8 @@ class SQLiteGenerationCoordinator:
                 ).fetchone()
                 current_generation_id = str(current_row[0]) if current_row is not None else None
                 if generation.state == "published" and current_generation_id == generation_id:
+                    if generation.previous_generation_id != expected_previous_generation_id:
+                        raise GenerationConflict("Dolphin publication replay has a different predecessor")
                     snapshot = _snapshot_by_generation(connection, generation_id)
                     if snapshot is None:
                         raise GenerationCoordinatorError("Dolphin published generation pointer is invalid")
@@ -238,10 +240,11 @@ class SQLiteGenerationCoordinator:
                 connection.execute(
                     """
                     UPDATE generations
-                    SET state = 'published', publication_id = ?, publication_revision = ?, published_at = ?
+                    SET state = 'published', publication_id = ?, publication_revision = ?,
+                        previous_generation_id = ?, published_at = ?
                     WHERE generation_id = ? AND state = 'ready'
                     """,
-                    (publication_id, revision, observed_at, generation_id),
+                    (publication_id, revision, expected_previous_generation_id, observed_at, generation_id),
                 )
                 connection.execute(
                     """
@@ -470,8 +473,8 @@ _GENERATION_COLUMNS = """
 generation_id, operation_id, workspace_id, target_fingerprint, pipeline_key, state,
 vector_commit_token, vector_digest, vector_row_count, vector_provider, vector_model,
 vector_dimensions, embedding_contract_version, manifest_id, manifest_digest,
-metadata_item_count, keyword_item_count, publication_id, publication_revision, created_at,
-ready_at, published_at
+metadata_item_count, keyword_item_count, publication_id, publication_revision,
+previous_generation_id, created_at, ready_at, published_at
 """
 _GENERATION_BY_ID = f"SELECT {_GENERATION_COLUMNS} FROM generations WHERE generation_id = ?"
 _GENERATION_BY_OPERATION = f"SELECT {_GENERATION_COLUMNS} FROM generations WHERE operation_id = ?"
@@ -503,9 +506,10 @@ def _generation_from_row(row: tuple[object, ...]) -> StagingGeneration:
             manifest_digest=_optional_text(row[14], "manifest digest"),
             metadata_item_count=_optional_count(row[15], "metadata item count"),
             keyword_item_count=_optional_count(row[16], "keyword item count"),
-            created_at=_parse_timestamp(row[19], "generation creation timestamp"),
-            ready_at=_optional_timestamp(row[20], "generation ready timestamp"),
-            published_at=_optional_timestamp(row[21], "generation publication timestamp"),
+            previous_generation_id=_optional_text(row[19], "previous generation ID"),
+            created_at=_parse_timestamp(row[20], "generation creation timestamp"),
+            ready_at=_optional_timestamp(row[21], "generation ready timestamp"),
+            published_at=_optional_timestamp(row[22], "generation publication timestamp"),
         )
     except ValidationError as exc:
         raise GenerationCoordinatorError("Dolphin generation metadata is invalid") from exc

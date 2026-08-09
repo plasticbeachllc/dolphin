@@ -1485,6 +1485,7 @@ class WorkspaceRegistry:
                             publication_revision INTEGER CHECK (
                                 publication_revision IS NULL OR publication_revision >= 1
                             ),
+                            previous_generation_id TEXT,
                             created_at TEXT NOT NULL,
                             ready_at TEXT,
                             published_at TEXT,
@@ -1538,6 +1539,7 @@ class WorkspaceRegistry:
                                     state != 'published'
                                     AND publication_id IS NULL
                                     AND publication_revision IS NULL
+                                    AND previous_generation_id IS NULL
                                     AND published_at IS NULL
                                 )
                             ),
