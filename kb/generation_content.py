@@ -10,7 +10,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from kb.artifacts import ChunkTextArtifact, VerifiedChunkArtifactSet
-from kb.generation import PublishedSnapshot, StagingGeneration, VerifiedGenerationManifest
+from kb.generation import StagingGeneration, VerifiedGenerationManifest
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
 from kb.services.workspace_registry import OperationLease
 
@@ -166,4 +166,4 @@ class GenerationContentStore(Protocol):
         memberships: Sequence[StagedChunkMembership],
     ) -> VerifiedGenerationManifest: ...
 
-    def materialize_published_chunk(self, snapshot: PublishedSnapshot, chunk_instance_id: str) -> str: ...
+    def materialize_published_chunk(self, read_lease_id: str, chunk_instance_id: str) -> str: ...

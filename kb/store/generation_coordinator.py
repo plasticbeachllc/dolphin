@@ -187,12 +187,14 @@ class SQLiteGenerationCoordinator:
                 if generation.state in {"ready", "published"}:
                     if existing != supplied or generation.vector_row_count != manifest.vector_row_count:
                         raise GenerationConflict("Dolphin generation already records a different complete manifest")
+                    _mark_content_revision_validated(connection, manifest.generation_id)
                     connection.commit()
                     return generation
                 if generation.vector_commit_token is None or generation.vector_digest is None:
                     raise GenerationCoordinatorError("Dolphin generation vectors are not durably verified")
                 if generation.vector_row_count != manifest.vector_row_count:
                     raise GenerationConflict("Dolphin manifest vector count does not match verified vectors")
+                _mark_content_revision_validated(connection, manifest.generation_id)
                 connection.execute(
                     """
                     UPDATE generations
@@ -257,6 +259,7 @@ class SQLiteGenerationCoordinator:
                     _require_generation_content_binding(connection, generation)
                     if generation.previous_generation_id != expected_previous_generation_id:
                         raise GenerationConflict("Dolphin publication replay has a different predecessor")
+                    _mark_content_revision_validated(connection, generation_id)
                     snapshot = _snapshot_by_generation(connection, generation_id)
                     if snapshot is None:
                         raise GenerationCoordinatorError("Dolphin published generation pointer is invalid")
@@ -267,6 +270,7 @@ class SQLiteGenerationCoordinator:
                 if generation.state != "ready":
                     raise GenerationCoordinatorError("Dolphin generation is not ready for publication")
                 _require_generation_content_binding(connection, generation)
+                _mark_content_revision_validated(connection, generation_id)
                 head_row = connection.execute(
                     "SELECT head_commit FROM workspace_registrations WHERE workspace_id = ?",
                     (generation.workspace_id,),
@@ -642,6 +646,19 @@ def _require_generation_content_binding(
     if manifest is None:
         raise GenerationCoordinatorError("Dolphin generation content binding is unavailable or incompatible")
     _require_content_counts(connection, manifest)
+
+
+def _mark_content_revision_validated(connection: sqlite3.Connection, generation_id: str) -> None:
+    cursor = connection.execute(
+        """
+        UPDATE generation_content_manifests
+        SET validated_content_revision = content_revision
+        WHERE generation_id = ?
+        """,
+        (generation_id,),
+    )
+    if cursor.rowcount != 1:
+        raise GenerationCoordinatorError("Dolphin generation content revision is unavailable")
 
 
 def _require_content_counts(

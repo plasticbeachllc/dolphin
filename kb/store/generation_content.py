@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,13 +31,6 @@ _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
 _WRITE_LOCK_DEADLINE_SECONDS = 3.0
 _WRITE_LOCK_INITIAL_BACKOFF_SECONDS = 0.025
 _WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
-_VERIFIED_SNAPSHOT_CACHE_LIMIT = 256
-
-
-@dataclass(frozen=True, slots=True)
-class _VerifiedManifestCacheEntry:
-    manifest: VerifiedGenerationManifest
-    content_revision: int
 
 
 class SQLiteGenerationContentStore:
@@ -55,7 +46,6 @@ class SQLiteGenerationContentStore:
         self._layout = layout
         self._artifacts = artifacts or ChunkArtifactStore(layout)
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._verified_snapshots: OrderedDict[tuple[object, ...], _VerifiedManifestCacheEntry] = OrderedDict()
 
     def stage_manifest(
         self,
@@ -154,27 +144,21 @@ class SQLiteGenerationContentStore:
             connection.commit()
         return manifest
 
-    def materialize_published_chunk(self, snapshot: PublishedSnapshot, chunk_instance_id: str) -> str:
+    def materialize_published_chunk(self, read_lease_id: str, chunk_instance_id: str) -> str:
+        _bounded_id(read_lease_id, "generation read lease ID")
         _bounded_id(chunk_instance_id, "chunk instance ID")
+        observed_at = _timestamp(self._clock())
         with self._connection(read_only=True) as connection:
             connection.execute("BEGIN")
-            canonical = _canonical_published_snapshot(connection, snapshot.generation_id)
-            if canonical is None or canonical != snapshot:
-                raise PublishedChunkUnavailable("Dolphin exact published snapshot is unavailable")
-            cache_key = _snapshot_cache_key(canonical)
-            current_manifest = _manifest_cache_entry(connection, canonical.generation_id)
-            cached_manifest = self._verified_snapshots.get(cache_key)
-            needs_complete_validation = cached_manifest != current_manifest
-            if needs_complete_validation:
-                _require_complete_manifest_binding(connection, canonical, current_manifest)
-            else:
-                self._verified_snapshots.move_to_end(cache_key)
+            canonical = _snapshot_for_live_reader_lease(connection, read_lease_id, observed_at)
+            current_manifest = _validated_manifest_for_generation(connection, canonical.generation_id)
+            if (
+                current_manifest.manifest_id != canonical.manifest_id
+                or current_manifest.manifest_digest != canonical.manifest_digest
+            ):
+                raise GenerationContentError("Dolphin published chunk manifest is corrupt")
             membership = _require_published_membership(connection, canonical, chunk_instance_id)
             connection.commit()
-        if needs_complete_validation:
-            self._verified_snapshots[cache_key] = current_manifest
-            if len(self._verified_snapshots) > _VERIFIED_SNAPSHOT_CACHE_LIMIT:
-                self._verified_snapshots.popitem(last=False)
         text, artifact = self._artifacts.read_verified_artifact(membership.artifact.artifact_id)
         if artifact != membership.artifact:
             raise ArtifactCorrupt("Dolphin published chunk artifact does not match its membership")
@@ -391,59 +375,35 @@ def _require_published_membership(
     return membership
 
 
-def _require_complete_manifest_binding(
-    connection: sqlite3.Connection,
-    snapshot: PublishedSnapshot,
-    current: _VerifiedManifestCacheEntry,
-) -> None:
-    manifest = current.manifest
-    if manifest.manifest_id != snapshot.manifest_id or manifest.manifest_digest != snapshot.manifest_digest:
-        raise GenerationContentError("Dolphin published chunk manifest is corrupt")
-    rows = connection.execute(
-        """
-        SELECT chunk_instance_id, artifact_id, artifact_utf8_bytes, artifact_characters,
-               artifact_lines, relative_path, source_file_fingerprint, start_line, end_line,
-               language, chunker_key, embedding_cache_key, membership_digest
-        FROM generation_chunk_memberships
-        WHERE generation_id = ?
-        ORDER BY chunk_instance_id
-        """,
-        (snapshot.generation_id,),
-    ).fetchall()
-    memberships: list[PublishedChunkMembership] = []
-    artifacts = {}
-    for row in rows:
-        membership = _published_membership(snapshot, str(row[0]), tuple(row[1:]))
-        if identify_chunk_membership(snapshot.generation_id, membership) != row[12]:
-            raise GenerationContentError("Dolphin published chunk membership is corrupt")
-        existing = artifacts.setdefault(membership.artifact.artifact_id, membership.artifact)
-        if existing != membership.artifact:
-            raise GenerationContentError("Dolphin published chunk artifact metadata is inconsistent")
-        memberships.append(membership)
-    artifact_set = identify_chunk_artifact_set(
-        tuple(artifacts),
-        total_utf8_bytes=sum(artifact.utf8_bytes for artifact in artifacts.values()),
-    )
-    observed = identify_generation_content_manifest(snapshot.generation_id, tuple(memberships), artifact_set)
-    if observed != manifest:
-        raise GenerationContentError("Dolphin published chunk manifest binding is corrupt")
-
-
-def _manifest_cache_entry(
+def _validated_manifest_for_generation(
     connection: sqlite3.Connection,
     generation_id: str,
-) -> _VerifiedManifestCacheEntry:
+) -> VerifiedGenerationManifest:
     manifest = _manifest_for_generation(connection, generation_id)
     row = connection.execute(
-        "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+        """
+        SELECT content_revision, validated_content_revision
+        FROM generation_content_manifests
+        WHERE generation_id = ?
+        """,
         (generation_id,),
     ).fetchone()
     if manifest is None or row is None:
         raise GenerationContentError("Dolphin published chunk manifest is corrupt")
     revision = row[0]
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+    validated_revision = row[1]
+    if (
+        not isinstance(revision, int)
+        or isinstance(revision, bool)
+        or revision < 1
+        or not isinstance(validated_revision, int)
+        or isinstance(validated_revision, bool)
+        or validated_revision < 1
+    ):
         raise GenerationContentError("Dolphin published chunk manifest revision is corrupt")
-    return _VerifiedManifestCacheEntry(manifest=manifest, content_revision=revision)
+    if revision != validated_revision:
+        raise GenerationContentError("Dolphin published chunk manifest binding is corrupt")
+    return manifest
 
 
 _CANONICAL_SNAPSHOT_BY_GENERATION = """
@@ -455,6 +415,27 @@ SELECT publication_id, generation_id, workspace_id, operation_id, target_fingerp
 FROM generations
 WHERE generation_id = ? AND state = 'published'
 """
+
+
+def _snapshot_for_live_reader_lease(
+    connection: sqlite3.Connection,
+    lease_id: str,
+    observed_at: str,
+) -> PublishedSnapshot:
+    row = connection.execute(
+        """
+        SELECT workspace_id, generation_id, publication_id
+        FROM generation_reader_leases
+        WHERE lease_id = ? AND expires_at > ?
+        """,
+        (lease_id, observed_at),
+    ).fetchone()
+    if row is None:
+        raise PublishedChunkUnavailable("Dolphin generation read lease is unavailable or expired")
+    canonical = _canonical_published_snapshot(connection, str(row[1]))
+    if canonical is None or canonical.workspace_id != row[0] or canonical.publication_id != row[2]:
+        raise PublishedChunkUnavailable("Dolphin generation read lease no longer matches its snapshot")
+    return canonical
 
 
 def _canonical_published_snapshot(
@@ -490,30 +471,6 @@ def _canonical_published_snapshot(
         )
     except ValidationError as exc:
         raise GenerationContentError("Dolphin published snapshot metadata is corrupt") from exc
-
-
-def _snapshot_cache_key(snapshot: PublishedSnapshot) -> tuple[object, ...]:
-    return (
-        snapshot.publication_id,
-        snapshot.generation_id,
-        snapshot.workspace_id,
-        snapshot.operation_id,
-        snapshot.target_fingerprint,
-        snapshot.pipeline_key,
-        snapshot.manifest_id,
-        snapshot.manifest_digest,
-        snapshot.vector_commit_token,
-        snapshot.vector_digest,
-        snapshot.vector_row_count,
-        snapshot.vector_provider,
-        snapshot.vector_model,
-        snapshot.vector_dimensions,
-        snapshot.embedding_contract_version,
-        snapshot.metadata_item_count,
-        snapshot.keyword_item_count,
-        snapshot.revision,
-        snapshot.published_at,
-    )
 
 
 def _parse_stored_timestamp(value: object) -> datetime:

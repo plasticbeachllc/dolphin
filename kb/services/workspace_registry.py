@@ -1568,6 +1568,8 @@ class WorkspaceRegistry:
                             keyword_item_count INTEGER NOT NULL CHECK (keyword_item_count >= 0),
                             vector_row_count INTEGER NOT NULL CHECK (vector_row_count >= 0),
                             content_revision INTEGER NOT NULL DEFAULT 1 CHECK (content_revision >= 1),
+                            validated_content_revision INTEGER
+                                CHECK (validated_content_revision IS NULL OR validated_content_revision >= 1),
                             created_at TEXT NOT NULL
                         ) STRICT
                         """

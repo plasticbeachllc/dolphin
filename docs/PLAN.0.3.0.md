@@ -2478,9 +2478,10 @@ def identify_chunk_text(text: str) -> ChunkTextArtifact:
 
 def materialize_published_chunk(
     *,
-    snapshot: PublishedSnapshot,
+    read_lease_id: str,
     chunk_instance_id: str,
 ) -> str:
+    snapshot = generation_coordinator.snapshot_for_lease(read_lease_id)
     membership = metadata_store.require_chunk_membership(
         snapshot=snapshot,
         chunk_instance_id=chunk_instance_id,
@@ -2491,7 +2492,7 @@ def materialize_published_chunk(
     return text
 ```
 
-`put_exact_text` uses the same identity function, writes a versioned envelope through a private same-root temporary file, synchronizes it, and atomically installs it without replacing an existing artifact. An existing/racing artifact is accepted only after full verification. `materialize_published_chunk` receives an internal chunk-instance ID from a snapshot-scoped search result; no MCP input accepts a raw artifact ID. Production code returns a bounded typed error rather than placing the ID, path, or payload in an uncontrolled exception.
+`put_exact_text` uses the same identity function, writes a versioned envelope through a private same-root temporary file, synchronizes it, and atomically installs it without replacing an existing artifact. An existing/racing artifact is accepted only after full verification. `materialize_published_chunk` requires an unexpired reader-lease ID and resolves its exact snapshot from SQLite rather than trusting caller-supplied snapshot fields; it receives an internal chunk-instance ID from that snapshot-scoped search result, and no MCP input accepts a raw artifact ID. Production code returns a bounded typed error rather than placing the ID, path, or payload in an uncontrolled exception.
 
 ### 7.22 Current-reference result and alignment
 
@@ -4391,7 +4392,7 @@ Implementation status (2026-08-09): the Python stdio process now records one cap
 
 Native Apple Silicon storage qualification now instruments Application Support initialization and immutable artifact installation through real macOS filesystem syscalls, asserting successful directory-descriptor syncs on the supported hardware. Directory durability fails closed when the filesystem rejects it. Repeated artifact puts verify the existing immutable envelope under the install lock before allocating or syncing temporary bytes; all blocking artifact lock acquisitions have a fixed deadline, while healthy reads take only a shared lock and invoke exclusive cleanup solely for the exact two-link crash-recovery path.
 
-The generation-content foundation now persists strict canonical chunk-instance membership and one content-addressed manifest per staging generation under exact live operation-lease authority. Readiness and publication recompute the complete membership/descriptor/artifact-set binding and physically verify every immutable artifact before taking the SQLite writer lock; the visibility transaction rechecks the captured file identities and all metadata authority before committing. Materialization requires equality with every field of the canonical published snapshot, validates and caches the complete immutable manifest binding once per exact snapshot and generation-specific content revision, and still verifies the requested artifact bytes on every access. SQLite triggers advance that revision on every membership insertion, update, or deletion so coherent metadata damage invalidates the cache and fails closed without rescanning on unrelated runtime writes. Physical artifacts and staging/ready rows remain unsearchable; FTS5/vector retrieval wiring, reader-lease materialization admission, and GC reachability remain pending.
+The generation-content foundation now persists strict canonical chunk-instance membership and one content-addressed manifest per staging generation under exact live operation-lease authority. Readiness and publication recompute the complete membership/descriptor/artifact-set binding and physically verify every immutable artifact before taking the SQLite writer lock; the visibility transaction rechecks the captured file identities and all metadata authority before committing. Materialization requires an unexpired reader lease, resolves every canonical snapshot field server-side, requires the generation's current content revision to match the revision validated by the visibility transaction, and still verifies the requested membership and artifact bytes on every access. SQLite triggers advance the content revision on every membership insertion, update, or deletion, so coherent metadata damage fails closed while healthy reads remain bounded independently of generation size and unrelated runtime writes. Physical artifacts and staging/ready rows remain unsearchable; FTS5/vector retrieval wiring and GC reachability remain pending.
 
 - [ ] Add the Python MCP SDK dependency and `dolphin mcp` entry point.
 - [ ] Implement the environment-only `DOLPHIN_OPENAI_API_KEY` resolver and exhaustive secret-redaction tests.

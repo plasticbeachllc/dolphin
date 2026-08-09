@@ -12,14 +12,8 @@ import pytest
 from pydantic import ValidationError
 
 import kb.store.generation_content as generation_content_implementation
-from kb.artifacts import ArtifactCorrupt, ChunkTextArtifact, VerifiedChunkArtifactSet, identify_embedding_input
-from kb.generation import (
-    GenerationCoordinatorError,
-    PublishedSnapshot,
-    StagingGeneration,
-    VerifiedGenerationManifest,
-    VerifiedVectorCommit,
-)
+from kb.artifacts import ArtifactCorrupt, ChunkTextArtifact, identify_embedding_input
+from kb.generation import GenerationCoordinatorError, PublishedSnapshot, StagingGeneration, VerifiedVectorCommit
 from kb.generation_content import (
     GenerationContentConflict,
     GenerationContentError,
@@ -56,8 +50,9 @@ def test_staged_content_is_invisible_until_publication_then_materializes_exact_t
         context.generation.generation_id,
         expected_previous_generation_id=None,
     )
+    read_lease_id = _read_lease_id(context, snapshot)
 
-    materialized = context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+    materialized = context.content.materialize_published_chunk(read_lease_id, membership.chunk_instance_id)
 
     assert materialized == "exact published text\r\nλ\n"
 
@@ -257,52 +252,54 @@ def test_readiness_and_publication_recompute_persisted_membership_digests(
         )
 
 
-def test_materialization_requires_the_exact_published_snapshot_scope(
+def test_materialization_requires_a_live_reader_lease_and_resolves_its_snapshot_server_side(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     context = _generation_context(monkeypatch, tmp_path)
     membership, snapshot = _publish_one(context, suffix="scope", text="scoped text")
-    tampered = (
-        snapshot.model_copy(update={"publication_id": "pub_unrelated"}),
-        snapshot.model_copy(update={"generation_id": "gen_unrelated"}),
-        snapshot.model_copy(update={"workspace_id": "ws_unrelated"}),
-        snapshot.model_copy(update={"operation_id": "op_unrelated"}),
-        snapshot.model_copy(update={"target_fingerprint": "git-head-v1:" + "b" * 40}),
-        snapshot.model_copy(update={"pipeline_key": "pipeline-unrelated"}),
-        snapshot.model_copy(update={"manifest_id": "manifest_unrelated"}),
-        snapshot.model_copy(update={"manifest_digest": "f" * 64}),
-        snapshot.model_copy(update={"vector_commit_token": "vector-unrelated"}),
-        snapshot.model_copy(update={"vector_digest": "vector-digest-unrelated"}),
-        snapshot.model_copy(update={"vector_row_count": snapshot.vector_row_count + 1}),
-        snapshot.model_copy(update={"vector_provider": "not-openai"}),
-        snapshot.model_copy(update={"vector_model": "not-the-pinned-model"}),
-        snapshot.model_copy(update={"vector_dimensions": snapshot.vector_dimensions + 1}),
-        snapshot.model_copy(update={"embedding_contract_version": snapshot.embedding_contract_version + 1}),
-        snapshot.model_copy(update={"metadata_item_count": snapshot.metadata_item_count + 1}),
-        snapshot.model_copy(update={"keyword_item_count": snapshot.keyword_item_count + 1}),
-        snapshot.model_copy(update={"revision": snapshot.revision + 1}),
-        snapshot.model_copy(update={"published_at": snapshot.published_at + timedelta(microseconds=1)}),
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    assert read_lease.snapshot == snapshot
+
+    with pytest.raises(PublishedChunkUnavailable, match="read lease is unavailable or expired"):
+        context.content.materialize_published_chunk("read_unrelated", membership.chunk_instance_id)
+    with pytest.raises(PublishedChunkUnavailable, match="membership is unavailable"):
+        context.content.materialize_published_chunk(read_lease.lease_id, "chunk_unknown")
+
+    expired = SQLiteGenerationContentStore(
+        context.layout,
+        context.artifacts,
+        clock=lambda: read_lease.expires_at,
     )
+    with pytest.raises(PublishedChunkUnavailable, match="read lease is unavailable or expired"):
+        expired.materialize_published_chunk(read_lease.lease_id, membership.chunk_instance_id)
 
-    for altered in tampered:
-        with pytest.raises(PublishedChunkUnavailable, match="exact published snapshot"):
-            context.content.materialize_published_chunk(altered, membership.chunk_instance_id)
-    with pytest.raises(PublishedChunkUnavailable):
-        context.content.materialize_published_chunk(snapshot, "chunk_unknown")
+    context.coordinator.release_read(read_lease)
+    with pytest.raises(PublishedChunkUnavailable, match="read lease is unavailable or expired"):
+        context.content.materialize_published_chunk(read_lease.lease_id, membership.chunk_instance_id)
 
 
-def test_complete_manifest_binding_is_cached_once_per_exact_snapshot(
+def test_validated_revision_keeps_large_generation_reads_bounded_and_fails_closed_on_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     context = _generation_context(monkeypatch, tmp_path)
-    first = _membership(context.artifacts, suffix="cache-first", text="first cached chunk")
-    second = _membership(context.artifacts, suffix="cache-second", text="second cached chunk")
-    manifest = context.content.stage_manifest(context.lease, context.generation, [first, second])
+    first = _membership(context.artifacts, suffix="bounded-000", text="shared bounded chunk")
+    memberships = tuple(
+        first.model_copy(
+            update={
+                "chunk_instance_id": f"chunk_bounded_{index:03d}",
+                "relative_path": f"src/bounded-{index:03d}.py",
+                "source_file_fingerprint": hashlib.sha256(f"bounded:{index}".encode()).hexdigest(),
+            }
+        )
+        for index in range(256)
+    )
+    last = memberships[-1]
+    manifest = context.content.stage_manifest(context.lease, context.generation, memberships)
     context.coordinator.record_vector_ready(
         context.lease,
-        _vector_commit(context.generation.generation_id, row_count=2),
+        _vector_commit(context.generation.generation_id, row_count=len(memberships)),
     )
     context.coordinator.mark_ready(context.lease, manifest)
     snapshot = context.coordinator.publish(
@@ -310,38 +307,41 @@ def test_complete_manifest_binding_is_cached_once_per_exact_snapshot(
         context.generation.generation_id,
         expected_previous_generation_id=None,
     )
-    original_binding = generation_content_implementation.identify_generation_content_manifest
-    complete_validations = 0
+    read_lease_id = _read_lease_id(context, snapshot)
     original_read = context.artifacts.read_verified_artifact
     artifact_reads = 0
-
-    def count_binding(
-        generation_id: str,
-        memberships: tuple[StagedChunkMembership, ...],
-        artifact_set: VerifiedChunkArtifactSet,
-    ) -> VerifiedGenerationManifest:
-        nonlocal complete_validations
-        complete_validations += 1
-        return original_binding(generation_id, memberships, artifact_set)
 
     def count_artifact_read(artifact_id: str) -> tuple[str, ChunkTextArtifact]:
         nonlocal artifact_reads
         artifact_reads += 1
         return original_read(artifact_id)
 
-    monkeypatch.setattr(generation_content_implementation, "identify_generation_content_manifest", count_binding)
+    def unexpected_full_manifest_rebuild(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("materialization rebuilt the complete generation manifest")
+
+    monkeypatch.setattr(
+        generation_content_implementation,
+        "identify_generation_content_manifest",
+        unexpected_full_manifest_rebuild,
+    )
     monkeypatch.setattr(context.artifacts, "read_verified_artifact", count_artifact_read)
 
-    assert context.content.materialize_published_chunk(snapshot, first.chunk_instance_id) == "first cached chunk"
-    assert context.content.materialize_published_chunk(snapshot, second.chunk_instance_id) == "second cached chunk"
-    assert complete_validations == 1
+    assert (
+        context.content.materialize_published_chunk(read_lease_id, memberships[0].chunk_instance_id)
+        == "shared bounded chunk"
+    )
+    assert context.content.materialize_published_chunk(read_lease_id, last.chunk_instance_id) == "shared bounded chunk"
     assert artifact_reads == 2
 
-    changed = second.model_copy(update={"relative_path": "src/cache-corrupt.py"})
+    changed = last.model_copy(update={"relative_path": "src/bounded-corrupt.py"})
     changed_digest = identify_chunk_membership(snapshot.generation_id, changed)
     with sqlite3.connect(context.layout.metadata_db) as connection:
         before = connection.execute(
-            "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+            """
+            SELECT content_revision, validated_content_revision
+            FROM generation_content_manifests
+            WHERE generation_id = ?
+            """,
             (snapshot.generation_id,),
         ).fetchone()
         connection.execute(
@@ -350,17 +350,21 @@ def test_complete_manifest_binding_is_cached_once_per_exact_snapshot(
             SET relative_path = ?, membership_digest = ?
             WHERE generation_id = ? AND chunk_instance_id = ?
             """,
-            (changed.relative_path, changed_digest, snapshot.generation_id, second.chunk_instance_id),
+            (changed.relative_path, changed_digest, snapshot.generation_id, last.chunk_instance_id),
         )
         after = connection.execute(
-            "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+            """
+            SELECT content_revision, validated_content_revision
+            FROM generation_content_manifests
+            WHERE generation_id = ?
+            """,
             (snapshot.generation_id,),
         ).fetchone()
     assert before is not None
-    assert after == (before[0] + 1,)
+    assert before[0] == before[1]
+    assert after == (before[0] + 1, before[1])
     with pytest.raises(GenerationContentError, match="manifest binding is corrupt"):
-        context.content.materialize_published_chunk(snapshot, first.chunk_instance_id)
-    assert complete_validations == 2
+        context.content.materialize_published_chunk(read_lease_id, memberships[0].chunk_instance_id)
     assert artifact_reads == 2
 
 
@@ -370,32 +374,14 @@ def test_materialization_fails_closed_for_membership_or_artifact_corruption(
 ) -> None:
     context = _generation_context(monkeypatch, tmp_path)
     membership, snapshot = _publish_one(context, suffix="corrupt", text="verified source")
+    read_lease_id = _read_lease_id(context, snapshot)
     with sqlite3.connect(context.layout.metadata_db) as connection:
         connection.execute(
             "UPDATE generation_chunk_memberships SET relative_path = 'src/swapped.py' WHERE chunk_instance_id = ?",
             (membership.chunk_instance_id,),
         )
-    with pytest.raises(GenerationContentError, match="membership is corrupt"):
-        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
-
-    with sqlite3.connect(context.layout.metadata_db) as connection:
-        connection.execute(
-            "UPDATE generation_chunk_memberships SET relative_path = ? WHERE chunk_instance_id = ?",
-            (membership.relative_path, membership.chunk_instance_id),
-        )
-    changed = membership.model_copy(update={"relative_path": "src/coherent.py"})
-    changed_digest = identify_chunk_membership(snapshot.generation_id, changed)
-    with sqlite3.connect(context.layout.metadata_db) as connection:
-        connection.execute(
-            """
-            UPDATE generation_chunk_memberships
-            SET relative_path = ?, membership_digest = ?
-            WHERE generation_id = ? AND chunk_instance_id = ?
-            """,
-            (changed.relative_path, changed_digest, snapshot.generation_id, membership.chunk_instance_id),
-        )
     with pytest.raises(GenerationContentError, match="manifest binding is corrupt"):
-        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+        context.content.materialize_published_chunk(read_lease_id, membership.chunk_instance_id)
 
     original_digest = identify_chunk_membership(snapshot.generation_id, membership)
     with sqlite3.connect(context.layout.metadata_db) as connection:
@@ -407,9 +393,17 @@ def test_materialization_fails_closed_for_membership_or_artifact_corruption(
             """,
             (membership.relative_path, original_digest, snapshot.generation_id, membership.chunk_instance_id),
         )
+        connection.execute(
+            """
+            UPDATE generation_content_manifests
+            SET validated_content_revision = content_revision
+            WHERE generation_id = ?
+            """,
+            (snapshot.generation_id,),
+        )
     _artifact_path(context, membership).write_bytes(b"corrupt")
     with pytest.raises(ArtifactCorrupt):
-        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+        context.content.materialize_published_chunk(read_lease_id, membership.chunk_instance_id)
 
 
 def test_publication_reverifies_every_manifest_artifact(
@@ -676,6 +670,12 @@ def _publish_one(
         expected_previous_generation_id=None,
     )
     return membership, snapshot
+
+
+def _read_lease_id(context: _GenerationContext, snapshot: PublishedSnapshot) -> str:
+    lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    assert lease.snapshot == snapshot
+    return lease.lease_id
 
 
 def _vector_commit(generation_id: str, *, row_count: int) -> VerifiedVectorCommit:
