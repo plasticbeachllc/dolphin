@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from kb.artifacts import (
     CHUNK_TEXT_FORMAT,
@@ -41,6 +42,22 @@ _STALE_INSTALL_SCAN_LIMIT = 256
 _STALE_INSTALL_PRUNE_LIMIT = 32
 _INSTALL_LOCK_TIMEOUT_SECONDS = 5.0
 _INSTALL_LOCK_RETRY_SECONDS = 0.01
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedArtifactObservation:
+    """Filesystem identity captured by the same descriptor as full verification."""
+
+    artifact_id: str
+    device: int
+    inode: int
+    size: int
+    modified_ns: int
+    changed_ns: int
+
+    @property
+    def stable_identity(self) -> tuple[int, int, int, int, int]:
+        return (self.device, self.inode, self.size, self.modified_ns, self.changed_ns)
 
 
 class ChunkArtifactStore:
@@ -87,6 +104,38 @@ class ChunkArtifactStore:
         try:
             with self._layout.open_artifacts_directory() as artifacts_fd:
                 return _read_verified_from_root(artifacts_fd, artifact_id)
+        except StorageLayoutError:
+            raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable") from None
+
+    def read_verified_artifact_observation(
+        self,
+        artifact_id: str,
+    ) -> tuple[str, ChunkTextArtifact, VerifiedArtifactObservation]:
+        """Fully verify an artifact and capture its exact opened-file identity."""
+        require_artifact_id(artifact_id)
+        captured: list[tuple[int, int, int, int, int]] = []
+        try:
+            with self._layout.open_artifacts_directory() as artifacts_fd:
+                text, descriptor = _read_verified_from_root(artifacts_fd, artifact_id, captured=captured)
+        except StorageLayoutError:
+            raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable") from None
+        if len(captured) != 1:
+            raise ArtifactStoreUnavailable("Dolphin chunk artifact verification is unavailable")
+        return text, descriptor, VerifiedArtifactObservation(artifact_id, *captured[0])
+
+    def require_unchanged(self, observations: Sequence[VerifiedArtifactObservation]) -> None:
+        """Recheck verified artifact identities without rereading payload bytes."""
+        if isinstance(observations, (str, bytes)) or len(observations) > MAX_GENERATION_ARTIFACTS:
+            raise ArtifactInputInvalid("Dolphin chunk artifact observations are invalid")
+        try:
+            with self._layout.open_artifacts_directory() as artifacts_fd:
+                for observation in observations:
+                    if not isinstance(observation, VerifiedArtifactObservation):
+                        raise ArtifactInputInvalid("Dolphin chunk artifact observations are invalid")
+                    require_artifact_id(observation.artifact_id)
+                    current = _artifact_file_identity_from_root(artifacts_fd, observation.artifact_id)
+                    if current != observation.stable_identity:
+                        raise ArtifactCorrupt("Dolphin chunk artifact changed after verification")
         except StorageLayoutError:
             raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable") from None
 
@@ -329,7 +378,12 @@ def _acquire_read_lock(install_fd: int) -> None:
     )
 
 
-def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
+def _read_verified_from_root(
+    artifacts_fd: int,
+    artifact_id: str,
+    *,
+    captured: list[tuple[int, int, int, int, int]] | None = None,
+) -> tuple[str, ChunkTextArtifact]:
     format_fd = _open_existing_private_directory(artifacts_fd, _FORMAT_DIRECTORY)
     if format_fd is None:
         raise ArtifactUnavailable("Dolphin chunk artifact is unavailable")
@@ -341,12 +395,12 @@ def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, 
             install_fd = _open_existing_private_directory(shard_fd, _INSTALL_DIRECTORY)
             if install_fd is None:
                 try:
-                    return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
+                    return _read_verified_file_capturing(shard_fd, artifact_id[2:], artifact_id, captured)
                 except (ArtifactCorrupt, ArtifactUnavailable):
                     install_fd = _open_existing_private_directory(shard_fd, _INSTALL_DIRECTORY)
                     if install_fd is None:
                         raise
-            return _read_verified_with_install_lock(shard_fd, install_fd, artifact_id)
+            return _read_verified_with_install_lock(shard_fd, install_fd, artifact_id, captured=captured)
         finally:
             os.close(shard_fd)
     finally:
@@ -357,15 +411,17 @@ def _read_verified_with_install_lock(
     shard_fd: int,
     install_fd: int,
     artifact_id: str,
+    *,
+    captured: list[tuple[int, int, int, int, int]] | None = None,
 ) -> tuple[str, ChunkTextArtifact]:
     try:
         try:
-            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id)
+            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id, captured=captured)
         except ArtifactCorrupt:
             if not _artifact_may_have_crash_left_installer(shard_fd, artifact_id[2:]):
                 raise
             _prune_stale_install_files(install_fd, wait_for_lock=True)
-            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id)
+            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id, captured=captured)
     finally:
         os.close(install_fd)
 
@@ -374,12 +430,14 @@ def _read_verified_under_shared_lock(
     shard_fd: int,
     install_fd: int,
     artifact_id: str,
+    *,
+    captured: list[tuple[int, int, int, int, int]] | None = None,
 ) -> tuple[str, ChunkTextArtifact]:
     locked = False
     try:
         _acquire_read_lock(install_fd)
         locked = True
-        return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
+        return _read_verified_file_capturing(shard_fd, artifact_id[2:], artifact_id, captured)
     finally:
         if locked:
             _release_install_lock_preserving_primary_error(install_fd)
@@ -393,7 +451,24 @@ def _artifact_may_have_crash_left_installer(shard_fd: int, final_name: str) -> b
     return stat.S_ISREG(status.st_mode) and status.st_nlink == 2
 
 
-def _read_verified_file(parent_fd: int, name: str, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
+def _read_verified_file_capturing(
+    parent_fd: int,
+    name: str,
+    artifact_id: str,
+    captured: list[tuple[int, int, int, int, int]] | None,
+) -> tuple[str, ChunkTextArtifact]:
+    if captured is None:
+        return _read_verified_file(parent_fd, name, artifact_id)
+    return _read_verified_file(parent_fd, name, artifact_id, captured=captured)
+
+
+def _read_verified_file(
+    parent_fd: int,
+    name: str,
+    artifact_id: str,
+    *,
+    captured: list[tuple[int, int, int, int, int]] | None = None,
+) -> tuple[str, ChunkTextArtifact]:
     try:
         descriptor = os.open(
             name,
@@ -442,7 +517,43 @@ def _read_verified_file(parent_fd: int, name: str, artifact_id: str) -> tuple[st
         or identified.lines != lines
     ):
         raise ArtifactCorrupt("Dolphin chunk artifact is corrupt")
+    if captured is not None:
+        captured.append(_stable_file_identity(after))
     return text, identified
+
+
+def _artifact_file_identity_from_root(
+    artifacts_fd: int,
+    artifact_id: str,
+) -> tuple[int, int, int, int, int]:
+    format_fd = _open_existing_private_directory(artifacts_fd, _FORMAT_DIRECTORY)
+    if format_fd is None:
+        raise ArtifactUnavailable("Dolphin chunk artifact is unavailable")
+    try:
+        shard_fd = _open_existing_private_directory(format_fd, artifact_id[:2])
+        if shard_fd is None:
+            raise ArtifactUnavailable("Dolphin chunk artifact is unavailable")
+        try:
+            try:
+                descriptor = os.open(
+                    artifact_id[2:],
+                    os.O_RDONLY | _no_follow_flag() | _close_on_exec_flag() | _non_blocking_flag(),
+                    dir_fd=shard_fd,
+                )
+            except FileNotFoundError:
+                raise ArtifactUnavailable("Dolphin chunk artifact is unavailable") from None
+            except OSError:
+                raise ArtifactCorrupt("Dolphin chunk artifact is corrupt") from None
+            try:
+                status = os.fstat(descriptor)
+                _validate_artifact_file(status)
+                return _stable_file_identity(status)
+            finally:
+                os.close(descriptor)
+        finally:
+            os.close(shard_fd)
+    finally:
+        os.close(format_fd)
 
 
 def _validate_artifact_file(status: os.stat_result) -> None:

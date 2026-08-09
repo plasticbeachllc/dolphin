@@ -18,6 +18,7 @@ from kb.generation_content import (
     GenerationContentError,
     PublishedChunkUnavailable,
     StagedChunkMembership,
+    identify_chunk_membership,
 )
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
@@ -161,7 +162,24 @@ def test_readiness_rejects_unpersisted_or_incomplete_membership(
             "DELETE FROM generation_chunk_memberships WHERE chunk_instance_id = ?",
             (membership.chunk_instance_id,),
         )
-    with pytest.raises(GenerationCoordinatorError, match="counts are incompatible"):
+    with pytest.raises(ArtifactCorrupt, match="artifact set does not match"):
+        context.coordinator.mark_ready(context.lease, manifest)
+
+
+def test_readiness_reverifies_every_manifest_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="ready-corrupt", text="ready only with verified bytes")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    _artifact_path(context, membership).write_bytes(b"corrupt before readiness")
+
+    with pytest.raises(ArtifactCorrupt):
         context.coordinator.mark_ready(context.lease, manifest)
 
 
@@ -271,13 +289,31 @@ def test_materialization_fails_closed_for_membership_or_artifact_corruption(
             "UPDATE generation_chunk_memberships SET relative_path = ? WHERE chunk_instance_id = ?",
             (membership.relative_path, membership.chunk_instance_id),
         )
-    artifact_path = (
-        context.layout.artifacts
-        / "dolphin-chunk-text-v1"
-        / membership.artifact.artifact_id[:2]
-        / membership.artifact.artifact_id[2:]
-    )
-    artifact_path.write_bytes(b"corrupt")
+    changed = membership.model_copy(update={"relative_path": "src/coherent.py"})
+    changed_digest = identify_chunk_membership(snapshot.generation_id, changed)
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            """
+            UPDATE generation_chunk_memberships
+            SET relative_path = ?, membership_digest = ?
+            WHERE generation_id = ? AND chunk_instance_id = ?
+            """,
+            (changed.relative_path, changed_digest, snapshot.generation_id, membership.chunk_instance_id),
+        )
+    with pytest.raises(GenerationContentError, match="manifest binding is corrupt"):
+        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+
+    original_digest = identify_chunk_membership(snapshot.generation_id, membership)
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            """
+            UPDATE generation_chunk_memberships
+            SET relative_path = ?, membership_digest = ?
+            WHERE generation_id = ? AND chunk_instance_id = ?
+            """,
+            (membership.relative_path, original_digest, snapshot.generation_id, membership.chunk_instance_id),
+        )
+    _artifact_path(context, membership).write_bytes(b"corrupt")
     with pytest.raises(ArtifactCorrupt):
         context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
 
@@ -294,13 +330,7 @@ def test_publication_reverifies_every_manifest_artifact(
         _vector_commit(context.generation.generation_id, row_count=1),
     )
     context.coordinator.mark_ready(context.lease, manifest)
-    artifact_path = (
-        context.layout.artifacts
-        / "dolphin-chunk-text-v1"
-        / membership.artifact.artifact_id[:2]
-        / membership.artifact.artifact_id[2:]
-    )
-    artifact_path.write_bytes(b"corrupt before publication")
+    _artifact_path(context, membership).write_bytes(b"corrupt before publication")
 
     with pytest.raises(ArtifactCorrupt):
         context.coordinator.publish(
@@ -328,7 +358,6 @@ def test_publication_authorizes_before_artifact_io(
 
     def unexpected_artifact_io(
         _coordinator: SQLiteGenerationCoordinator,
-        _connection: sqlite3.Connection,
         _generation_id: str,
     ) -> None:
         raise AssertionError("artifact verification ran before publication authority")
@@ -343,7 +372,7 @@ def test_publication_authorizes_before_artifact_io(
         )
 
 
-def test_publication_reverifies_artifacts_while_holding_the_visibility_lock(
+def test_publication_reads_artifacts_before_acquiring_the_visibility_lock(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -356,24 +385,23 @@ def test_publication_reverifies_artifacts_while_holding_the_visibility_lock(
     )
     context.coordinator.mark_ready(context.lease, manifest)
     original = SQLiteGenerationCoordinator._verify_generation_artifacts
-    observed_write_lock = False
+    observed_without_write_lock = False
 
-    def verify_under_lock(
+    def verify_before_lock(
         coordinator: SQLiteGenerationCoordinator,
-        connection: sqlite3.Connection,
         generation_id: str,
-    ) -> None:
-        nonlocal observed_write_lock
+    ) -> object:
+        nonlocal observed_without_write_lock
         competing = sqlite3.connect(context.layout.metadata_db, timeout=0, isolation_level=None)
         try:
-            with pytest.raises(sqlite3.OperationalError, match="locked"):
-                competing.execute("BEGIN IMMEDIATE")
-            observed_write_lock = True
+            competing.execute("BEGIN IMMEDIATE")
+            competing.rollback()
+            observed_without_write_lock = True
         finally:
             competing.close()
-        original(coordinator, connection, generation_id)
+        return original(coordinator, generation_id)
 
-    monkeypatch.setattr(SQLiteGenerationCoordinator, "_verify_generation_artifacts", verify_under_lock)
+    monkeypatch.setattr(SQLiteGenerationCoordinator, "_verify_generation_artifacts", verify_before_lock)
 
     context.coordinator.publish(
         context.lease,
@@ -381,7 +409,38 @@ def test_publication_reverifies_artifacts_while_holding_the_visibility_lock(
         expected_previous_generation_id=None,
     )
 
-    assert observed_write_lock is True
+    assert observed_without_write_lock is True
+
+
+def test_publication_rejects_an_artifact_changed_after_full_verification(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="publish-race", text="stable through publication")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    original = SQLiteGenerationCoordinator._verify_generation_artifacts
+
+    def verify_then_corrupt(coordinator: SQLiteGenerationCoordinator, generation_id: str) -> object:
+        verified = original(coordinator, generation_id)
+        _artifact_path(context, membership).write_bytes(b"changed after full verification")
+        return verified
+
+    monkeypatch.setattr(SQLiteGenerationCoordinator, "_verify_generation_artifacts", verify_then_corrupt)
+
+    with pytest.raises(ArtifactCorrupt, match="changed after verification"):
+        context.coordinator.publish(
+            context.lease,
+            context.generation.generation_id,
+            expected_previous_generation_id=None,
+        )
+
+    assert context.coordinator.current_snapshot(context.lease.operation.workspace_id) is None
 
 
 def test_membership_contract_rejects_noncanonical_paths_and_ranges() -> None:
@@ -492,6 +551,15 @@ def _membership(
         language="python",
         chunker_key="python-tree-sitter-v1",
         embedding_cache_key=identify_embedding_input(text).cache_key,
+    )
+
+
+def _artifact_path(context: _GenerationContext, membership: StagedChunkMembership) -> Path:
+    return (
+        context.layout.artifacts
+        / "dolphin-chunk-text-v1"
+        / membership.artifact.artifact_id[:2]
+        / membership.artifact.artifact_id[2:]
     )
 
 

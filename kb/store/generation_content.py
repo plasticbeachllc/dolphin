@@ -147,33 +147,9 @@ class SQLiteGenerationContentStore:
     def materialize_published_chunk(self, snapshot: PublishedSnapshot, chunk_instance_id: str) -> str:
         _bounded_id(chunk_instance_id, "chunk instance ID")
         with self._connection(read_only=True) as connection:
-            row = connection.execute(
-                """
-                SELECT m.artifact_id, m.artifact_utf8_bytes, m.artifact_characters, m.artifact_lines,
-                       m.relative_path, m.source_file_fingerprint, m.start_line, m.end_line,
-                       m.language, m.chunker_key, m.embedding_cache_key, m.membership_digest
-                FROM generation_chunk_memberships AS m
-                JOIN generation_content_manifests AS c ON c.generation_id = m.generation_id
-                JOIN generations AS g ON g.generation_id = m.generation_id
-                WHERE m.chunk_instance_id = ? AND m.generation_id = ?
-                  AND g.workspace_id = ? AND g.publication_id = ? AND g.state = 'published'
-                  AND c.manifest_id = ? AND c.manifest_digest = ?
-                  AND g.manifest_id = c.manifest_id AND g.manifest_digest = c.manifest_digest
-                """,
-                (
-                    chunk_instance_id,
-                    snapshot.generation_id,
-                    snapshot.workspace_id,
-                    snapshot.publication_id,
-                    snapshot.manifest_id,
-                    snapshot.manifest_digest,
-                ),
-            ).fetchone()
-        if row is None:
-            raise PublishedChunkUnavailable("Dolphin published chunk membership is unavailable")
-        membership = _published_membership(snapshot, chunk_instance_id, row)
-        if identify_chunk_membership(snapshot.generation_id, membership) != row[11]:
-            raise GenerationContentError("Dolphin published chunk membership is corrupt")
+            connection.execute("BEGIN")
+            membership = _require_published_membership(connection, snapshot, chunk_instance_id)
+            connection.commit()
         text, artifact = self._artifacts.read_verified_artifact(membership.artifact.artifact_id)
         if artifact != membership.artifact:
             raise ArtifactCorrupt("Dolphin published chunk artifact does not match its membership")
@@ -365,6 +341,73 @@ def _published_membership(
         )
     except ValidationError as exc:
         raise GenerationContentError("Dolphin published chunk membership is corrupt") from exc
+
+
+def _require_published_membership(
+    connection: sqlite3.Connection,
+    snapshot: PublishedSnapshot,
+    chunk_instance_id: str,
+) -> PublishedChunkMembership:
+    scope = connection.execute(
+        """
+        SELECT 1
+        FROM generations AS g
+        JOIN generation_content_manifests AS c ON c.generation_id = g.generation_id
+        WHERE g.generation_id = ? AND g.workspace_id = ? AND g.publication_id = ?
+          AND g.state = 'published' AND g.manifest_id = ? AND g.manifest_digest = ?
+          AND c.manifest_id = g.manifest_id AND c.manifest_digest = g.manifest_digest
+        """,
+        (
+            snapshot.generation_id,
+            snapshot.workspace_id,
+            snapshot.publication_id,
+            snapshot.manifest_id,
+            snapshot.manifest_digest,
+        ),
+    ).fetchone()
+    if scope is None:
+        raise PublishedChunkUnavailable("Dolphin published chunk membership is unavailable")
+    manifest = _manifest_for_generation(connection, snapshot.generation_id)
+    if (
+        manifest is None
+        or manifest.manifest_id != snapshot.manifest_id
+        or manifest.manifest_digest != snapshot.manifest_digest
+    ):
+        raise GenerationContentError("Dolphin published chunk manifest is corrupt")
+    rows = connection.execute(
+        """
+        SELECT chunk_instance_id, artifact_id, artifact_utf8_bytes, artifact_characters,
+               artifact_lines, relative_path, source_file_fingerprint, start_line, end_line,
+               language, chunker_key, embedding_cache_key, membership_digest
+        FROM generation_chunk_memberships
+        WHERE generation_id = ?
+        ORDER BY chunk_instance_id
+        """,
+        (snapshot.generation_id,),
+    ).fetchall()
+    memberships: list[PublishedChunkMembership] = []
+    artifacts = {}
+    requested: PublishedChunkMembership | None = None
+    for row in rows:
+        membership = _published_membership(snapshot, str(row[0]), tuple(row[1:]))
+        if identify_chunk_membership(snapshot.generation_id, membership) != row[12]:
+            raise GenerationContentError("Dolphin published chunk membership is corrupt")
+        existing = artifacts.setdefault(membership.artifact.artifact_id, membership.artifact)
+        if existing != membership.artifact:
+            raise GenerationContentError("Dolphin published chunk artifact metadata is inconsistent")
+        memberships.append(membership)
+        if membership.chunk_instance_id == chunk_instance_id:
+            requested = membership
+    artifact_set = identify_chunk_artifact_set(
+        tuple(artifacts),
+        total_utf8_bytes=sum(artifact.utf8_bytes for artifact in artifacts.values()),
+    )
+    observed = identify_generation_content_manifest(snapshot.generation_id, tuple(memberships), artifact_set)
+    if observed != manifest:
+        raise GenerationContentError("Dolphin published chunk manifest binding is corrupt")
+    if requested is None:
+        raise PublishedChunkUnavailable("Dolphin published chunk membership is unavailable")
+    return requested
 
 
 def _bounded_id(value: str, label: str) -> None:

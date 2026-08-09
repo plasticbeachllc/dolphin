@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, cast
@@ -29,7 +30,7 @@ from kb.generation_content import StagedChunkMembership, identify_chunk_membersh
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
-from kb.store.chunk_artifacts import ChunkArtifactStore
+from kb.store.chunk_artifacts import ChunkArtifactStore, VerifiedArtifactObservation
 
 _READ_LEASE_MAXIMUM = timedelta(seconds=60)
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
@@ -39,6 +40,12 @@ _WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
 _EXPIRED_READ_LEASE_PRUNE_LIMIT = 256
 _PRIVATE_ID_MAX_LENGTH = 128
 _PRIVATE_VALUE_MAX_LENGTH = 256
+
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedGenerationArtifacts:
+    manifest: VerifiedGenerationManifest
+    observations: tuple[VerifiedArtifactObservation, ...]
 
 
 class SQLiteGenerationCoordinator:
@@ -148,6 +155,10 @@ class SQLiteGenerationCoordinator:
         lease: OperationLease,
         manifest: VerifiedGenerationManifest,
     ) -> StagingGeneration:
+        preflight = self._preflight_generation_authority(lease, manifest.generation_id)
+        if preflight.vector_commit_token is None or preflight.vector_digest is None:
+            raise GenerationCoordinatorError("Dolphin generation vectors are not durably verified")
+        verified_artifacts = self._verify_generation_artifacts(manifest.generation_id)
         observed_at = _timestamp(self._clock())
         with self._connection() as connection:
             _begin_write(connection)
@@ -167,6 +178,12 @@ class SQLiteGenerationCoordinator:
                     generation.keyword_item_count,
                 )
                 _require_persisted_content_manifest(connection, manifest)
+                self._require_verified_artifacts_unchanged(
+                    connection,
+                    manifest.generation_id,
+                    verified_artifacts,
+                )
+                _require_operation_authority(connection, lease, _timestamp(self._clock()))
                 if generation.state in {"ready", "published"}:
                     if existing != supplied or generation.vector_row_count != manifest.vector_row_count:
                         raise GenerationConflict("Dolphin generation already records a different complete manifest")
@@ -211,14 +228,21 @@ class SQLiteGenerationCoordinator:
     ) -> PublishedSnapshot:
         if expected_previous_generation_id is not None:
             _bounded(expected_previous_generation_id, "expected generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        self._preflight_publish_authority(lease, generation_id)
+        preflight = self._preflight_generation_authority(lease, generation_id)
+        if preflight.state not in {"ready", "published"}:
+            raise GenerationCoordinatorError("Dolphin generation is not ready for publication")
+        verified_artifacts = self._verify_generation_artifacts(generation_id)
         observed_at = _timestamp(self._clock())
         with self._connection() as connection:
             _begin_write(connection)
             try:
                 authority = _require_operation_authority(connection, lease, observed_at)
                 generation = _require_generation(connection, generation_id, lease)
-                self._verify_generation_artifacts(connection, generation_id)
+                self._require_verified_artifacts_unchanged(
+                    connection,
+                    generation_id,
+                    verified_artifacts,
+                )
                 authority = _require_operation_authority(
                     connection,
                     lease,
@@ -291,31 +315,37 @@ class SQLiteGenerationCoordinator:
             connection.commit()
         return snapshot
 
-    def _preflight_publish_authority(self, lease: OperationLease, generation_id: str) -> None:
+    def _preflight_generation_authority(
+        self,
+        lease: OperationLease,
+        generation_id: str,
+    ) -> StagingGeneration:
         observed_at = _timestamp(self._clock())
         with self._connection(read_only=True) as connection:
             _require_operation_authority(connection, lease, observed_at)
-            _require_generation(connection, generation_id, lease)
+            return _require_generation(connection, generation_id, lease)
 
-    def _verify_generation_artifacts(self, connection: sqlite3.Connection, generation_id: str) -> None:
+    def _verify_generation_artifacts(self, generation_id: str) -> _VerifiedGenerationArtifacts | None:
         _bounded(generation_id, "generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        manifest = _content_manifest_for_generation(connection, generation_id)
-        if manifest is None:
-            return
-        rows = connection.execute(
-            """
-            SELECT artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
-            FROM generation_chunk_memberships
-            WHERE generation_id = ?
-            GROUP BY artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
-            ORDER BY artifact_id
-            """,
-            (generation_id,),
-        ).fetchall()
+        with self._connection(read_only=True) as connection:
+            manifest = _content_manifest_for_generation(connection, generation_id)
+            if manifest is None:
+                return None
+            rows = connection.execute(
+                """
+                SELECT artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+                FROM generation_chunk_memberships
+                WHERE generation_id = ?
+                GROUP BY artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+                ORDER BY artifact_id
+                """,
+                (generation_id,),
+            ).fetchall()
         artifacts = ChunkArtifactStore(self._layout)
         observed = {}
+        observations = []
         for row in rows:
-            _text, descriptor = artifacts.read_verified_artifact(str(row[0]))
+            _text, descriptor, observation = artifacts.read_verified_artifact_observation(str(row[0]))
             expected = (str(row[0]), int(row[1]), int(row[2]), int(row[3]))
             actual = (
                 descriptor.artifact_id,
@@ -326,6 +356,7 @@ class SQLiteGenerationCoordinator:
             if actual != expected:
                 raise ArtifactCorrupt("Dolphin generation artifact does not match its manifest")
             observed[descriptor.artifact_id] = descriptor
+            observations.append(observation)
         artifact_set = identify_chunk_artifact_set(
             tuple(observed),
             total_utf8_bytes=sum(artifact.utf8_bytes for artifact in observed.values()),
@@ -336,6 +367,18 @@ class SQLiteGenerationCoordinator:
             or artifact_set.total_utf8_bytes != manifest.artifact_utf8_bytes
         ):
             raise ArtifactCorrupt("Dolphin generation artifact set does not match its manifest")
+        return _VerifiedGenerationArtifacts(manifest=manifest, observations=tuple(observations))
+
+    def _require_verified_artifacts_unchanged(
+        self,
+        connection: sqlite3.Connection,
+        generation_id: str,
+        verified: _VerifiedGenerationArtifacts | None,
+    ) -> None:
+        current = _content_manifest_for_generation(connection, generation_id)
+        if verified is None or current != verified.manifest:
+            raise GenerationCoordinatorError("Dolphin generation artifacts changed before visibility transition")
+        ChunkArtifactStore(self._layout).require_unchanged(verified.observations)
 
     def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None:
         _bounded(workspace_id, "workspace ID", maximum=_PRIVATE_ID_MAX_LENGTH)
