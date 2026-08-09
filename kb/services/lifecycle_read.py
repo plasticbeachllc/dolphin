@@ -25,6 +25,7 @@ from kb.services.lifecycle_models import (
     RepositoryFamilySummary,
     WorkspaceSummary,
 )
+from kb.services.repository_boundaries import RepositoryBoundary
 from kb.services.workspace_registry import (
     OperationSnapshot,
     OperationState,
@@ -148,6 +149,19 @@ def workspace_summary(snapshot: WorkspaceSnapshot) -> WorkspaceSummary:
     )
 
 
+def repository_boundary_summary(boundary: RepositoryBoundary) -> RepositoryBoundarySummary:
+    return RepositoryBoundarySummary(
+        kind=boundary.kind,
+        relative_path=boundary.relative_path,
+        root=str(boundary.root) if boundary.root is not None else None,
+        state=boundary.state,
+        expected_commit=boundary.expected_commit,
+        observed_commit=boundary.observed_commit,
+        dirty=boundary.dirty,
+        next_actions=[],
+    )
+
+
 def _repo_list_result(page: WorkspaceListPage) -> RepoListResult:
     return RepoListResult(
         items=[
@@ -157,7 +171,9 @@ def _repo_list_result(page: WorkspaceListPage) -> RepoListResult:
                     display_name=snapshot.repository_display_name,
                 ),
                 workspace=workspace_summary(snapshot),
-                repository_boundaries=[],
+                repository_boundaries=[
+                    repository_boundary_summary(boundary) for boundary in snapshot.repository_boundaries
+                ],
             )
             for snapshot in page.items
         ],

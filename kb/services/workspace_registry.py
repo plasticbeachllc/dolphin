@@ -13,12 +13,12 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal, cast
 
 from kb.cleanup_authority import is_valid_cleanup_receipt
@@ -31,6 +31,7 @@ from kb.lifecycle_limits import (
     REPO_LIST_PAGE_SIZE,
 )
 from kb.runtime.storage import StorageLayout, StorageLayoutError
+from kb.services.repository_boundaries import RepositoryBoundary, RepositoryBoundaryKind, RepositoryBoundaryState
 from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
 
 
@@ -46,7 +47,9 @@ class RepoListCursorExpired(ValueError):
     """The repository-list cursor names an obsolete actionable-list revision."""
 
 
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
+_MAX_BOUNDARIES_PER_READ = 8
+_MAX_STORED_BOUNDARIES = 100_000
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
 _OPERATION_STATUS_RETENTION = timedelta(days=30)
 _REGISTRATION_LOCK_DEADLINE_SECONDS = 15.0
@@ -126,6 +129,7 @@ class WorkspaceSnapshot:
     branch: str | None
     head_commit: str
     state: WorkspaceEffectiveState
+    repository_boundaries: tuple[RepositoryBoundary, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +211,9 @@ class WorkspaceRegistry:
                 current_row = (
                     connection.execute(_WORKSPACE_BY_ROOT_QUERY, (str(root),)).fetchone() if root is not None else None
                 )
+                current_boundaries = (
+                    self._read_boundaries(connection, str(current_row[0])) if current_row is not None else ()
+                )
             except Exception:
                 connection.rollback()
                 raise
@@ -218,7 +225,11 @@ class WorkspaceRegistry:
             indexing=count_row[1],
             ready=count_row[2],
             failed=count_row[3],
-            current_workspace=_workspace_snapshot(current_row) if current_row is not None else None,
+            current_workspace=(
+                replace(_workspace_snapshot(current_row), repository_boundaries=current_boundaries)
+                if current_row is not None
+                else None
+            ),
         )
 
     def list_workspaces(self, cursor: str | None) -> WorkspaceListPage:
@@ -244,13 +255,20 @@ class WorkspaceRegistry:
                     _WORKSPACE_PAGE_QUERY_WITH_CURSOR if after_key is not None else _WORKSPACE_PAGE_QUERY,
                     (*after_key, REPO_LIST_PAGE_SIZE + 1) if after_key is not None else (REPO_LIST_PAGE_SIZE + 1,),
                 ).fetchall()
+                page_rows = rows[:REPO_LIST_PAGE_SIZE]
+                page_boundaries = {str(row[0]): self._read_boundaries(connection, str(row[0])) for row in page_rows}
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
 
-        page_rows = rows[:REPO_LIST_PAGE_SIZE]
-        items = tuple(_workspace_snapshot(row[:8]) for row in page_rows)
+        items = tuple(
+            replace(
+                _workspace_snapshot(row[:8]),
+                repository_boundaries=page_boundaries[str(row[0])],
+            )
+            for row in page_rows
+        )
         next_cursor = None
         if len(rows) > REPO_LIST_PAGE_SIZE and page_rows:
             next_cursor = _encode_repo_list_cursor(
@@ -282,7 +300,13 @@ class WorkspaceRegistry:
             return None
         return snapshot
 
-    def register(self, worktree: GitWorktree, *, cleanup_receipt: str) -> WorkspaceRegistration:
+    def register(
+        self,
+        worktree: GitWorktree,
+        *,
+        cleanup_receipt: str,
+        boundaries: Sequence[RepositoryBoundary] | None = None,
+    ) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
         self._require_valid_cleanup_receipt(cleanup_receipt)
         self._validate_worktree_snapshot(worktree)
@@ -290,6 +314,8 @@ class WorkspaceRegistry:
             self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree, cleanup_receipt)
+                if boundaries is not None:
+                    self._replace_boundaries(connection, registration.workspace_id, boundaries)
                 self._validate_worktree_snapshot(worktree)
             except Exception:
                 connection.rollback()
@@ -302,6 +328,7 @@ class WorkspaceRegistry:
         worktree: GitWorktree,
         *,
         cleanup_receipt: str,
+        boundaries: Sequence[RepositoryBoundary] | None = None,
     ) -> tuple[WorkspaceRegistration, WorkspaceOperation]:
         """Persist one discovered snapshot and its initial-index operation atomically."""
         self._require_valid_cleanup_receipt(cleanup_receipt)
@@ -310,6 +337,8 @@ class WorkspaceRegistry:
             self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree, cleanup_receipt)
+                if boundaries is not None:
+                    self._replace_boundaries(connection, registration.workspace_id, boundaries)
                 operation = self._submit_initial_index(connection, registration)
                 self._validate_worktree_snapshot(worktree)
             except Exception:
@@ -519,6 +548,24 @@ class WorkspaceRegistry:
                         """
                         CREATE UNIQUE INDEX workspace_registrations_git_identity
                         ON workspace_registrations (common_git_dir_identity, worktree_git_dir_identity)
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE workspace_repository_boundaries (
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id)
+                                ON DELETE CASCADE,
+                            relative_path TEXT NOT NULL,
+                            kind TEXT NOT NULL CHECK (kind IN ('submodule', 'nested_git')),
+                            state TEXT NOT NULL CHECK (state IN (
+                                'enrollable', 'uninitialized', 'missing', 'conflicted', 'invalid'
+                            )),
+                            root TEXT,
+                            expected_commit TEXT,
+                            observed_commit TEXT,
+                            dirty INTEGER CHECK (dirty IS NULL OR dirty IN (0, 1)),
+                            PRIMARY KEY (workspace_id, relative_path)
+                        ) STRICT
                         """
                     )
                     connection.execute(
@@ -752,6 +799,59 @@ class WorkspaceRegistry:
             cleanup_receipt=cleanup_receipt,
         )
 
+    @staticmethod
+    def _replace_boundaries(
+        connection: sqlite3.Connection,
+        workspace_id: str,
+        boundaries: Sequence[RepositoryBoundary],
+    ) -> None:
+        ordered = sorted(boundaries, key=lambda boundary: boundary.relative_path)
+        if len(ordered) > _MAX_STORED_BOUNDARIES:
+            raise WorkspaceRegistryError("Dolphin repository boundary count is invalid")
+        if len({boundary.relative_path for boundary in ordered}) != len(ordered):
+            raise WorkspaceRegistryError("Dolphin repository boundaries contain duplicate paths")
+        for boundary in ordered:
+            _validate_boundary_for_storage(boundary)
+        serialized = [_boundary_storage_row(workspace_id, boundary) for boundary in ordered]
+        existing = connection.execute(
+            """
+            SELECT workspace_id, relative_path, kind, state, root, expected_commit, observed_commit, dirty
+            FROM workspace_repository_boundaries
+            WHERE workspace_id = ?
+            ORDER BY relative_path
+            """,
+            (workspace_id,),
+        ).fetchall()
+        if existing == serialized:
+            return
+        connection.execute("DELETE FROM workspace_repository_boundaries WHERE workspace_id = ?", (workspace_id,))
+        connection.executemany(
+            """
+            INSERT INTO workspace_repository_boundaries (
+                workspace_id, relative_path, kind, state, root, expected_commit, observed_commit, dirty
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            serialized,
+        )
+        connection.execute("UPDATE workspace_registry_meta SET list_revision = list_revision + 1 WHERE singleton = 1")
+
+    @staticmethod
+    def _read_boundaries(
+        connection: sqlite3.Connection,
+        workspace_id: str,
+    ) -> tuple[RepositoryBoundary, ...]:
+        rows = connection.execute(
+            """
+            SELECT kind, relative_path, state, root, expected_commit, observed_commit, dirty
+            FROM workspace_repository_boundaries
+            WHERE workspace_id = ?
+            ORDER BY relative_path
+            LIMIT ?
+            """,
+            (workspace_id, _MAX_BOUNDARIES_PER_READ),
+        ).fetchall()
+        return tuple(_boundary_from_row(row) for row in rows)
+
     def _submit_initial_index(
         self,
         connection: sqlite3.Connection,
@@ -839,6 +939,56 @@ def _repository_id(worktree: GitWorktree) -> str:
 def _repository_id_from_common_git_identity(common_git_dir_identity: str) -> str:
     digest = hashlib.sha256(common_git_dir_identity.encode("utf-8")).hexdigest()
     return f"repo_{digest[:24]}"
+
+
+def _validate_boundary_for_storage(boundary: RepositoryBoundary) -> None:
+    path = PurePosixPath(boundary.relative_path)
+    if (
+        not boundary.relative_path
+        or len(boundary.relative_path) > 4_096
+        or path.is_absolute()
+        or boundary.relative_path != path.as_posix()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise WorkspaceRegistryError("Dolphin repository boundary path is invalid")
+    if boundary.root is not None and (not boundary.root.is_absolute() or len(str(boundary.root)) > 4_096):
+        raise WorkspaceRegistryError("Dolphin repository boundary root is invalid")
+    for commit in (boundary.expected_commit, boundary.observed_commit):
+        if commit is not None and (not commit or len(commit) > HEAD_COMMIT_MAX_LENGTH):
+            raise WorkspaceRegistryError("Dolphin repository boundary commit is invalid")
+
+
+def _boundary_storage_row(workspace_id: str, boundary: RepositoryBoundary) -> tuple[object, ...]:
+    return (
+        workspace_id,
+        boundary.relative_path,
+        boundary.kind.value,
+        boundary.state.value,
+        str(boundary.root) if boundary.root is not None else None,
+        boundary.expected_commit,
+        boundary.observed_commit,
+        int(boundary.dirty) if boundary.dirty is not None else None,
+    )
+
+
+def _boundary_from_row(row: tuple[object, ...]) -> RepositoryBoundary:
+    try:
+        dirty_value = row[6]
+        if dirty_value not in {None, 0, 1}:
+            raise ValueError("invalid dirty state")
+        boundary = RepositoryBoundary(
+            kind=RepositoryBoundaryKind(str(row[0])),
+            relative_path=str(row[1]),
+            state=RepositoryBoundaryState(str(row[2])),
+            root=Path(str(row[3])) if row[3] is not None else None,
+            expected_commit=str(row[4]) if row[4] is not None else None,
+            observed_commit=str(row[5]) if row[5] is not None else None,
+            dirty=bool(dirty_value) if dirty_value is not None else None,
+        )
+        _validate_boundary_for_storage(boundary)
+    except (IndexError, TypeError, ValueError) as exc:
+        raise WorkspaceRegistryError("Dolphin repository boundary metadata is invalid") from exc
+    return boundary
 
 
 def _path_entry_exists(path: str) -> bool:

@@ -39,7 +39,12 @@ class GitWorktree:
 
 async def discover_git_worktree(path: Path) -> GitWorktree:
     """Resolve one absolute input path to its concrete Git worktree identity."""
-    return await asyncio.to_thread(_discover_git_worktree, path)
+    return await asyncio.to_thread(discover_git_worktree_sync, path)
+
+
+def discover_git_worktree_sync(path: Path) -> GitWorktree:
+    """Synchronous worktree discovery for local worker and scanner threads."""
+    return _discover_git_worktree(path)
 
 
 def validate_git_worktree_snapshot(worktree: GitWorktree) -> None:
@@ -154,7 +159,9 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
             ["git", "-C", str(path), *arguments],
             capture_output=True,
             check=False,
+            encoding="utf-8",
             env=sanitized_git_environment(),
+            errors="surrogateescape",
             text=True,
             timeout=_git_probe_timeout_seconds(),
         )
@@ -164,6 +171,11 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_TIMEOUT") from exc
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_FAILED") from exc
+
+
+def run_git_read_only(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run one bounded, sanitized Git metadata command without a shell."""
+    return _run_git(path, *arguments)
 
 
 def sanitized_git_environment() -> dict[str, str]:

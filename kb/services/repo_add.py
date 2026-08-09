@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
+from kb.services.repository_boundaries import ParentScanPlan, plan_parent_scan
 from kb.services.workspace_registry import WorkspaceOperation, WorkspaceRegistration, WorkspaceRegistry
 from kb.services.worktree import GitWorktree, discover_git_worktree
 
@@ -15,6 +16,7 @@ class RepoAddSubmission:
     """The internal, transport-neutral result of one `repo_add` lifecycle request."""
 
     worktree: GitWorktree
+    parent_scan: ParentScanPlan
     registration: WorkspaceRegistration
     operation: WorkspaceOperation
 
@@ -28,9 +30,16 @@ class RepoAddService:
     async def submit(self, path: Path, cleanup_receipt: str) -> RepoAddSubmission:
         """Register an explicit worktree and durably submit or reuse its initial index operation."""
         worktree = await discover_git_worktree(path)
+        parent_scan = await asyncio.to_thread(plan_parent_scan, worktree)
         registration, operation = await asyncio.to_thread(
             self._registry.register_and_submit_initial_index,
             worktree,
             cleanup_receipt=cleanup_receipt,
+            boundaries=parent_scan.repository_boundaries,
         )
-        return RepoAddSubmission(worktree=worktree, registration=registration, operation=operation)
+        return RepoAddSubmission(
+            worktree=worktree,
+            parent_scan=parent_scan,
+            registration=registration,
+            operation=operation,
+        )

@@ -62,7 +62,7 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert common_git_dir == str(worktree_root / ".git")
     assert common_git_dir_identity == worktree_git_dir_identity
     assert worktree_git_dir == common_git_dir
-    assert version == 5
+    assert version == 6
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
@@ -520,15 +520,21 @@ async def test_sqlite_contention_is_reported_as_a_registry_error(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
+    _commit_repository(worktree_root / "nested")
     home = tmp_path / "home"
     home.mkdir()
-    service = RepoAddService(WorkspaceRegistry(macos_storage_layout(home=home)))
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    service = RepoAddService(registry)
 
     cleanup_receipt = _cleanup_receipt("repo-add-service")
     first = await service.submit(worktree_root, cleanup_receipt)
     second = await service.submit(worktree_root, cleanup_receipt)
 
     assert first.registration.created is True
+    assert first.parent_scan.excluded_subtrees == frozenset({"nested"})
+    persisted = registry.list_workspaces(None).items[0]
+    assert len(persisted.repository_boundaries) == 1
+    assert persisted.repository_boundaries[0].relative_path == "nested"
     assert first.registration.cleanup_receipt is not None
     assert first.operation.created is True
     assert second.registration.created is False
