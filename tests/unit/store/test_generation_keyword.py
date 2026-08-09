@@ -121,6 +121,39 @@ def test_keyword_revision_invalidates_published_search_after_any_document_change
         context.keyword.search(read_lease.lease_id, "original", limit=10)
 
 
+def test_keyword_search_rejects_direct_fts_index_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="fts-corrupt", text="indexed integrity evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    assert context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        row = connection.execute(
+            """
+            SELECT document_rowid, text, relative_path, language
+            FROM generation_keyword_documents
+            WHERE generation_id = ? AND chunk_instance_id = ?
+            """,
+            (snapshot.generation_id, membership.chunk_instance_id),
+        ).fetchone()
+        assert row is not None
+        connection.execute(
+            """
+            INSERT INTO generation_keyword_fts(
+                generation_keyword_fts, rowid, text, relative_path, language
+            ) VALUES('delete', ?, ?, ?, ?)
+            """,
+            row,
+        )
+
+    with pytest.raises(GenerationKeywordError, match="storage is busy, unavailable, or corrupt"):
+        context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+
+
 def test_readiness_rejects_missing_or_changed_keyword_documents(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
