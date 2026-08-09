@@ -2999,15 +2999,7 @@ class EffectiveWorkspaceCounts(BaseModel):
     registered: int = Field(ge=0)
     indexing: int = Field(ge=0)
     ready: int = Field(ge=0)
-    missing: int = Field(ge=0)
-    cleanup_pending: int = Field(ge=0)
     failed: int = Field(ge=0)
-
-
-class ForgottenStateAggregates(BaseModel):
-    replay_tombstones: int = Field(ge=0)
-    tombstone_metadata_bytes: int = Field(ge=0)
-    awaiting_physical_reclamation: int = Field(ge=0)
 
 
 class ToolAvailability(BaseModel):
@@ -3028,7 +3020,6 @@ class StatusResult(BaseModel):
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
     tool_availability: ToolAvailability
     workspace_counts: EffectiveWorkspaceCounts
-    forgotten: ForgottenStateAggregates
     current_workspace_resolution: Literal[
         "resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"
     ]
@@ -3054,7 +3045,7 @@ class RepoListResult(BaseModel):
     next_cursor: str | None
 ```
 
-`current_workspace` is non-null if and only if `current_workspace_resolution == "resolved"`; `status` never substitutes a candidate when resolution is ambiguous. Counts use effective mutually exclusive states, so a live cleanup intent contributes to `cleanup_pending` rather than its underlying state. The forgotten aggregate is separate and contains no entry-level identity. Production models may group detailed runtime/storage diagnostics into bounded typed submodels, but may not add workspace enumeration or credential values to this result.
+`current_workspace` is non-null if and only if `current_workspace_resolution == "resolved"`; `status` never substitutes a candidate when resolution is ambiguous. The shipped counts include only the durable mutually exclusive states the current registry can represent: `registered`, `indexing`, `ready`, and `failed`. Missing, cleanup-pending, and forgotten aggregates must not appear as fabricated zeros; they may be added only with their durable state implementation and corresponding contract update. Production models may group detailed runtime/storage diagnostics into bounded typed submodels, but may not add workspace enumeration or credential values to this result.
 
 The initial `repo_list` request sends `{"cursor": null}`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts with `{"cursor": null}` rather than merging inconsistent pages.
 

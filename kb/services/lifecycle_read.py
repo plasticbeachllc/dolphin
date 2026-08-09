@@ -6,7 +6,7 @@ import asyncio
 from datetime import timedelta
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from kb.lifecycle_limits import (
     ENTITY_ID_MAX_LENGTH,
@@ -85,6 +85,15 @@ class OperationStatusResult(LifecycleResultModel):
     status_expires_at: str | None = Field(default=None, max_length=ISO_TIMESTAMP_MAX_LENGTH)
     recommended_poll_after_ms: int | None = Field(default=None, ge=250, le=5_000)
     next_actions: list[NextAction] = Field(max_length=8)
+
+    @model_validator(mode="after")
+    def terminal_timestamps_match_state(self) -> OperationStatusResult:
+        terminal = self.state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
+        timestamps_present = self.terminal_at is not None and self.status_expires_at is not None
+        timestamps_absent = self.terminal_at is None and self.status_expires_at is None
+        if (terminal and not timestamps_present) or (not terminal and not timestamps_absent):
+            raise ValueError("operation terminal timestamps do not match its state")
+        return self
 
 
 class RepoListService:

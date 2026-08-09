@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import stat
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -128,6 +129,15 @@ async def test_repo_list_and_operation_status_return_bounded_durable_projections
     assert terminal_status.recommended_poll_after_ms is None
     assert terminal_status.pause_reason is None
 
+    with sqlite3.connect(layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE workspace_operations SET terminal_at = NULL WHERE operation_id = ?",
+            (operation.operation_id,),
+        )
+    with pytest.raises(ToolFailure) as corrupt_terminal_status:
+        await OperationStatusService(registry)(OperationStatusInput(operation_id=operation.operation_id))
+    assert corrupt_terminal_status.value.error.code == "STORAGE_UNAVAILABLE"
+
 
 @pytest.mark.asyncio
 async def test_lifecycle_read_errors_are_constant_shape(tmp_path: Path) -> None:
@@ -191,6 +201,17 @@ def test_operation_status_enforces_bounded_identifiers_commits_and_timestamps() 
     ):
         with pytest.raises(ValidationError):
             OperationStatusResult.model_validate({**valid, field: oversized})
+
+    with pytest.raises(ValidationError):
+        OperationStatusResult.model_validate({**valid, "state": "succeeded"})
+    with pytest.raises(ValidationError):
+        OperationStatusResult.model_validate(
+            {
+                **valid,
+                "terminal_at": observed_at.isoformat(),
+                "status_expires_at": (observed_at + timedelta(days=30)).isoformat(),
+            }
+        )
 
 
 def test_failed_operation_returns_status_guidance_without_unavailable_repo_add() -> None:

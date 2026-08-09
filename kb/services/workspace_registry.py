@@ -1063,6 +1063,9 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
     created_at = _parse_registry_timestamp(row[6], label="operation creation timestamp")
     updated_at = _parse_registry_timestamp(row[7], label="operation progress timestamp")
     terminal_at = None if row[8] is None else _parse_registry_timestamp(row[8], label="operation terminal timestamp")
+    terminal = state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
+    if terminal != (terminal_at is not None):
+        raise WorkspaceRegistryError("Dolphin operation metadata has inconsistent terminal timestamps")
     return OperationSnapshot(
         operation_id=operation_id,
         workspace_id=workspace_id,
