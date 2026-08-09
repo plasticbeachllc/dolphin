@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import fcntl
 import os
 import stat
 import struct
@@ -20,6 +21,7 @@ from kb.artifacts import (
     ArtifactUnavailable,
     ChunkTextArtifact,
     VerifiedChunkArtifactSet,
+    encode_chunk_text,
     identify_chunk_artifact_set,
     identify_chunk_text,
     require_artifact_id,
@@ -45,8 +47,7 @@ class ChunkArtifactStore:
         self._layout = layout
 
     def put_exact_text(self, text: str) -> ChunkTextArtifact:
-        descriptor = identify_chunk_text(text)
-        payload = text.encode("utf-8", errors="strict")
+        descriptor, payload = encode_chunk_text(text)
         envelope = _encode_envelope(descriptor, payload)
         try:
             with self._layout.open_artifacts_directory() as artifacts_fd:
@@ -133,7 +134,10 @@ def _install_no_replace(
     final_name = artifact_id[2:]
     temporary_name = f"{_INSTALL_FILE_PREFIX}{uuid.uuid4().hex}"
     temporary_fd: int | None = None
+    locked = False
     try:
+        _acquire_install_lock(install_fd)
+        locked = True
         temporary_fd = os.open(
             temporary_name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | _no_follow_flag() | _close_on_exec_flag(),
@@ -177,9 +181,20 @@ def _install_no_replace(
             pass
         except OSError:
             pass
+        if locked:
+            _release_install_lock(install_fd)
 
 
 def _prune_stale_install_files(install_fd: int) -> None:
+    if not _try_acquire_cleanup_lock(install_fd):
+        return
+    try:
+        _prune_stale_install_files_locked(install_fd)
+    finally:
+        _release_install_lock(install_fd)
+
+
+def _prune_stale_install_files_locked(install_fd: int) -> None:
     cutoff_ns = time.time_ns() - (_STALE_INSTALL_MINIMUM_AGE_SECONDS * 1_000_000_000)
     removed = 0
     scanned = 0
@@ -233,6 +248,30 @@ def _prune_stale_install_files(install_fd: int) -> None:
             os.fsync(install_fd)
         except OSError:
             raise ArtifactStoreUnavailable("Dolphin chunk artifact cleanup is unavailable") from None
+
+
+def _acquire_install_lock(install_fd: int) -> None:
+    try:
+        fcntl.flock(install_fd, fcntl.LOCK_SH)
+    except OSError:
+        raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
+
+
+def _try_acquire_cleanup_lock(install_fd: int) -> bool:
+    try:
+        fcntl.flock(install_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    except OSError:
+        raise ArtifactStoreUnavailable("Dolphin chunk artifact cleanup lock is unavailable") from None
+    return True
+
+
+def _release_install_lock(install_fd: int) -> None:
+    try:
+        fcntl.flock(install_fd, fcntl.LOCK_UN)
+    except OSError:
+        raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
 
 
 def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, ChunkTextArtifact]:

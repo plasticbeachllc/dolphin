@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 import stat
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from kb.artifacts import (
     ArtifactStoreUnavailable,
     ArtifactUnavailable,
     EmbeddingContract,
+    encode_chunk_text,
     identify_chunk_text,
     identify_embedding_input,
 )
@@ -31,7 +33,10 @@ def test_chunk_identity_preserves_exact_unicode_and_newlines() -> None:
     payload = text.encode("utf-8")
 
     artifact = identify_chunk_text(text)
+    encoded_artifact, encoded_payload = encode_chunk_text(text)
 
+    assert encoded_artifact == artifact
+    assert encoded_payload == payload
     assert artifact.artifact_id == sha256(CHUNK_TEXT_DOMAIN + payload).hexdigest()
     assert artifact.utf8_bytes == len(payload)
     assert artifact.characters == len(text)
@@ -267,6 +272,29 @@ def test_artifact_store_preserves_fresh_install_files(tmp_path: Path) -> None:
     store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="fresh shard seed"))
 
     assert active.is_file()
+
+
+def test_artifact_store_cleanup_does_not_interfere_with_an_active_installer_lock(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    artifact = store.put_exact_text("locked shard seed")
+    install_directory = _install_directory(layout.artifacts, artifact.artifact_id)
+    active = install_directory / f"install-{'d' * 32}"
+    active.write_bytes(b"paused private installer")
+    active.chmod(0o600)
+    os.utime(active, ns=(1, 1))
+    lock_fd = os.open(install_directory, os.O_RDONLY)
+
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_SH)
+        store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="locked shard seed"))
+        assert active.exists()
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+
+    store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="locked shard seed"))
+    assert not active.exists()
 
 
 def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path: Path) -> None:

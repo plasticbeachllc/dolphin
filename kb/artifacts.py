@@ -94,13 +94,22 @@ DOCUMENT_EMBEDDING_CONTRACT = EmbeddingContract(
 
 def identify_chunk_text(text: str) -> ChunkTextArtifact:
     """Identify exact decoded chunk text without normalization or newline rewriting."""
+    descriptor, _payload = encode_chunk_text(text)
+    return descriptor
+
+
+def encode_chunk_text(text: str) -> tuple[ChunkTextArtifact, bytes]:
+    """Identify exact chunk text and return its single validated UTF-8 encoding."""
     payload = _exact_utf8(text)
-    return ChunkTextArtifact(
-        artifact_id=sha256(CHUNK_TEXT_DOMAIN + payload).hexdigest(),
-        format=CHUNK_TEXT_FORMAT,
-        utf8_bytes=len(payload),
-        characters=len(text),
-        lines=text.count("\n") + (1 if text else 0),
+    return (
+        ChunkTextArtifact(
+            artifact_id=sha256(CHUNK_TEXT_DOMAIN + payload).hexdigest(),
+            format=CHUNK_TEXT_FORMAT,
+            utf8_bytes=len(payload),
+            characters=len(text),
+            lines=text.count("\n") + (1 if text else 0),
+        ),
+        payload,
     )
 
 
