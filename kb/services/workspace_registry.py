@@ -151,6 +151,23 @@ class WorkspaceReadSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class BoundaryPathMatch:
+    """One persisted child boundary containing a requested local path."""
+
+    parent_workspace_id: str
+    root: str
+    boundary: RepositoryBoundary
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspacePathMatch:
+    """The deepest registered workspace or blocking boundary for one path."""
+
+    workspace: WorkspaceSnapshot | None = None
+    boundary: BoundaryPathMatch | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class WorkspaceListPage:
     """One revision-consistent page of actionable workspaces."""
 
@@ -238,6 +255,77 @@ class WorkspaceRegistry:
                 else None
             ),
         )
+
+    def inspect_workspace(self, workspace_id: str) -> WorkspaceSnapshot | None:
+        """Read one exact active workspace by its stable ID."""
+        with self._read_connection() as connection:
+            row = connection.execute(_WORKSPACE_BY_ID_QUERY, (workspace_id,)).fetchone()
+            boundaries = self._read_boundaries(connection, str(row[0])) if row is not None else ()
+        if row is None:
+            return None
+        return replace(_workspace_snapshot(row), repository_boundaries=boundaries)
+
+    def resolve_workspace_path(self, path: Path) -> WorkspacePathMatch:
+        """Resolve one absolute path to its deepest workspace or hard child boundary."""
+        normalized_path = _normalize_resolution_path(path)
+        with self._read_connection() as connection:
+            workspace_row = connection.execute(
+                _DEEPEST_WORKSPACE_FOR_PATH_QUERY,
+                (normalized_path, normalized_path, normalized_path),
+            ).fetchone()
+            boundary_row = connection.execute(
+                _DEEPEST_BOUNDARY_FOR_PATH_QUERY,
+                (normalized_path, normalized_path, normalized_path),
+            ).fetchone()
+            workspace = _workspace_snapshot(workspace_row) if workspace_row is not None else None
+            if workspace is not None:
+                workspace = replace(
+                    workspace,
+                    repository_boundaries=self._read_boundaries(connection, workspace.workspace_id),
+                )
+            boundary_match = None
+            if boundary_row is not None:
+                boundary = _boundary_from_row(tuple(boundary_row[3:]))
+                child_row = (
+                    connection.execute(
+                        "SELECT workspace_id FROM workspace_registrations WHERE root = ? LIMIT 1",
+                        (str(boundary.root),),
+                    ).fetchone()
+                    if boundary.root is not None
+                    else None
+                )
+                if child_row is not None:
+                    boundary = replace(
+                        boundary,
+                        workspace_id=_bounded_registry_text(
+                            child_row[0],
+                            label="workspace ID",
+                            max_length=ENTITY_ID_MAX_LENGTH,
+                        ),
+                    )
+                parent_workspace_id = _bounded_registry_text(
+                    boundary_row[0],
+                    label="workspace ID",
+                    max_length=ENTITY_ID_MAX_LENGTH,
+                )
+                boundary_root = _bounded_registry_text(
+                    boundary_row[1],
+                    label="repository boundary root",
+                    max_length=4_096,
+                )
+                if not Path(boundary_root).is_absolute():
+                    raise WorkspaceRegistryError("Dolphin repository boundary metadata contains an invalid root")
+                boundary_match = BoundaryPathMatch(
+                    parent_workspace_id=parent_workspace_id,
+                    root=boundary_root,
+                    boundary=boundary,
+                )
+
+        if workspace is not None and (boundary_match is None or len(workspace.root) >= len(boundary_match.root)):
+            return WorkspacePathMatch(workspace=workspace)
+        if boundary_match is not None:
+            return WorkspacePathMatch(boundary=boundary_match)
+        return WorkspacePathMatch()
 
     def list_workspaces(self, cursor: str | None) -> WorkspaceListPage:
         """Read one fixed-size, revision-bound page of actionable workspaces."""
@@ -883,7 +971,28 @@ class WorkspaceRegistry:
             """,
             (workspace_id, _MAX_BOUNDARIES_PER_READ),
         ).fetchall()
-        return tuple(_boundary_from_row(row) for row in rows)
+        boundaries: list[RepositoryBoundary] = []
+        for row in rows:
+            boundary = _boundary_from_row(row)
+            child_row = (
+                connection.execute(
+                    "SELECT workspace_id FROM workspace_registrations WHERE root = ? LIMIT 1",
+                    (str(boundary.root),),
+                ).fetchone()
+                if boundary.root is not None
+                else None
+            )
+            if child_row is not None:
+                boundary = replace(
+                    boundary,
+                    workspace_id=_bounded_registry_text(
+                        child_row[0],
+                        label="workspace ID",
+                        max_length=ENTITY_ID_MAX_LENGTH,
+                    ),
+                )
+            boundaries.append(boundary)
+        return tuple(boundaries)
 
     def _submit_initial_index(
         self,
@@ -989,6 +1098,10 @@ def _validate_boundary_for_storage(boundary: RepositoryBoundary) -> None:
     for commit in (boundary.expected_commit, boundary.observed_commit):
         if commit is not None and (not commit or len(commit) > HEAD_COMMIT_MAX_LENGTH):
             raise WorkspaceRegistryError("Dolphin repository boundary commit is invalid")
+    if boundary.workspace_id is not None and (
+        not boundary.workspace_id or len(boundary.workspace_id) > ENTITY_ID_MAX_LENGTH
+    ):
+        raise WorkspaceRegistryError("Dolphin repository boundary workspace ID is invalid")
 
 
 def _boundary_storage_row(workspace_id: str, boundary: RepositoryBoundary) -> tuple[object, ...]:
@@ -1066,6 +1179,46 @@ _WORKSPACE_PROJECTION = """
 """
 
 _WORKSPACE_BY_ROOT_QUERY = _WORKSPACE_PROJECTION + " WHERE w.root = ? LIMIT 1"
+_WORKSPACE_BY_ID_QUERY = _WORKSPACE_PROJECTION + " WHERE w.workspace_id = ? LIMIT 1"
+
+_DEEPEST_WORKSPACE_FOR_PATH_QUERY = (
+    "WITH workspace_projection AS ("
+    + _WORKSPACE_PROJECTION
+    + ")"
+    + """
+    SELECT workspace_id, repository_id, repository_display_name, workspace_display_name,
+           root, branch, head_commit, effective_state
+    FROM workspace_projection
+    WHERE ? = root OR (length(?) > length(root) AND substr(?, 1, length(root) + 1) = root || '/')
+    ORDER BY length(root) DESC, workspace_id
+    LIMIT 1
+"""
+)
+
+_DEEPEST_BOUNDARY_FOR_PATH_QUERY = """
+    WITH boundary_projection AS (
+        SELECT
+            w.workspace_id AS parent_workspace_id,
+            rtrim(w.root, '/') || '/' || b.relative_path AS boundary_root,
+            w.root AS parent_root,
+            b.kind,
+            b.relative_path,
+            b.state,
+            b.root,
+            b.expected_commit,
+            b.observed_commit,
+            b.dirty
+        FROM workspace_repository_boundaries AS b
+        JOIN workspace_registrations AS w ON w.workspace_id = b.workspace_id
+    )
+    SELECT parent_workspace_id, boundary_root, parent_root, kind, relative_path, state,
+           root, expected_commit, observed_commit, dirty
+    FROM boundary_projection
+    WHERE ? = boundary_root
+       OR (length(?) > length(boundary_root) AND substr(?, 1, length(boundary_root) + 1) = boundary_root || '/')
+    ORDER BY length(boundary_root) DESC, parent_workspace_id, relative_path
+    LIMIT 1
+"""
 
 _WORKSPACE_COUNT_QUERY = (
     """
@@ -1131,16 +1284,38 @@ _WORKSPACE_PAGE_QUERY_WITH_CURSOR = (
 
 
 def _workspace_snapshot(row: tuple[object, ...]) -> WorkspaceSnapshot:
+    workspace_id = _bounded_registry_text(row[0], label="workspace ID", max_length=ENTITY_ID_MAX_LENGTH)
+    repository_id = _bounded_registry_text(row[1], label="repository ID", max_length=ENTITY_ID_MAX_LENGTH)
+    repository_display_name = _bounded_registry_text(row[2], label="repository display name", max_length=512)
+    workspace_display_name = _bounded_registry_text(row[3], label="workspace display name", max_length=512)
+    root = _bounded_registry_text(row[4], label="workspace root", max_length=4_096)
+    if not Path(root).is_absolute():
+        raise WorkspaceRegistryError("Dolphin workspace metadata contains an invalid root")
+    branch = None if row[5] is None else _bounded_registry_text(row[5], label="workspace branch", max_length=1_024)
+    head_commit = _bounded_registry_text(row[6], label="workspace commit", max_length=HEAD_COMMIT_MAX_LENGTH)
+    state = str(row[7])
+    if state not in {"registered", "indexing", "ready", "failed"}:
+        raise WorkspaceRegistryError("Dolphin workspace metadata contains an invalid state")
     return WorkspaceSnapshot(
-        workspace_id=str(row[0]),
-        repository_id=str(row[1]),
-        repository_display_name=str(row[2]),
-        workspace_display_name=str(row[3]),
-        root=str(row[4]),
-        branch=str(row[5]) if row[5] is not None else None,
-        head_commit=str(row[6]),
-        state=cast(WorkspaceEffectiveState, row[7]),
+        workspace_id=workspace_id,
+        repository_id=repository_id,
+        repository_display_name=repository_display_name,
+        workspace_display_name=workspace_display_name,
+        root=root,
+        branch=branch,
+        head_commit=head_commit,
+        state=cast(WorkspaceEffectiveState, state),
     )
+
+
+def _normalize_resolution_path(path: Path) -> str:
+    raw_path = str(path)
+    if not path.is_absolute() or not raw_path or "\x00" in raw_path or len(raw_path) > 4_096:
+        raise WorkspaceRegistryError("Dolphin workspace resolution path is invalid")
+    normalized = os.path.normpath(raw_path)
+    if not Path(normalized).is_absolute() or len(normalized) > 4_096:
+        raise WorkspaceRegistryError("Dolphin workspace resolution path is invalid")
+    return normalized
 
 
 def _repository_display_name(common_git_dir: str) -> str:

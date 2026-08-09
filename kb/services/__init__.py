@@ -18,6 +18,14 @@ from kb.services.workspace_registry import (
     WorkspaceRegistry,
     WorkspaceRegistryError,
 )
+from kb.services.workspace_resolution import (
+    MCPRootSnapshot,
+    WorkspaceResolution,
+    WorkspaceResolutionOutcome,
+    WorkspaceResolutionSource,
+    WorkspaceResolver,
+    WorkspaceSessionScope,
+)
 from kb.services.worktree import (
     GitWorktree,
     WorktreeDiscoveryError,
@@ -27,6 +35,7 @@ from kb.services.worktree import (
 
 __all__ = [
     "GitWorktree",
+    "MCPRootSnapshot",
     "OperationState",
     "ParentScanPlan",
     "RepoAddService",
@@ -39,9 +48,14 @@ __all__ = [
     "StatusService",
     "WorktreeDiscoveryError",
     "WorkspaceRegistration",
+    "WorkspaceResolution",
+    "WorkspaceResolutionOutcome",
+    "WorkspaceResolutionSource",
+    "WorkspaceResolver",
     "WorkspaceOperation",
     "WorkspaceRegistry",
     "WorkspaceRegistryError",
+    "WorkspaceSessionScope",
     "default_mcp_handlers",
     "discover_git_worktree",
     "plan_parent_scan",

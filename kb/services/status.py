@@ -15,7 +15,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from kb.mcp.contracts import StatusInput
 from kb.services.lifecycle_models import NextAction, RepositoryBoundarySummary, WorkspaceSummary
 from kb.services.lifecycle_read import repository_boundary_summary, workspace_summary
+from kb.services.repository_boundaries import RepositoryBoundaryKind, RepositoryBoundaryState
 from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
+from kb.services.workspace_resolution import (
+    MCP_ROOT_LIMIT,
+    MCPRootSnapshot,
+    WorkspaceResolution,
+    WorkspaceResolutionOutcome,
+    WorkspaceResolutionSource,
+    WorkspaceResolver,
+    WorkspaceSessionScope,
+)
 from kb.services.worktree import sanitized_git_environment
 from kb.version import get_version
 
@@ -71,15 +81,20 @@ class StatusService:
         cwd: Path | None = None,
         environment: Mapping[str, str] | None = None,
         registry: WorkspaceRegistry | None = None,
+        mcp_roots: tuple[Path, ...] = (),
+        session_scope: WorkspaceSessionScope | None = None,
     ) -> None:
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = environment if environment is not None else os.environ
         self._registry = registry
+        self._mcp_roots = mcp_roots
+        self._session_scope = session_scope
 
     async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
         probe = await asyncio.to_thread(_probe_worktree, self._cwd)
         registry_snapshot = WorkspaceReadSnapshot(registered=0, indexing=0, ready=0, failed=0, current_workspace=None)
+        scope_resolution: WorkspaceResolution | None = None
         storage_available = True
         if self._registry is not None:
             try:
@@ -87,13 +102,27 @@ class StatusService:
                 if database_exists:
                     if not await asyncio.to_thread(self._registry.schema_is_current):
                         raise WorkspaceRegistryError("Dolphin metadata storage requires initialization")
-                    registry_snapshot = await asyncio.to_thread(self._registry.read_workspace_snapshot, probe.root)
+                    registry_snapshot = await asyncio.to_thread(self._registry.read_workspace_snapshot)
+                    mcp_roots = await _probe_mcp_roots(self._mcp_roots)
+                    resolver = WorkspaceResolver(self._registry, session_scope=self._session_scope)
+                    scope_resolution = await asyncio.to_thread(
+                        resolver.resolve,
+                        mcp_roots=mcp_roots,
+                        cwd=self._cwd,
+                        cwd_worktree_root=probe.root,
+                    )
+                    if (
+                        scope_resolution.source is WorkspaceResolutionSource.CWD
+                        and probe.root is None
+                        and scope_resolution.boundary is None
+                    ):
+                        scope_resolution = None
             except WorkspaceRegistryError:
                 storage_available = False
 
         current_workspace = (
-            workspace_summary(registry_snapshot.current_workspace)
-            if registry_snapshot.current_workspace is not None
+            workspace_summary(scope_resolution.workspace)
+            if scope_resolution is not None and scope_resolution.workspace is not None
             else None
         )
         if current_workspace is not None:
@@ -102,6 +131,18 @@ class StatusService:
         elif not storage_available:
             resolution = "unavailable"
             next_actions = [NextAction(action="inspect_storage", reason="Dolphin metadata storage is unavailable.")]
+        elif scope_resolution is not None and scope_resolution.outcome is WorkspaceResolutionOutcome.AMBIGUOUS:
+            resolution = "ambiguous"
+            next_actions = _next_actions_for_resolution(scope_resolution)
+        elif scope_resolution is not None and scope_resolution.outcome in {
+            WorkspaceResolutionOutcome.UNREGISTERED,
+            WorkspaceResolutionOutcome.MISSING,
+        }:
+            resolution = "unregistered"
+            next_actions = _next_actions_for_resolution(scope_resolution)
+        elif scope_resolution is not None and scope_resolution.outcome is WorkspaceResolutionOutcome.UNAVAILABLE:
+            resolution = "unavailable"
+            next_actions = _next_actions_for_resolution(scope_resolution)
         else:
             resolution = probe.resolution
             next_actions = _next_actions_for_probe(probe)
@@ -125,11 +166,8 @@ class StatusService:
             current_workspace_resolution=resolution,
             current_workspace=current_workspace,
             current_repository_boundaries=(
-                [
-                    repository_boundary_summary(boundary)
-                    for boundary in registry_snapshot.current_workspace.repository_boundaries
-                ]
-                if registry_snapshot.current_workspace is not None
+                [repository_boundary_summary(boundary) for boundary in scope_resolution.workspace.repository_boundaries]
+                if scope_resolution is not None and scope_resolution.workspace is not None
                 else []
             ),
             next_actions=next_actions,
@@ -179,6 +217,58 @@ def _next_actions_for_probe(probe: _WorktreeProbe) -> list[NextAction]:
     return []
 
 
+def _next_actions_for_resolution(resolution: WorkspaceResolution) -> list[NextAction]:
+    if resolution.outcome in {WorkspaceResolutionOutcome.AMBIGUOUS, WorkspaceResolutionOutcome.MISSING}:
+        return [
+            NextAction(
+                action="inspect_repositories",
+                reason="Choose one available Dolphin workspace explicitly.",
+                tool="repo_list",
+                arguments={"cursor": None},
+            )
+        ]
+    if resolution.outcome is WorkspaceResolutionOutcome.UNAVAILABLE:
+        return [
+            NextAction(
+                action="inspect_git",
+                reason="Dolphin could not safely inspect the client workspace roots.",
+            )
+        ]
+    if resolution.boundary is not None:
+        boundary = resolution.boundary.boundary
+        if boundary.kind is RepositoryBoundaryKind.SUBMODULE and boundary.state in {
+            RepositoryBoundaryState.UNINITIALIZED,
+            RepositoryBoundaryState.MISSING,
+        }:
+            return [
+                NextAction(
+                    action="initialize_submodule",
+                    reason="This submodule has no usable local worktree; initialize or restore it outside Dolphin.",
+                )
+            ]
+        if boundary.state in {RepositoryBoundaryState.INVALID, RepositoryBoundaryState.CONFLICTED}:
+            return [
+                NextAction(
+                    action="inspect_repository_boundary",
+                    reason=(
+                        "This nested repository boundary is invalid or conflicted and must be repaired outside Dolphin."
+                    ),
+                )
+            ]
+        return [
+            NextAction(
+                action="registration_unavailable",
+                reason="The deepest Git worktree is not registered, but repo_add is unavailable in this runtime.",
+            )
+        ]
+    return _next_actions_for_probe(
+        _WorktreeProbe(
+            resolution="unregistered",
+            root=resolution.unregistered_root,
+        )
+    )
+
+
 def _tool_availability(storage_available: bool) -> ToolAvailability:
     read_state: Literal["available", "unavailable"] = "available" if storage_available else "unavailable"
     return ToolAvailability(
@@ -190,4 +280,21 @@ def _tool_availability(storage_available: bool) -> ToolAvailability:
         operation_status=read_state,
         search="unavailable",
         open_ref="unavailable",
+    )
+
+
+async def _probe_mcp_roots(roots: tuple[Path, ...]) -> tuple[MCPRootSnapshot, ...]:
+    if len(roots) > MCP_ROOT_LIMIT:
+        return tuple(
+            MCPRootSnapshot(path=root, worktree_root=None, probe_available=False)
+            for root in roots[: MCP_ROOT_LIMIT + 1]
+        )
+    probes = await asyncio.gather(*(asyncio.to_thread(_probe_worktree, root) for root in roots))
+    return tuple(
+        MCPRootSnapshot(
+            path=root,
+            worktree_root=probe.root,
+            probe_available=probe.resolution != "unavailable",
+        )
+        for root, probe in zip(roots, probes, strict=True)
     )
