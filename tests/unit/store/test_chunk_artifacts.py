@@ -269,6 +269,22 @@ def test_artifact_store_preserves_fresh_install_files(tmp_path: Path) -> None:
     assert active.is_file()
 
 
+def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    text = "recover this exact artifact after a crashed install"
+    artifact = store.put_exact_text(text)
+    artifact_path = _artifact_path(layout.artifacts, artifact.artifact_id)
+    installer_path = _install_directory(layout.artifacts, artifact.artifact_id) / f"install-{'c' * 32}"
+    os.link(artifact_path, installer_path)
+    os.utime(installer_path, ns=(1, 1))
+
+    assert artifact_path.stat().st_nlink == 2
+    assert store.read_verified(artifact.artifact_id) == text
+    assert artifact_path.stat().st_nlink == 1
+    assert not installer_path.exists()
+
+
 def test_artifact_store_refuses_unsafe_stale_installer_entries(tmp_path: Path) -> None:
     layout = macos_storage_layout(home=tmp_path)
     store = ChunkArtifactStore(layout)

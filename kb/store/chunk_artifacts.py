@@ -244,6 +244,12 @@ def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, 
         if shard_fd is None:
             raise ArtifactUnavailable("Dolphin chunk artifact is unavailable")
         try:
+            install_fd = _open_existing_private_directory(shard_fd, _INSTALL_DIRECTORY)
+            if install_fd is not None:
+                try:
+                    _prune_stale_install_files(install_fd)
+                finally:
+                    os.close(install_fd)
             return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
         finally:
             os.close(shard_fd)
@@ -328,7 +334,7 @@ def _validate_install_file(status: os.stat_result) -> None:
         not stat.S_ISREG(status.st_mode)
         or status.st_uid != os.getuid()
         or stat.S_IMODE(status.st_mode) != _ARTIFACT_FILE_MODE
-        or status.st_nlink != 1
+        or status.st_nlink not in {1, 2}
     ):
         raise ArtifactCorrupt("Dolphin chunk artifact installer storage is corrupt")
 
