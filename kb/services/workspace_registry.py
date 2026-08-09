@@ -1543,7 +1543,8 @@ class WorkspaceRegistry:
                                     AND published_at IS NULL
                                 )
                             ),
-                            UNIQUE (generation_id, publication_id)
+                            UNIQUE (generation_id, publication_id),
+                            UNIQUE (workspace_id, generation_id)
                         ) STRICT
                         """
                     )
@@ -1562,7 +1563,9 @@ class WorkspaceRegistry:
                             revision INTEGER NOT NULL CHECK (revision >= 1),
                             published_at TEXT NOT NULL,
                             FOREIGN KEY (generation_id, publication_id)
-                                REFERENCES generations(generation_id, publication_id)
+                                REFERENCES generations(generation_id, publication_id),
+                            FOREIGN KEY (workspace_id, generation_id)
+                                REFERENCES generations(workspace_id, generation_id)
                         ) STRICT
                         """
                     )

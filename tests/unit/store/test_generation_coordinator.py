@@ -320,11 +320,30 @@ def test_writer_acquisition_retries_brief_sqlite_contention(
     assert generation.operation_id == lease.operation.operation_id
 
 
+def test_writer_acquisition_stops_at_its_bounded_contention_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    coordinator, _registry, layout, _worktree, lease, _clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    lock_connection = sqlite3.connect(layout.metadata_db, timeout=0, isolation_level=None)
+    lock_connection.execute("BEGIN IMMEDIATE")
+    started = time.monotonic()
+    try:
+        with pytest.raises(GenerationCoordinatorError, match="busy or unavailable"):
+            coordinator.create_staging(lease)
+    finally:
+        elapsed = time.monotonic() - started
+        lock_connection.rollback()
+        lock_connection.close()
+
+    assert 2.5 <= elapsed < 3.5
+
+
 def test_database_rejects_impossible_generation_and_reader_lease_states(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, _registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    coordinator, registry, layout, worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
     generation = coordinator.create_staging(lease)
     with sqlite3.connect(layout.metadata_db) as connection:
         with pytest.raises(sqlite3.IntegrityError):
@@ -346,6 +365,20 @@ def test_database_rejects_impossible_generation_and_reader_lease_states(
         generation_id,
         expected_previous_generation_id=None,
     )
+    other_root = tmp_path / "other-repository"
+    other_root.mkdir()
+    other_registration, _other_operation = registry.register_and_submit_initial_index(
+        GitWorktree(
+            root=other_root,
+            common_git_dir=other_root / ".git",
+            common_git_dir_identity="other-common-identity",
+            worktree_git_dir=other_root / ".git",
+            worktree_git_dir_identity="other-worktree-identity",
+            head_commit="d" * 40,
+            branch=worktree.branch,
+        ),
+        cleanup_receipt=_cleanup_receipt("other-generation-coordinator"),
+    )
     acquired_at = clock.current.isoformat()
     with sqlite3.connect(layout.metadata_db) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
@@ -357,6 +390,11 @@ def test_database_rejects_impossible_generation_and_reader_lease_states(
                 ) VALUES ('read_invalid', ?, ?, ?, ?)
                 """,
                 (snapshot.generation_id, snapshot.publication_id, acquired_at, acquired_at),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE workspace_publications SET workspace_id = ? WHERE workspace_id = ?",
+                (other_registration.workspace_id, snapshot.workspace_id),
             )
 
 

@@ -29,6 +29,7 @@ from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
 
 _READ_LEASE_MAXIMUM = timedelta(seconds=60)
+_SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
 _WRITE_LOCK_DEADLINE_SECONDS = 3.0
 _WRITE_LOCK_INITIAL_BACKOFF_SECONDS = 0.025
 _WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
@@ -388,7 +389,7 @@ class SQLiteGenerationCoordinator:
             raise GenerationCoordinatorError("Dolphin metadata storage is unavailable") from exc
         try:
             connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute("PRAGMA busy_timeout = 1000")
+            connection.execute(f"PRAGMA busy_timeout = {_SQLITE_BUSY_TIMEOUT_MILLISECONDS}")
             if read_only:
                 connection.execute("PRAGMA query_only = ON")
             version_row = connection.execute("PRAGMA user_version").fetchone()
@@ -661,14 +662,18 @@ def _begin_write(connection: sqlite3.Connection) -> None:
     """Acquire SQLite's writer slot with short bounded contention backoff."""
     deadline = time.monotonic() + _WRITE_LOCK_DEADLINE_SECONDS
     backoff = _WRITE_LOCK_INITIAL_BACKOFF_SECONDS
-    while True:
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            return
-        except sqlite3.OperationalError as exc:
-            message = str(exc).lower()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0 or ("locked" not in message and "busy" not in message):
-                raise
-            time.sleep(min(backoff, remaining))
-            backoff = min(backoff * 2, _WRITE_LOCK_MAX_BACKOFF_SECONDS)
+    connection.execute("PRAGMA busy_timeout = 0")
+    try:
+        while True:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or ("locked" not in message and "busy" not in message):
+                    raise
+                time.sleep(min(backoff, remaining))
+                backoff = min(backoff * 2, _WRITE_LOCK_MAX_BACKOFF_SECONDS)
+    finally:
+        connection.execute(f"PRAGMA busy_timeout = {_SQLITE_BUSY_TIMEOUT_MILLISECONDS}")
