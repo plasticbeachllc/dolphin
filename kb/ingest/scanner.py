@@ -1,11 +1,21 @@
 from __future__ import annotations
 
-import subprocess
+import os
+import stat
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from pathspec import PathSpec
+
+from kb.services.repository_boundaries import (
+    ParentScanPlan,
+    RepositoryBoundaryError,
+    path_is_within_boundary,
+    plan_parent_scan,
+    validate_parent_scan,
+)
+from kb.services.worktree import WorktreeDiscoveryError, discover_git_worktree_sync, run_git_read_only
 
 from .lang import classify_language
 
@@ -14,7 +24,6 @@ from .lang import classify_language
 class FileCandidate:
     repo_root: Path
     rel_path: str  # POSIX
-    abs_path: Path
     ext: str | None
     language: str
     size_bytes: int
@@ -27,9 +36,12 @@ class ScannerError(RuntimeError):
 
 def _git(root: Path, *args: str) -> bytes:
     try:
-        return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        raise ScannerError(e.output.decode("utf-8", errors="ignore"))
+        result = run_git_read_only(root, *args)
+    except WorktreeDiscoveryError as exc:
+        raise ScannerError("Git metadata is unavailable") from exc
+    if result.returncode != 0:
+        raise ScannerError("Git metadata command failed")
+    return result.stdout.encode("utf-8", errors="surrogateescape")
 
 
 def _list_tracked(root: Path) -> list[str]:
@@ -46,23 +58,27 @@ def _list_tracked(root: Path) -> list[str]:
     """
     out = _git(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
     items = [p for p in out.split(b"\x00") if p]
-    return [PurePosixPath(p.decode("utf-8")).as_posix() for p in items]
+    return [PurePosixPath(p.decode("utf-8", errors="surrogateescape")).as_posix() for p in items]
 
 
-def _submodule_roots(root: Path) -> list[str]:
+def _repository_boundary_plan(root: Path) -> ParentScanPlan:
+    """Build the immutable boundary plan shared by one parent scan."""
     try:
-        out = _git(root, "submodule", "status", "--recursive")
-    except ScannerError:
-        return []
-    prefixes: list[str] = []
-    for line in out.decode("utf-8", errors="ignore").splitlines():
-        parts = line.strip().split()
-        if len(parts) >= 2:
-            rel = PurePosixPath(parts[1]).as_posix()
-            if not rel.endswith("/"):
-                rel = f"{rel}/"
-            prefixes.append(rel)
-    return prefixes
+        worktree = discover_git_worktree_sync(root)
+        if worktree.root != root:
+            raise ScannerError(f"Not a Git worktree root: {root}")
+        return plan_parent_scan(worktree)
+    except WorktreeDiscoveryError as exc:
+        raise ScannerError(f"Not a Git worktree: {root}") from exc
+    except RepositoryBoundaryError as exc:
+        raise ScannerError(f"Repository boundary discovery failed: {exc.code}") from exc
+
+
+def _validate_repository_boundary_plan(plan: ParentScanPlan) -> None:
+    try:
+        validate_parent_scan(plan)
+    except (RepositoryBoundaryError, WorktreeDiscoveryError) as exc:
+        raise ScannerError("Repository boundaries changed during scanning") from exc
 
 
 def _build_pathspec(ignores: Iterable[str]) -> PathSpec:
@@ -70,18 +86,69 @@ def _build_pathspec(ignores: Iterable[str]) -> PathSpec:
     return PathSpec.from_lines("gitignore", patterns)
 
 
-def _is_binary(path: Path, sniff_bytes: int = 65536) -> bool:
+def _chunk_is_binary(chunk: bytes) -> bool:
     try:
-        with path.open("rb") as f:
-            chunk = f.read(sniff_bytes)
         # Fast NUL-byte heuristic
         if b"\x00" in chunk:
             return True
         # UTF-8 decode check
         chunk.decode("utf-8")
         return False
-    except Exception:
+    except UnicodeDecodeError:
         return True
+
+
+def _directory_snapshot(directory_fd: int) -> tuple[int, int, int, int]:
+    status = os.fstat(directory_fd)
+    return status.st_dev, status.st_ino, status.st_ctime_ns, status.st_mtime_ns
+
+
+def _directory_has_git_marker(directory_fd: int) -> bool:
+    try:
+        os.stat(".git", dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _inspect_candidate_file(root: Path, rel_path: str, sniff_bytes: int = 65_536) -> tuple[int, bool] | None:
+    """Inspect one repository-relative file without following any symlink component."""
+    parts = PurePosixPath(rel_path).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    file_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+    directory_fds: list[int] = []
+    nested_directory_snapshots: list[tuple[int, tuple[int, int, int, int]]] = []
+    file_fd: int | None = None
+    try:
+        directory_fds.append(os.open(root, directory_flags))
+        for part in parts[:-1]:
+            directory_fd = os.open(part, directory_flags, dir_fd=directory_fds[-1])
+            directory_fds.append(directory_fd)
+            if _directory_has_git_marker(directory_fd):
+                return None
+            nested_directory_snapshots.append((directory_fd, _directory_snapshot(directory_fd)))
+
+        file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fds[-1])
+        file_status = os.fstat(file_fd)
+        if not stat.S_ISREG(file_status.st_mode):
+            return None
+        chunk = os.read(file_fd, sniff_bytes)
+        if any(
+            _directory_has_git_marker(directory_fd) or _directory_snapshot(directory_fd) != snapshot
+            for directory_fd, snapshot in nested_directory_snapshots
+        ):
+            return None
+        return file_status.st_size, _chunk_is_binary(chunk)
+    except OSError:
+        return None
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        for directory_fd in reversed(directory_fds):
+            os.close(directory_fd)
 
 
 def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
@@ -95,33 +162,24 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
     if not (root / ".git").exists():
         raise ScannerError(f"Not a git repository: {root}")
 
+    boundary_plan = _repository_boundary_plan(root)
     rel_paths = _list_tracked(root)
-    submods = _submodule_roots(root)
+    excluded_subtrees = boundary_plan.excluded_subtrees
     spec = _build_pathspec(ignores)
 
     candidates: list[FileCandidate] = []
     for rel in rel_paths:
-        # Skip submodules
-        if any(rel.startswith(prefix) for prefix in submods):
+        # Repository boundaries are non-overridable, including malformed ones.
+        if path_is_within_boundary(rel, excluded_subtrees):
             continue
         # Skip by pathspec
         if spec.match_file(rel):
             continue
-        abs_path = (root / rel).resolve()
-        # Skip symlinks
-        if abs_path.is_symlink():
+        inspection = _inspect_candidate_file(root, rel)
+        if inspection is None:
             continue
-        # Skip non-files
-        if not abs_path.is_file():
-            continue
-        # Binary detection
-        is_bin = _is_binary(abs_path)
+        size, is_bin = inspection
         if is_bin:
-            continue
-        # Size
-        try:
-            size = abs_path.stat().st_size
-        except OSError:
             continue
         # Language
         _, language = classify_language(Path(rel))
@@ -130,7 +188,6 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
             FileCandidate(
                 repo_root=root,
                 rel_path=rel,
-                abs_path=abs_path,
                 ext=ext,
                 language=language,
                 size_bytes=size,
@@ -138,4 +195,5 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
             )
         )
 
+    _validate_repository_boundary_plan(boundary_plan)
     return candidates

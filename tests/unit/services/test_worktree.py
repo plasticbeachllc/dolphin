@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -23,6 +25,8 @@ async def test_discovery_canonicalizes_an_absolute_path_inside_a_worktree(tmp_pa
 
     assert worktree.root == tmp_path
     assert worktree.common_git_dir == tmp_path / ".git"
+    assert worktree.worktree_git_dir == tmp_path / ".git"
+    assert worktree.worktree_git_dir_identity == worktree.common_git_dir_identity
     assert worktree.head_commit == _git(tmp_path, "rev-parse", "HEAD")
     assert worktree.branch == _git(tmp_path, "symbolic-ref", "--short", "HEAD")
 
@@ -76,6 +80,7 @@ async def test_discovery_ignores_ambient_git_repository_selection(
 
     assert worktree.root == requested_root
     assert worktree.common_git_dir == requested_root / ".git"
+    assert worktree.worktree_git_dir == requested_root / ".git"
     assert worktree.head_commit == _git(requested_root, "rev-parse", "HEAD", sanitized=True)
 
 
@@ -95,13 +100,13 @@ async def test_discovery_rejects_a_head_that_changes_during_the_probe(
             subprocess.CompletedProcess(
                 [],
                 0,
-                f"{root}\n{root / '.git'}\ninitial-head\nrefs/heads/main\n",
+                f"{root}\n{root / '.git'}\n{root / '.git'}\ninitial-head\nrefs/heads/main\n",
                 "",
             ),
             subprocess.CompletedProcess(
                 [],
                 0,
-                f"{root}\n{root / '.git'}\nreplacement-head\nrefs/heads/main\n",
+                f"{root}\n{root / '.git'}\n{root / '.git'}\nreplacement-head\nrefs/heads/main\n",
                 "",
             ),
         ]
@@ -116,6 +121,70 @@ async def test_discovery_rejects_a_head_that_changes_during_the_probe(
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
         await discover_git_worktree(caller_path)
     assert calls == [caller_path, root]
+
+
+@pytest.mark.asyncio
+async def test_linked_worktrees_share_repository_identity_but_have_distinct_git_directories(tmp_path: Path) -> None:
+    primary = tmp_path / "primary"
+    linked = tmp_path / "linked"
+    primary.mkdir()
+    _commit_repository(primary)
+    _git(primary, "worktree", "add", "-q", "-b", "linked-branch", str(linked))
+
+    primary_snapshot = await discover_git_worktree(primary)
+    linked_snapshot = await discover_git_worktree(linked)
+
+    assert linked_snapshot.common_git_dir == primary_snapshot.common_git_dir
+    assert linked_snapshot.common_git_dir_identity == primary_snapshot.common_git_dir_identity
+    assert linked_snapshot.worktree_git_dir != primary_snapshot.worktree_git_dir
+    assert linked_snapshot.worktree_git_dir_identity != primary_snapshot.worktree_git_dir_identity
+    assert linked_snapshot.worktree_git_dir.parent == primary / ".git" / "worktrees"
+
+
+@pytest.mark.asyncio
+async def test_worktree_git_directory_identity_survives_a_git_managed_move(tmp_path: Path) -> None:
+    primary = tmp_path / "primary"
+    linked = tmp_path / "linked"
+    moved = tmp_path / "moved"
+    primary.mkdir()
+    _commit_repository(primary)
+    _git(primary, "worktree", "add", "-q", "-b", "linked-branch", str(linked))
+    before = await discover_git_worktree(linked)
+
+    _git(primary, "worktree", "move", str(linked), str(moved))
+    after = await discover_git_worktree(moved)
+
+    assert after.root == moved
+    assert after.common_git_dir_identity == before.common_git_dir_identity
+    assert after.worktree_git_dir_identity == before.worktree_git_dir_identity
+
+
+def test_git_directory_identity_uses_birth_time_and_rejects_symlinks(tmp_path: Path) -> None:
+    directory = tmp_path / "git-directory"
+    directory.mkdir()
+    symlink = tmp_path / "git-directory-link"
+    symlink.symlink_to(directory, target_is_directory=True)
+
+    identity = worktree_module.git_directory_identity(directory)
+
+    kind, device, inode, birth_time_ns = identity.split(":")
+    assert kind == "directory"
+    assert int(device) >= 0
+    assert int(inode) > 0
+    assert int(birth_time_ns) > 0 if sys.platform == "darwin" else int(birth_time_ns) == 0
+    with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
+        worktree_module.git_directory_identity(symlink)
+
+
+def test_macos_directory_identity_rejects_missing_birth_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    status = cast(
+        os.stat_result,
+        SimpleNamespace(st_mode=0o040700, st_dev=1, st_ino=2),
+    )
+    monkeypatch.setattr(worktree_module.sys, "platform", "darwin")
+
+    with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
+        worktree_module._directory_identity_components(status)
 
 
 def test_git_probe_timeout_defaults_to_five_seconds_and_allows_an_override(

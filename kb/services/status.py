@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from kb.mcp.contracts import StatusInput
 from kb.services.lifecycle_models import NextAction, RepositoryBoundarySummary, WorkspaceSummary
-from kb.services.lifecycle_read import workspace_summary
+from kb.services.lifecycle_read import repository_boundary_summary, workspace_summary
 from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
 from kb.services.worktree import sanitized_git_environment
 from kb.version import get_version
@@ -124,7 +124,14 @@ class StatusService:
             ),
             current_workspace_resolution=resolution,
             current_workspace=current_workspace,
-            current_repository_boundaries=[],
+            current_repository_boundaries=(
+                [
+                    repository_boundary_summary(boundary)
+                    for boundary in registry_snapshot.current_workspace.repository_boundaries
+                ]
+                if registry_snapshot.current_workspace is not None
+                else []
+            ),
             next_actions=next_actions,
         )
 

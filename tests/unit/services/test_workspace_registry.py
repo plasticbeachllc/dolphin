@@ -14,8 +14,8 @@ from shutil import rmtree
 import pytest
 
 from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
-from kb.runtime.storage import StorageLayout, macos_storage_layout
-from kb.services import workspace_registry as workspace_registry_module
+from kb.runtime.storage import macos_storage_layout
+from kb.services import repo_add as repo_add_module, workspace_registry as workspace_registry_module
 from kb.services.repo_add import RepoAddService
 from kb.services.workspace_registry import (
     OperationState,
@@ -48,8 +48,21 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert registration.cleanup_receipt is not None
     assert layout.metadata_db.stat().st_mode & 0o077 == 0
     with sqlite3.connect(layout.metadata_db) as connection:
-        stored_hash = connection.execute("SELECT cleanup_receipt_hash FROM workspace_registrations").fetchone()[0]
+        stored = connection.execute(
+            """
+            SELECT cleanup_receipt_hash, common_git_dir, common_git_dir_identity,
+                   worktree_git_dir, worktree_git_dir_identity
+            FROM workspace_registrations
+            """
+        ).fetchone()
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+    assert stored is not None
+    stored_hash, common_git_dir, common_git_dir_identity, worktree_git_dir, worktree_git_dir_identity = stored
     assert stored_hash == hashlib.sha256(cleanup_receipt.encode("utf-8")).hexdigest()
+    assert common_git_dir == str(worktree_root / ".git")
+    assert common_git_dir_identity == worktree_git_dir_identity
+    assert worktree_git_dir == common_git_dir
+    assert version == 6
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
@@ -290,6 +303,99 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
 
 
 @pytest.mark.asyncio
+async def test_linked_worktrees_share_repository_identity_but_not_workspace_identity(tmp_path: Path) -> None:
+    primary_root = _commit_repository(tmp_path / "primary")
+    linked_root = tmp_path / "linked"
+    _git(primary_root, "worktree", "add", "-q", "-b", "linked-branch", str(linked_root))
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+
+    primary = registry.register(
+        await discover_git_worktree(primary_root),
+        cleanup_receipt=_cleanup_receipt("primary-worktree"),
+    )
+    linked = registry.register(
+        await discover_git_worktree(linked_root),
+        cleanup_receipt=_cleanup_receipt("linked-worktree"),
+    )
+
+    assert primary.repository_id == linked.repository_id
+    assert primary.workspace_id != linked.workspace_id
+    page = registry.list_workspaces(None)
+    assert {item.root for item in page.items} == {str(primary_root), str(linked_root)}
+
+
+@pytest.mark.asyncio
+async def test_same_volume_worktree_move_preserves_registration_and_operation_identity(tmp_path: Path) -> None:
+    original_root = _commit_repository(tmp_path / "original")
+    moved_root = tmp_path / "moved"
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    cleanup_receipt = _cleanup_receipt("moved-worktree")
+    first_registration, first_operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(original_root),
+        cleanup_receipt=cleanup_receipt,
+    )
+
+    original_root.rename(moved_root)
+    moved_registration, moved_operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(moved_root),
+        cleanup_receipt=cleanup_receipt,
+    )
+
+    assert moved_registration.created is False
+    assert moved_registration.workspace_id == first_registration.workspace_id
+    assert moved_registration.repository_id == first_registration.repository_id
+    assert moved_registration.root == str(moved_root)
+    assert moved_operation.created is False
+    assert moved_operation.operation_id == first_operation.operation_id
+    assert registry.read_workspace_snapshot(original_root).current_workspace is None
+    current = registry.read_workspace_snapshot(moved_root).current_workspace
+    assert current is not None
+    assert current.workspace_id == first_registration.workspace_id
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_replaced_concrete_worktree_identity_at_the_same_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    worktree = await discover_git_worktree(worktree_root)
+    cleanup_receipt = _cleanup_receipt("concrete-worktree-replacement")
+    registry.register(worktree, cleanup_receipt=cleanup_receipt)
+    replacement = replace(worktree, worktree_git_dir_identity="replacement-worktree-generation")
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
+
+    with pytest.raises(WorkspaceRegistryError, match="different Git repository or worktree"):
+        registry.register(replacement, cleanup_receipt=cleanup_receipt)
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_identity_transfer_while_the_prior_root_still_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    worktree = await discover_git_worktree(worktree_root)
+    cleanup_receipt = _cleanup_receipt("existing-prior-root")
+    registry.register(worktree, cleanup_receipt=cleanup_receipt)
+    claimed_move = replace(worktree, root=tmp_path / "claimed-move")
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
+
+    with pytest.raises(WorkspaceRegistryError, match="already registered at an existing filesystem path"):
+        registry.register(claimed_move, cleanup_receipt=cleanup_receipt)
+
+
+@pytest.mark.asyncio
 async def test_register_rejects_a_replacement_repository_at_the_same_root(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -350,61 +456,18 @@ async def test_registration_rolls_back_if_the_worktree_changes_before_commit(
         assert connection.execute("SELECT COUNT(*) FROM workspace_registrations").fetchone()[0] == 0
 
 
-@pytest.mark.asyncio
-async def test_v1_migration_backfills_git_identity_and_installs_retryable_attempts(tmp_path: Path) -> None:
-    worktree_root = _commit_repository(tmp_path / "repository")
+def test_legacy_prerelease_schema_requires_clean_reenrollment(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     layout = macos_storage_layout(home=home)
-    worktree = await discover_git_worktree(worktree_root)
-    _create_v1_registry(
-        layout, root=str(worktree.root), common_git_dir=str(worktree.common_git_dir), head=worktree.head_commit
-    )
-
-    registration = WorkspaceRegistry(layout).register(
-        worktree,
-        cleanup_receipt=_cleanup_receipt("v1-migration"),
-    )
-
-    assert registration.created is False
-    assert registration.repository_id.startswith("repo_")
+    layout.ensure_private_metadata_database()
     with sqlite3.connect(layout.metadata_db) as connection:
-        identity = connection.execute(
-            "SELECT common_git_dir_identity FROM workspace_registrations WHERE workspace_id = 'ws_v1'"
-        ).fetchone()[0]
-        operation_count = connection.execute("SELECT COUNT(*) FROM workspace_operations").fetchone()[0]
-        indexes = {row[1] for row in connection.execute("PRAGMA index_list('workspace_operations')")}
-        version = connection.execute("PRAGMA user_version").fetchone()[0]
-        retained_operation = connection.execute(
-            "SELECT operation_id, state, attempt, terminal_at FROM workspace_operations"
-        ).fetchone()
-    assert identity == worktree.common_git_dir_identity
-    assert operation_count == 1
-    assert retained_operation == ("op_v1_terminal", "succeeded", 1, "2026-01-01T00:00:00+00:00")
-    assert "workspace_operations_reusable_target" in indexes
-    assert version == 4
+        connection.execute("PRAGMA user_version = 4")
+    registry = WorkspaceRegistry(layout)
 
-
-@pytest.mark.asyncio
-async def test_v1_migration_prunes_unreachable_workspace_for_clean_reenrollment(tmp_path: Path) -> None:
-    worktree_root = _commit_repository(tmp_path / "repository")
-    home = tmp_path / "home"
-    home.mkdir()
-    layout = macos_storage_layout(home=home)
-    worktree = await discover_git_worktree(worktree_root)
-    _create_v1_registry(
-        layout,
-        root=str(worktree.root),
-        common_git_dir=str(tmp_path / "missing-git-directory"),
-        head=worktree.head_commit,
-    )
-
-    registration = WorkspaceRegistry(layout).register(
-        worktree,
-        cleanup_receipt=_cleanup_receipt("v1-pruned-registration"),
-    )
-
-    assert registration.created is True
+    assert registry.schema_is_current() is False
+    with pytest.raises(WorkspaceRegistryError, match="remove it and re-enroll worktrees"):
+        registry.get_operation("op_missing")
 
 
 @pytest.mark.asyncio
@@ -457,21 +520,52 @@ async def test_sqlite_contention_is_reported_as_a_registry_error(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
+    _commit_repository(worktree_root / "nested")
     home = tmp_path / "home"
     home.mkdir()
-    service = RepoAddService(WorkspaceRegistry(macos_storage_layout(home=home)))
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    service = RepoAddService(registry)
 
     cleanup_receipt = _cleanup_receipt("repo-add-service")
     first = await service.submit(worktree_root, cleanup_receipt)
     second = await service.submit(worktree_root, cleanup_receipt)
 
     assert first.registration.created is True
+    assert first.parent_scan.excluded_subtrees == frozenset({"nested"})
+    persisted = registry.list_workspaces(None).items[0]
+    assert len(persisted.repository_boundaries) == 1
+    assert persisted.repository_boundaries[0].relative_path == "nested"
     assert first.registration.cleanup_receipt is not None
     assert first.operation.created is True
     assert second.registration.created is False
     assert second.registration.cleanup_receipt == cleanup_receipt
     assert second.operation.created is False
     assert second.operation.operation_id == first.operation.operation_id
+
+
+@pytest.mark.asyncio
+async def test_repo_add_rolls_back_when_boundaries_change_before_registration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    service = RepoAddService(registry)
+    original_plan_parent_scan = repo_add_module.plan_parent_scan
+
+    def plan_then_add_boundary(worktree: GitWorktree):
+        plan = original_plan_parent_scan(worktree)
+        _commit_repository(worktree_root / "late-boundary")
+        return plan
+
+    monkeypatch.setattr(repo_add_module, "plan_parent_scan", plan_then_add_boundary)
+
+    with pytest.raises(WorkspaceRegistryError, match="boundaries changed before registration"):
+        await service.submit(worktree_root, _cleanup_receipt("boundary-race"))
+
+    assert registry.list_workspaces(None).items == ()
 
 
 def test_workspace_snapshot_counts_effective_states_and_resolves_exact_root(
@@ -650,6 +744,8 @@ def _fake_worktree(parent: Path, index: int) -> GitWorktree:
         root=root,
         common_git_dir=root / ".git",
         common_git_dir_identity=f"identity-{index}",
+        worktree_git_dir=root / ".git",
+        worktree_git_dir_identity=f"identity-{index}",
         head_commit=f"{index:040x}",
         branch="main",
     )
@@ -669,54 +765,3 @@ def _initialize_repository(path: Path) -> None:
 
 def _git(path: Path, *arguments: str) -> None:
     subprocess.run(["git", "-C", str(path), *arguments], check=True, capture_output=True, text=True)
-
-
-def _create_v1_registry(layout: StorageLayout, *, root: str, common_git_dir: str, head: str) -> None:
-    metadata_db = layout.metadata_db
-    layout.ensure_private_metadata_database()
-    with sqlite3.connect(metadata_db) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE workspace_registrations (
-                workspace_id TEXT PRIMARY KEY,
-                repository_id TEXT NOT NULL,
-                root TEXT NOT NULL UNIQUE,
-                common_git_dir TEXT NOT NULL,
-                branch TEXT,
-                head_commit TEXT NOT NULL,
-                registration_epoch TEXT NOT NULL,
-                cleanup_receipt_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            ) STRICT;
-            CREATE TABLE workspace_operations (
-                operation_id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
-                kind TEXT NOT NULL,
-                state TEXT NOT NULL,
-                target_head_commit TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            ) STRICT;
-            CREATE UNIQUE INDEX workspace_operations_active_target
-            ON workspace_operations (workspace_id, kind, target_head_commit)
-            WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused');
-            """
-        )
-        connection.execute(
-            """
-            INSERT INTO workspace_registrations VALUES
-            ('ws_v1', 'repo_legacy', ?, ?, 'main', ?, 'epoch_v1', 'receipt_hash', 'now', 'now')
-            """,
-            (root, common_git_dir, head),
-        )
-        connection.executemany(
-            """
-            INSERT INTO workspace_operations VALUES (?, 'ws_v1', 'initial_index', ?, ?, ?, ?)
-            """,
-            [
-                ("op_v1_terminal", "succeeded", head, "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
-                ("op_v1_queued", "queued", head, "2026-01-01T00:01:00+00:00", "2026-01-01T00:01:00+00:00"),
-            ],
-        )
-        connection.execute("PRAGMA user_version = 1")

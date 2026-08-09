@@ -1,6 +1,7 @@
 """Unit tests for parallel file scanner."""
 
 import signal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -25,7 +26,11 @@ class TestWorkerIgnoreSigint:
         """mp.Pool in scan_repo_parallel must use worker_ignore_sigint as initializer."""
         with (
             patch("kb.ingest.scanner._list_tracked") as mock_list,
-            patch("kb.ingest.scanner._submodule_roots", return_value=[]),
+            patch(
+                "kb.ingest.scanner._repository_boundary_plan",
+                return_value=SimpleNamespace(excluded_subtrees=frozenset()),
+            ),
+            patch("kb.ingest.scanner._validate_repository_boundary_plan"),
             patch("multiprocessing.Pool") as mock_pool,
         ):
             mock_pool.return_value.__enter__.return_value.imap_unordered.return_value = []
@@ -115,7 +120,14 @@ class TestScanRepoParallel:
         # Create a git repo
         (tmp_path / ".git").mkdir()
 
-        with patch("kb.ingest.scanner._list_tracked", return_value=[]):
+        with (
+            patch("kb.ingest.scanner._list_tracked", return_value=[]),
+            patch(
+                "kb.ingest.scanner._repository_boundary_plan",
+                return_value=SimpleNamespace(excluded_subtrees=frozenset()),
+            ),
+            patch("kb.ingest.scanner._validate_repository_boundary_plan"),
+        ):
             result = scan_repo_parallel(tmp_path, [])
             assert result == []
 
@@ -131,7 +143,14 @@ class TestScanRepoParallel:
         for i in range(5):
             (tmp_path / f"file{i}.py").write_text(f"# File {i}")
 
-        with patch("kb.ingest.scanner.scan_repo") as mock_scan:
+        with (
+            patch("kb.ingest.scanner.scan_repo") as mock_scan,
+            patch(
+                "kb.ingest.scanner._repository_boundary_plan",
+                return_value=SimpleNamespace(excluded_subtrees=frozenset()),
+            ),
+            patch("kb.ingest.scanner._validate_repository_boundary_plan"),
+        ):
             mock_scan.return_value = []
 
             # Should fall back to sequential for small repos
@@ -148,7 +167,14 @@ class TestScanRepoParallel:
         for i in range(250):
             (tmp_path / f"file{i}.py").write_text(f"# File {i}")
 
-        with patch("kb.ingest.scanner._list_tracked") as mock_list:
+        with (
+            patch("kb.ingest.scanner._list_tracked") as mock_list,
+            patch(
+                "kb.ingest.scanner._repository_boundary_plan",
+                return_value=SimpleNamespace(excluded_subtrees=frozenset()),
+            ),
+            patch("kb.ingest.scanner._validate_repository_boundary_plan"),
+        ):
             mock_list.return_value = [f"file{i}.py" for i in range(250)]
 
             with patch("multiprocessing.Pool") as mock_pool:
@@ -167,7 +193,14 @@ class TestScanRepoParallel:
         for i in range(250):
             (tmp_path / f"file{i}.py").write_text(f"# File {i}")
 
-        with patch("kb.ingest.scanner._list_tracked") as mock_list:
+        with (
+            patch("kb.ingest.scanner._list_tracked") as mock_list,
+            patch(
+                "kb.ingest.scanner._repository_boundary_plan",
+                return_value=SimpleNamespace(excluded_subtrees=frozenset()),
+            ),
+            patch("kb.ingest.scanner._validate_repository_boundary_plan"),
+        ):
             mock_list.return_value = [f"file{i}.py" for i in range(250)]
 
             with patch("multiprocessing.Pool") as mock_pool:

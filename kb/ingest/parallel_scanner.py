@@ -15,15 +15,17 @@ from pathlib import Path
 
 from pathspec import PathSpec
 
+from kb.services.repository_boundaries import path_is_within_boundary
+
 from ._helpers import worker_ignore_sigint
 from .lang import classify_language
-from .scanner import FileCandidate, ScannerError, _is_binary
+from .scanner import FileCandidate, ScannerError, _inspect_candidate_file
 
 
 def _process_file_batch(
     file_paths: list[str],
     root: Path,
-    submods: list[str],
+    excluded_subtrees: list[str],
     ignore_patterns: list[str],
 ) -> list[FileCandidate]:
     """Process a batch of files in a worker process.
@@ -31,41 +33,28 @@ def _process_file_batch(
     Args:
         file_paths: List of relative file paths to process
         root: Repository root path
-        submods: List of submodule prefixes to skip
+        excluded_subtrees: Repository-relative subtree roots to skip
         ignore_patterns: List of ignore patterns
 
     Returns:
         List of FileCandidate objects for valid files
     """
     spec = PathSpec.from_lines("gitignore", ignore_patterns)
+    boundary_roots = set(excluded_subtrees)
     candidates: list[FileCandidate] = []
 
     for rel in file_paths:
-        # Skip submodules
-        if any(rel.startswith(prefix) for prefix in submods):
+        if path_is_within_boundary(rel, boundary_roots):
             continue
         # Skip by pathspec
         if spec.match_file(rel):
             continue
 
-        abs_path = (root / rel).resolve()
-
-        # Skip symlinks
-        if abs_path.is_symlink():
+        inspection = _inspect_candidate_file(root, rel)
+        if inspection is None:
             continue
-        # Skip non-files
-        if not abs_path.is_file():
-            continue
-
-        # Binary detection
-        is_bin = _is_binary(abs_path)
+        size, is_bin = inspection
         if is_bin:
-            continue
-
-        # Size
-        try:
-            size = abs_path.stat().st_size
-        except OSError:
             continue
 
         # Language
@@ -76,7 +65,6 @@ def _process_file_batch(
             FileCandidate(
                 repo_root=root,
                 rel_path=rel,
-                abs_path=abs_path,
                 ext=ext,
                 language=language,
                 size_bytes=size,
@@ -113,18 +101,20 @@ def scan_repo_parallel(
         ScannerError: If not a git repository or git command fails
     """
     # Import here to avoid issues on module load
-    from .scanner import _list_tracked, _submodule_roots
+    from .scanner import _list_tracked, _repository_boundary_plan, _validate_repository_boundary_plan
 
     root = root.expanduser().resolve()
     if not (root / ".git").exists():
         raise ScannerError(f"Not a git repository: {root}")
 
     # Get list of tracked files (this is fast, no need to parallelize)
+    boundary_plan = _repository_boundary_plan(root)
     rel_paths = _list_tracked(root)
-    submods = _submodule_roots(root)
+    excluded_subtrees = boundary_plan.excluded_subtrees
     ignore_patterns = list(ignores or [])
 
     if not rel_paths:
+        _validate_repository_boundary_plan(boundary_plan)
         return []
 
     # Determine number of workers
@@ -147,7 +137,7 @@ def scan_repo_parallel(
     process_batch = partial(
         _process_file_batch,
         root=root,
-        submods=submods,
+        excluded_subtrees=list(excluded_subtrees),
         ignore_patterns=ignore_patterns,
     )
 
@@ -173,4 +163,5 @@ def scan_repo_parallel(
 
         return scan_repo(root, ignores)
 
+    _validate_repository_boundary_plan(boundary_plan)
     return all_candidates

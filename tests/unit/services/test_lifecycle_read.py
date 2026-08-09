@@ -25,6 +25,8 @@ from kb.services.lifecycle_read import (
     RepoListService,
     _operation_status_result,
 )
+from kb.services.repo_add import RepoAddService
+from kb.services.repository_boundaries import RepositoryBoundaryKind, RepositoryBoundaryState
 from kb.services.status import StatusService
 from kb.services.workspace_registry import OperationSnapshot, OperationState, WorkspaceRegistry
 from kb.services.worktree import discover_git_worktree
@@ -137,6 +139,28 @@ async def test_repo_list_and_operation_status_return_bounded_durable_projections
     with pytest.raises(ToolFailure) as corrupt_terminal_status:
         await OperationStatusService(registry)(OperationStatusInput(operation_id=operation.operation_id))
     assert corrupt_terminal_status.value.error.code == "STORAGE_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_reads_report_persisted_nested_repository_boundaries(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    nested_root = _commit_repository(worktree_root / "nested")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    await RepoAddService(registry).submit(worktree_root, _cleanup_receipt("boundary-read"))
+
+    repo_list = await RepoListService(registry)(RepoListInput(cursor=None))
+    status = await StatusService(cwd=worktree_root, environment={}, registry=registry)(StatusInput())
+
+    repo_boundary = repo_list.items[0].repository_boundaries[0]
+    status_boundary = status.current_repository_boundaries[0]
+    assert repo_boundary == status_boundary
+    assert repo_boundary.kind is RepositoryBoundaryKind.NESTED_GIT
+    assert repo_boundary.state is RepositoryBoundaryState.ENROLLABLE
+    assert repo_boundary.relative_path == "nested"
+    assert repo_boundary.root == str(nested_root)
+    assert repo_boundary.next_actions == []
 
 
 @pytest.mark.asyncio
@@ -261,16 +285,26 @@ def test_repo_list_result_models_enforce_string_collection_and_cursor_bounds() -
             state="ready",
         )
     with pytest.raises(ValidationError):
-        RepoListItem(
-            repository=repository,
-            workspace=workspace,
-            repository_boundaries=[{} for _ in range(9)],
+        RepoListItem.model_validate(
+            {
+                "repository": repository.model_dump(),
+                "workspace": workspace.model_dump(),
+                "repository_boundaries": [{} for _ in range(9)],
+            }
         )
     with pytest.raises(ValidationError):
-        RepoListItem(
-            repository=repository,
-            workspace=workspace,
-            repository_boundaries=[{"path": "x" * 257}],
+        RepoListItem.model_validate(
+            {
+                "repository": repository.model_dump(),
+                "workspace": workspace.model_dump(),
+                "repository_boundaries": [
+                    {
+                        "kind": "nested_git",
+                        "relative_path": "x" * 4_097,
+                        "state": "invalid",
+                    }
+                ],
+            }
         )
     with pytest.raises(ValidationError):
         RepoListResult(items=[], next_cursor="x" * (REPO_LIST_CURSOR_MAX_LENGTH + 1))

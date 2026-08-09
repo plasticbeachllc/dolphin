@@ -150,6 +150,8 @@ def _fake_worktree(parent: Path, index: int) -> GitWorktree:
         root=root,
         common_git_dir=root / ".git",
         common_git_dir_identity=f"identity-{index}",
+        worktree_git_dir=root / ".git",
+        worktree_git_dir_identity=f"identity-{index}",
         head_commit=f"{index:040x}",
         branch="develop",
     )

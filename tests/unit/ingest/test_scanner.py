@@ -1,11 +1,12 @@
 """Unit tests for repository scanning and file enumeration."""
 
+import os
 import subprocess
 
 import pytest
 
 from kb.ignores import build_ignore_set
-from kb.ingest.scanner import ScannerError, scan_repo
+from kb.ingest.scanner import ScannerError, _inspect_candidate_file, scan_repo
 from tests.conftest import init_test_git_repo
 
 
@@ -37,6 +38,7 @@ class TestScannerBasic:
                 "-C",
                 str(repo_path),
                 "add",
+                "-f",
                 "src/app.py",
                 "src/app.ts",
                 "docs/readme.md",
@@ -143,6 +145,49 @@ class TestScannerBasic:
         assert "Not a git repository" in str(exc_info.value)
 
 
+def test_candidate_inspection_rejects_a_file_replaced_by_a_symlink(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    candidate = tmp_path / "candidate.py"
+    outside = tmp_path / "outside.py"
+    candidate.write_text("print('inside')\n")
+    outside.write_text("print('outside')\n")
+    real_open = os.open
+
+    def replace_before_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == "candidate.py" and dir_fd is not None:
+            candidate.unlink()
+            candidate.symlink_to(outside)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    assert _inspect_candidate_file(tmp_path, "candidate.py") is None
+
+
+def test_candidate_inspection_rejects_a_transient_nested_repository_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    nested_directory = tmp_path / "nested"
+    nested_directory.mkdir()
+    candidate = nested_directory / "candidate.py"
+    candidate.write_text("print('candidate')\n")
+    real_read = os.read
+
+    def read_during_transient_boundary(file_descriptor: int, byte_count: int) -> bytes:
+        chunk = real_read(file_descriptor, byte_count)
+        marker = nested_directory / ".git"
+        marker.mkdir()
+        marker.rmdir()
+        return chunk
+
+    monkeypatch.setattr(os, "read", read_during_transient_boundary)
+
+    assert _inspect_candidate_file(tmp_path, "nested/candidate.py") is None
+
+
 class TestIgnorePatterns:
     """Test ignore pattern functionality."""
 
@@ -174,7 +219,7 @@ class TestIgnorePatterns:
         (repo_path / ".env").write_text("SECRET=value\n")
 
         # Add and commit
-        subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo_path), "add", "-f", "-A"], check=True)
         subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True)
 
         ignores = build_ignore_set()
