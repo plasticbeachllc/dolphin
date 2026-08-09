@@ -110,6 +110,25 @@ class WorkspaceRegistry:
             created=False,
         )
 
+    def set_operation_state(self, operation_id: str, state: OperationState) -> WorkspaceOperation | None:
+        """Record a worker-owned state transition and return its updated source-free snapshot."""
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                updated = connection.execute(
+                    """
+                    UPDATE workspace_operations
+                    SET state = ?, updated_at = ?
+                    WHERE operation_id = ?
+                    """,
+                    (state.value, datetime.now(UTC).isoformat(), operation_id),
+                ).rowcount
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+        return self.get_operation(operation_id) if updated else None
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         self._layout.ensure_private_metadata_database()
@@ -151,11 +170,11 @@ class WorkspaceRegistry:
                 ) STRICT
                 """
             )
+            connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
             connection.execute(
                 """
-                CREATE INDEX IF NOT EXISTS workspace_operations_active_target
+                CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
                 ON workspace_operations (workspace_id, kind, target_head_commit)
-                WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused')
                 """
             )
             yield connection
@@ -231,6 +250,20 @@ class WorkspaceRegistry:
         connection: sqlite3.Connection,
         registration: WorkspaceRegistration,
     ) -> WorkspaceOperation:
+        persisted = connection.execute(
+            """
+            SELECT repository_id, root, head_commit
+            FROM workspace_registrations
+            WHERE workspace_id = ?
+            """,
+            (registration.workspace_id,),
+        ).fetchone()
+        if persisted is None:
+            raise WorkspaceRegistryError("Dolphin workspace registration is unavailable")
+        repository_id, root, target_head_commit = persisted
+        if registration.repository_id != repository_id or registration.root != root:
+            raise WorkspaceRegistryError("Dolphin workspace registration identity does not match persisted state")
+
         existing = connection.execute(
             """
             SELECT operation_id, state
@@ -238,11 +271,10 @@ class WorkspaceRegistry:
             WHERE workspace_id = ?
               AND kind = 'initial_index'
               AND target_head_commit = ?
-              AND state IN ('queued', 'running', 'awaiting_approval', 'paused')
             ORDER BY created_at
             LIMIT 1
             """,
-            (registration.workspace_id, registration.head_commit),
+            (registration.workspace_id, target_head_commit),
         ).fetchone()
         if existing is not None:
             operation_id, state = existing
@@ -251,7 +283,7 @@ class WorkspaceRegistry:
                 workspace_id=registration.workspace_id,
                 kind="initial_index",
                 state=OperationState(state),
-                target_head_commit=registration.head_commit,
+                target_head_commit=target_head_commit,
                 created=False,
             )
 
@@ -263,14 +295,14 @@ class WorkspaceRegistry:
                 operation_id, workspace_id, kind, state, target_head_commit, created_at, updated_at
             ) VALUES (?, ?, 'initial_index', 'queued', ?, ?, ?)
             """,
-            (operation_id, registration.workspace_id, registration.head_commit, now, now),
+            (operation_id, registration.workspace_id, target_head_commit, now, now),
         )
         return WorkspaceOperation(
             operation_id=operation_id,
             workspace_id=registration.workspace_id,
             kind="initial_index",
             state=OperationState.QUEUED,
-            target_head_commit=registration.head_commit,
+            target_head_commit=target_head_commit,
             created=True,
         )
 

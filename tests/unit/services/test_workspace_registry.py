@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from kb.runtime.storage import macos_storage_layout
 from kb.services.repo_add import RepoAddService
-from kb.services.workspace_registry import OperationState, WorkspaceRegistry
+from kb.services.workspace_registry import OperationState, WorkspaceRegistry, WorkspaceRegistryError
 from kb.services.worktree import discover_git_worktree
 
 
@@ -72,6 +73,58 @@ async def test_initial_index_submission_is_durable_and_idempotent_for_one_head(t
     assert loaded is not None
     assert loaded.operation_id == first.operation_id
     assert loaded.workspace_id == registration.workspace_id
+
+
+@pytest.mark.asyncio
+async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same_head(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration = registry.register(await discover_git_worktree(worktree_root))
+
+    first = registry.submit_initial_index(registration)
+    terminal = registry.set_operation_state(first.operation_id, OperationState.SUCCEEDED)
+    repeated = registry.submit_initial_index(registration)
+
+    assert terminal is not None
+    assert terminal.state is OperationState.SUCCEEDED
+    assert repeated.created is False
+    assert repeated.operation_id == first.operation_id
+    assert repeated.state is OperationState.SUCCEEDED
+
+
+@pytest.mark.asyncio
+async def test_initial_index_submission_uses_the_persisted_workspace_head_and_identity(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration = registry.register(await discover_git_worktree(worktree_root))
+
+    submitted = registry.submit_initial_index(replace(registration, head_commit="forged-head"))
+
+    assert submitted.target_head_commit == registration.head_commit
+    with pytest.raises(WorkspaceRegistryError, match="identity does not match"):
+        registry.submit_initial_index(replace(registration, root="/forged/root"))
+
+
+@pytest.mark.asyncio
+async def test_distinct_repositories_receive_distinct_workspace_and_operation_ids(tmp_path: Path) -> None:
+    first_root = _commit_repository(tmp_path / "first-repository")
+    second_root = _commit_repository(tmp_path / "second-repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+
+    first_registration = registry.register(await discover_git_worktree(first_root))
+    second_registration = registry.register(await discover_git_worktree(second_root))
+    first_operation = registry.submit_initial_index(first_registration)
+    second_operation = registry.submit_initial_index(second_registration)
+
+    assert first_registration.workspace_id != second_registration.workspace_id
+    assert first_registration.repository_id != second_registration.repository_id
+    assert first_operation.operation_id != second_operation.operation_id
 
 
 @pytest.mark.asyncio
