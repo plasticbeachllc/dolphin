@@ -20,14 +20,18 @@ from kb.services.worktree import WorktreeDiscoveryError, discover_git_worktree
 
 
 @pytest.mark.asyncio
-async def test_register_persists_one_worktree_and_returns_a_one_time_receipt(tmp_path: Path) -> None:
+async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
     layout = macos_storage_layout(home=home)
     registry = WorkspaceRegistry(layout)
 
-    registration = registry.register(await discover_git_worktree(worktree_root))
+    cleanup_receipt = _cleanup_receipt("first-registration")
+    registration = registry.register(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=cleanup_receipt,
+    )
 
     assert registration.created is True
     assert registration.workspace_id.startswith("ws_")
@@ -36,25 +40,32 @@ async def test_register_persists_one_worktree_and_returns_a_one_time_receipt(tmp
     assert layout.metadata_db.stat().st_mode & 0o077 == 0
     with sqlite3.connect(layout.metadata_db) as connection:
         stored_hash = connection.execute("SELECT cleanup_receipt_hash FROM workspace_registrations").fetchone()[0]
-    assert stored_hash == hashlib.sha256(registration.cleanup_receipt.encode("utf-8")).hexdigest()
+    assert stored_hash == hashlib.sha256(cleanup_receipt.encode("utf-8")).hexdigest()
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
 @pytest.mark.asyncio
-async def test_register_is_idempotent_and_never_reissues_cleanup_authority(tmp_path: Path) -> None:
+async def test_register_retry_reissues_only_matching_cleanup_authority(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
-    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    layout = macos_storage_layout(home=home)
+    registry = WorkspaceRegistry(layout)
     worktree = await discover_git_worktree(worktree_root)
 
-    first = registry.register(worktree)
-    second = registry.register(worktree)
+    cleanup_receipt = _cleanup_receipt("retry-safe-registration")
+    first = registry.register(worktree, cleanup_receipt=cleanup_receipt)
+    second = WorkspaceRegistry(layout).register(worktree, cleanup_receipt=cleanup_receipt)
+    unrelated = WorkspaceRegistry(layout).register(
+        worktree,
+        cleanup_receipt=_cleanup_receipt("unrelated-caller"),
+    )
 
     assert first.created is True
     assert second.created is False
     assert second.workspace_id == first.workspace_id
-    assert second.cleanup_receipt is None
+    assert second.cleanup_receipt == cleanup_receipt
+    assert unrelated.cleanup_receipt is None
 
 
 @pytest.mark.asyncio
@@ -65,8 +76,15 @@ async def test_initial_index_submission_is_durable_and_idempotent_for_one_head(t
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
     worktree = await discover_git_worktree(worktree_root)
 
-    registration, first = registry.register_and_submit_initial_index(worktree)
-    _, second = registry.register_and_submit_initial_index(worktree)
+    cleanup_receipt = _cleanup_receipt("idempotent-index")
+    registration, first = registry.register_and_submit_initial_index(
+        worktree,
+        cleanup_receipt=cleanup_receipt,
+    )
+    repeated_registration, second = registry.register_and_submit_initial_index(
+        worktree,
+        cleanup_receipt=cleanup_receipt,
+    )
     loaded = registry.get_operation(first.operation_id)
 
     assert first.created is True
@@ -79,6 +97,7 @@ async def test_initial_index_submission_is_durable_and_idempotent_for_one_head(t
     assert loaded.operation_id == first.operation_id
     assert loaded.workspace_id == registration.workspace_id
     assert loaded.attempt == 1
+    assert repeated_registration.cleanup_receipt == cleanup_receipt
 
 
 @pytest.mark.asyncio
@@ -89,12 +108,16 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
     worktree = await discover_git_worktree(worktree_root)
 
-    registration, first = registry.register_and_submit_initial_index(worktree)
+    cleanup_receipt = _cleanup_receipt("succeeded-index")
+    registration, first = registry.register_and_submit_initial_index(
+        worktree,
+        cleanup_receipt=cleanup_receipt,
+    )
     registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
     terminal = registry.set_operation_state(
         first.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
     )
-    _, repeated = registry.register_and_submit_initial_index(worktree)
+    _, repeated = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
 
     assert terminal is not None
     assert terminal.state is OperationState.SUCCEEDED
@@ -116,15 +139,16 @@ async def test_failed_or_cancelled_initial_index_is_retried_as_a_new_attempt(
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
     worktree = await discover_git_worktree(worktree_root)
 
-    _, first = registry.register_and_submit_initial_index(worktree)
+    cleanup_receipt = _cleanup_receipt(f"retry-{terminal_state.value}")
+    _, first = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
     if terminal_state is OperationState.FAILED:
         registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
         registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.RUNNING)
     else:
         registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.QUEUED)
 
-    _, retry = registry.register_and_submit_initial_index(worktree)
-    _, repeated = registry.register_and_submit_initial_index(worktree)
+    _, retry = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
+    _, repeated = registry.register_and_submit_initial_index(worktree, cleanup_receipt=cleanup_receipt)
     original = registry.get_operation(first.operation_id)
 
     assert original is not None
@@ -145,7 +169,10 @@ async def test_terminal_operation_cannot_be_restarted(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    _, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
+    _, operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("terminal-operation"),
+    )
 
     running = registry.set_operation_state(
         operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED
@@ -170,7 +197,10 @@ async def test_competing_state_transitions_allow_only_one_observed_state(tmp_pat
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    _, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
+    _, operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("competing-transition"),
+    )
 
     def transition(state: OperationState) -> WorkspaceOperation | None:
         return registry.set_operation_state(operation.operation_id, state, expected_state=OperationState.QUEUED)
@@ -195,11 +225,16 @@ async def test_atomic_submission_replaces_an_unsubmitted_stale_registration(tmp_
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    stale_registration = registry.register(await discover_git_worktree(worktree_root))
+    cleanup_receipt = _cleanup_receipt("stale-registration")
+    stale_registration = registry.register(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=cleanup_receipt,
+    )
     _commit_change(worktree_root)
 
     current_registration, operation = registry.register_and_submit_initial_index(
-        await discover_git_worktree(worktree_root)
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=cleanup_receipt,
     )
 
     assert current_registration.head_commit != stale_registration.head_commit
@@ -214,7 +249,10 @@ async def test_atomic_registration_and_submission_uses_one_discovered_head(tmp_p
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
     worktree = await discover_git_worktree(worktree_root)
 
-    registration, operation = registry.register_and_submit_initial_index(worktree)
+    registration, operation = registry.register_and_submit_initial_index(
+        worktree,
+        cleanup_receipt=_cleanup_receipt("atomic-snapshot"),
+    )
 
     assert operation.workspace_id == registration.workspace_id
     assert operation.target_head_commit == worktree.head_commit
@@ -229,10 +267,12 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
 
     first_registration, first_operation = registry.register_and_submit_initial_index(
-        await discover_git_worktree(first_root)
+        await discover_git_worktree(first_root),
+        cleanup_receipt=_cleanup_receipt("first-repository"),
     )
     second_registration, second_operation = registry.register_and_submit_initial_index(
-        await discover_git_worktree(second_root)
+        await discover_git_worktree(second_root),
+        cleanup_receipt=_cleanup_receipt("second-repository"),
     )
 
     assert first_registration.workspace_id != second_registration.workspace_id
@@ -249,7 +289,11 @@ async def test_register_rejects_a_replacement_repository_at_the_same_root(
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
+    cleanup_receipt = _cleanup_receipt("replacement-repository")
+    registration, operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=cleanup_receipt,
+    )
     rmtree(worktree_root / ".git")
     _initialize_repository(worktree_root)
     _git(worktree_root, "add", "example.py")
@@ -261,7 +305,7 @@ async def test_register_rejects_a_replacement_repository_at_the_same_root(
     monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
 
     with pytest.raises(WorkspaceRegistryError, match="different Git repository"):
-        registry.register(replacement)
+        registry.register(replacement, cleanup_receipt=cleanup_receipt)
 
     assert registry.get_operation(operation.operation_id) is not None
 
@@ -288,7 +332,10 @@ async def test_registration_rolls_back_if_the_worktree_changes_before_commit(
     monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", validate_then_fail)
 
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_SNAPSHOT_CHANGED"):
-        registry.register_and_submit_initial_index(worktree)
+        registry.register_and_submit_initial_index(
+            worktree,
+            cleanup_receipt=_cleanup_receipt("rollback-registration"),
+        )
 
     with sqlite3.connect(layout.metadata_db) as connection:
         assert connection.execute("SELECT COUNT(*) FROM workspace_registrations").fetchone()[0] == 0
@@ -305,7 +352,10 @@ async def test_v1_migration_backfills_git_identity_and_installs_retryable_attemp
         layout, root=str(worktree.root), common_git_dir=str(worktree.common_git_dir), head=worktree.head_commit
     )
 
-    registration = WorkspaceRegistry(layout).register(worktree)
+    registration = WorkspaceRegistry(layout).register(
+        worktree,
+        cleanup_receipt=_cleanup_receipt("v1-migration"),
+    )
 
     assert registration.created is False
     assert registration.repository_id.startswith("repo_")
@@ -340,7 +390,10 @@ async def test_v1_migration_prunes_unreachable_workspace_for_clean_reenrollment(
         head=worktree.head_commit,
     )
 
-    registration = WorkspaceRegistry(layout).register(worktree)
+    registration = WorkspaceRegistry(layout).register(
+        worktree,
+        cleanup_receipt=_cleanup_receipt("v1-pruned-registration"),
+    )
 
     assert registration.created is True
 
@@ -351,7 +404,10 @@ async def test_new_registry_reads_an_initialized_database_without_a_write_lock(t
     home = tmp_path / "home"
     home.mkdir()
     layout = macos_storage_layout(home=home)
-    registration = WorkspaceRegistry(layout).register(await discover_git_worktree(worktree_root))
+    registration = WorkspaceRegistry(layout).register(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("initialized-read"),
+    )
 
     # A concurrent writer may hold a RESERVED lock, but a fresh registry should
     # inspect the schema version and perform this read without trying schema DDL.
@@ -374,7 +430,10 @@ async def test_sqlite_contention_is_reported_as_a_registry_error(tmp_path: Path)
     home.mkdir()
     layout = macos_storage_layout(home=home)
     registry = WorkspaceRegistry(layout)
-    registry.register(await discover_git_worktree(worktree_root))
+    registry.register(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("sqlite-contention"),
+    )
 
     lock_connection = sqlite3.connect(layout.metadata_db, timeout=0)
     lock_connection.execute("BEGIN EXCLUSIVE")
@@ -393,14 +452,15 @@ async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp
     home.mkdir()
     service = RepoAddService(WorkspaceRegistry(macos_storage_layout(home=home)))
 
-    first = await service.submit(worktree_root)
-    second = await service.submit(worktree_root)
+    cleanup_receipt = _cleanup_receipt("repo-add-service")
+    first = await service.submit(worktree_root, cleanup_receipt)
+    second = await service.submit(worktree_root, cleanup_receipt)
 
     assert first.registration.created is True
     assert first.registration.cleanup_receipt is not None
     assert first.operation.created is True
     assert second.registration.created is False
-    assert second.registration.cleanup_receipt is None
+    assert second.registration.cleanup_receipt == cleanup_receipt
     assert second.operation.created is False
     assert second.operation.operation_id == first.operation.operation_id
 
@@ -412,6 +472,11 @@ def _commit_repository(path: Path) -> Path:
     _git(path, "add", "example.py")
     _git(path, "commit", "-qm", "Initial test commit")
     return path
+
+
+def _cleanup_receipt(seed: str) -> str:
+    token = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:43]
+    return f"dolphin-cleanup-v1_{token}"
 
 
 def _commit_change(path: Path) -> None:

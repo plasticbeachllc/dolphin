@@ -110,6 +110,7 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
             ["git", "-C", str(path), *arguments],
             capture_output=True,
             check=False,
+            env=sanitized_git_environment(),
             text=True,
             timeout=_git_probe_timeout_seconds(),
         )
@@ -119,6 +120,11 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_TIMEOUT") from exc
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_FAILED") from exc
+
+
+def sanitized_git_environment() -> dict[str, str]:
+    """Keep ambient Git repository/config selectors from overriding the explicit path."""
+    return {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
 
 
 def _git_probe_timeout_seconds() -> float:

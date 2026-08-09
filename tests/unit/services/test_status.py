@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kb.mcp.contracts import StatusInput
+from kb.mcp.contracts import RepoAddInput, StatusInput
 from kb.services import status as status_module
 from kb.services.status import StatusService
 
@@ -35,7 +35,30 @@ async def test_status_recommends_explicit_repo_add_for_the_current_worktree(tmp_
     assert result.current_workspace_resolution == "unregistered"
     assert len(result.next_actions) == 1
     assert result.next_actions[0].tool == "repo_add"
-    assert result.next_actions[0].arguments == {"path": str(tmp_path)}
+    arguments = result.next_actions[0].arguments
+    assert arguments is not None
+    parsed = RepoAddInput.model_validate(arguments)
+    assert parsed.path == tmp_path
+    assert parsed.cleanup_receipt.startswith("dolphin-cleanup-v1_")
+
+
+@pytest.mark.asyncio
+async def test_status_worktree_probe_ignores_ambient_git_selection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    requested_root = tmp_path / "requested"
+    ambient_root = tmp_path / "ambient"
+    subprocess.run(["git", "init", "-q", str(requested_root)], check=True)
+    subprocess.run(["git", "init", "-q", str(ambient_root)], check=True)
+    monkeypatch.setenv("GIT_DIR", str(ambient_root / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(ambient_root))
+
+    result = await StatusService(cwd=requested_root, environment={})(StatusInput())
+
+    arguments = result.next_actions[0].arguments
+    assert arguments is not None
+    assert arguments["path"] == str(requested_root)
 
 
 def test_worktree_probe_preserves_surrounding_path_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
+from kb.cleanup_authority import is_valid_cleanup_receipt
 from kb.runtime.storage import StorageLayout
 from kb.services.worktree import (
     GitWorktree,
@@ -99,13 +100,14 @@ class WorkspaceRegistry:
         self._initialized = False
         self._initialization_lock = threading.Lock()
 
-    def register(self, worktree: GitWorktree) -> WorkspaceRegistration:
+    def register(self, worktree: GitWorktree, *, cleanup_receipt: str) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
+        self._require_valid_cleanup_receipt(cleanup_receipt)
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             self._begin_registration_write(connection)
             try:
-                registration = self._register(connection, worktree)
+                registration = self._register(connection, worktree, cleanup_receipt)
                 self._validate_worktree_snapshot(worktree)
             except Exception:
                 connection.rollback()
@@ -116,13 +118,16 @@ class WorkspaceRegistry:
     def register_and_submit_initial_index(
         self,
         worktree: GitWorktree,
+        *,
+        cleanup_receipt: str,
     ) -> tuple[WorkspaceRegistration, WorkspaceOperation]:
         """Persist one discovered snapshot and its initial-index operation atomically."""
+        self._require_valid_cleanup_receipt(cleanup_receipt)
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             self._begin_registration_write(connection)
             try:
-                registration = self._register(connection, worktree)
+                registration = self._register(connection, worktree, cleanup_receipt)
                 operation = self._submit_initial_index(connection, registration)
                 self._validate_worktree_snapshot(worktree)
             except Exception:
@@ -372,6 +377,11 @@ class WorkspaceRegistry:
         validate_git_worktree_snapshot(worktree)
 
     @staticmethod
+    def _require_valid_cleanup_receipt(cleanup_receipt: str) -> None:
+        if not is_valid_cleanup_receipt(cleanup_receipt):
+            raise WorkspaceRegistryError("Dolphin cleanup receipt is malformed")
+
+    @staticmethod
     def _begin_registration_write(connection: sqlite3.Connection) -> None:
         """Acquire the registration write lock with bounded backoff for concurrent final probes."""
         deadline = time.monotonic() + _REGISTRATION_LOCK_DEADLINE_SECONDS
@@ -408,11 +418,16 @@ class WorkspaceRegistry:
                 (_repository_id_from_common_git_dir(common_git_dir, identity), identity, workspace_id),
             )
 
-    def _register(self, connection: sqlite3.Connection, worktree: GitWorktree) -> WorkspaceRegistration:
+    def _register(
+        self,
+        connection: sqlite3.Connection,
+        worktree: GitWorktree,
+        cleanup_receipt: str,
+    ) -> WorkspaceRegistration:
         root = str(worktree.root)
         existing = connection.execute(
             """
-            SELECT workspace_id, repository_id, common_git_dir, common_git_dir_identity
+            SELECT workspace_id, repository_id, common_git_dir, common_git_dir_identity, cleanup_receipt_hash
             FROM workspace_registrations
             WHERE root = ?
             """,
@@ -420,7 +435,7 @@ class WorkspaceRegistry:
         ).fetchone()
         now = datetime.now(UTC).isoformat()
         if existing is not None:
-            workspace_id, repository_id, common_git_dir, common_git_dir_identity = existing
+            workspace_id, repository_id, common_git_dir, common_git_dir_identity, cleanup_receipt_hash = existing
             if (
                 common_git_dir != str(worktree.common_git_dir)
                 or common_git_dir_identity != worktree.common_git_dir_identity
@@ -442,12 +457,15 @@ class WorkspaceRegistry:
                 branch=worktree.branch,
                 head_commit=worktree.head_commit,
                 created=False,
-                cleanup_receipt=None,
+                cleanup_receipt=(
+                    cleanup_receipt
+                    if secrets.compare_digest(cleanup_receipt_hash, _receipt_hash(cleanup_receipt))
+                    else None
+                ),
             )
 
         workspace_id = f"ws_{uuid.uuid4().hex}"
         repository_id = _repository_id(worktree)
-        cleanup_receipt = secrets.token_urlsafe(32)
         connection.execute(
             """
             INSERT INTO workspace_registrations (

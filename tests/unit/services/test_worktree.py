@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -51,6 +53,30 @@ async def test_discovery_rejects_linebreak_paths_before_using_git(tmp_path: Path
 
     with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_PATH_LINEBREAK"):
         await discover_git_worktree(path)
+
+
+@pytest.mark.asyncio
+async def test_discovery_ignores_ambient_git_repository_selection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    requested_root = tmp_path / "requested"
+    ambient_root = tmp_path / "ambient"
+    requested_root.mkdir()
+    ambient_root.mkdir()
+    _commit_repository(requested_root)
+    _commit_repository(ambient_root)
+    monkeypatch.setenv("GIT_DIR", str(ambient_root / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(ambient_root))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.worktree")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(ambient_root))
+
+    worktree = await discover_git_worktree(requested_root)
+
+    assert worktree.root == requested_root
+    assert worktree.common_git_dir == requested_root / ".git"
+    assert worktree.head_commit == _git(requested_root, "rev-parse", "HEAD", sanitized=True)
 
 
 @pytest.mark.asyncio
@@ -116,6 +142,29 @@ def test_git_probe_timeout_defaults_to_five_seconds_and_allows_an_override(
     assert observed_timeouts == [5.0, 12.5, 30.0, 5.0]
 
 
+def test_git_probe_environment_removes_every_git_variable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    observed_environment: dict[str, str] = {}
+
+    def run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        environment = kwargs["env"]
+        assert isinstance(environment, dict)
+        observed_environment.update(cast(dict[str, str], environment))
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(worktree_module.subprocess, "run", run)
+    monkeypatch.setenv("GIT_DIR", "/wrong/repository")
+    monkeypatch.setenv("GIT_CUSTOM_SELECTOR", "must-also-be-removed")
+    monkeypatch.setenv("DOLPHIN_TEST_SENTINEL", "preserved")
+
+    worktree_module._run_git(tmp_path, "status")
+
+    assert not any(name.startswith("GIT_") for name in observed_environment)
+    assert observed_environment["DOLPHIN_TEST_SENTINEL"] == "preserved"
+
+
 def test_git_probe_timeout_remains_a_distinct_discovery_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired("git", 5)
@@ -135,6 +184,15 @@ def _commit_repository(path: Path) -> None:
     _git(path, "commit", "-qm", "Initial test commit")
 
 
-def _git(path: Path, *arguments: str) -> str:
-    result = subprocess.run(["git", "-C", str(path), *arguments], capture_output=True, check=True, text=True)
+def _git(path: Path, *arguments: str, sanitized: bool = False) -> str:
+    environment = None
+    if sanitized:
+        environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    result = subprocess.run(
+        ["git", "-C", str(path), *arguments],
+        capture_output=True,
+        check=True,
+        env=environment,
+        text=True,
+    )
     return result.stdout.removesuffix("\n")

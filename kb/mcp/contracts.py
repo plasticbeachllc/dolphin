@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from kb.cleanup_authority import CLEANUP_RECEIPT_LENGTH, CLEANUP_RECEIPT_PATTERN
+
 
 class StrictInput(BaseModel):
     """Base model for every public MCP tool input."""
@@ -35,6 +37,16 @@ class RepoAddInput(StrictInput):
     """Explicitly register one concrete Git worktree."""
 
     path: Path = Field(description="Absolute path to the concrete Git worktree root.")
+    cleanup_receipt: str = Field(
+        min_length=CLEANUP_RECEIPT_LENGTH,
+        max_length=CLEANUP_RECEIPT_LENGTH,
+        pattern=CLEANUP_RECEIPT_PATTERN,
+        repr=False,
+        description=(
+            "Caller-supplied dolphin-cleanup-v1_ receipt containing 32 random bytes encoded as unpadded "
+            "base64url; retain it to retry repo_add or authorize repo_forget."
+        ),
+    )
 
     @field_validator("path")
     @classmethod
