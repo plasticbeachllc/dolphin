@@ -178,9 +178,6 @@ class WorkspaceResolver:
             )
         if not matches:
             return None
-        registered_matches = tuple(resolution for resolution in matches.values() if resolution.workspace is not None)
-        if len(registered_matches) == 1:
-            return registered_matches[0]
         if len(matches) == 1:
             return next(iter(matches.values()))
 

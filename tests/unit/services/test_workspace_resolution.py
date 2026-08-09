@@ -129,16 +129,19 @@ def test_resolver_fails_closed_when_any_mcp_root_probe_is_unavailable(tmp_path: 
     assert workspace_resolution_error(result, tool_name="search").code == "WORKSPACE_RESOLUTION_UNAVAILABLE"
 
 
-def test_one_registered_mcp_root_wins_when_other_roots_are_known_unregistered(tmp_path: Path) -> None:
+def test_registered_and_unregistered_mcp_roots_are_ambiguous(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
     registered = _register(registry, _commit_repository(tmp_path / "registered"), "registered")
     unregistered = _commit_repository(tmp_path / "unregistered")
 
     result = WorkspaceResolver(registry).resolve(mcp_roots=(_mcp_root(Path(registered.root)), _mcp_root(unregistered)))
 
-    assert result.outcome is WorkspaceResolutionOutcome.RESOLVED
-    assert result.workspace is not None
-    assert result.workspace.workspace_id == registered.workspace_id
+    assert result.outcome is WorkspaceResolutionOutcome.AMBIGUOUS
+    assert [candidate.workspace_id for candidate in result.workspace_candidates] == [registered.workspace_id]
+    assert result.unregistered_candidates == (unregistered,)
+    error = workspace_resolution_error(result, tool_name="search")
+    assert error.details["candidates"][0]["workspace_id"] == registered.workspace_id
+    assert error.details["unregistered_roots"] == [str(unregistered)]
 
 
 def test_missing_session_scope_does_not_fall_back_to_cwd(tmp_path: Path) -> None:

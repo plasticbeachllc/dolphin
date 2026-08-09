@@ -124,6 +124,9 @@ async def _serve_stdio() -> None:
     from kb.services import WorkspaceSessionScope, default_mcp_handlers
 
     async with stdio_server() as (read_stream, write_stream):
+        # MCP 2026-07-28 has no client-roots request surface. Keep the
+        # connection-owned scope here; root snapshots can join this boundary
+        # when the transport exposes them again.
         session_scope = WorkspaceSessionScope()
         server = create_server(default_mcp_handlers(session_scope=session_scope))
         await server.run(
