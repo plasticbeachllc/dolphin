@@ -1,2 +1,3 @@
+from .generation_coordinator import SQLiteGenerationCoordinator as SQLiteGenerationCoordinator
 from .lancedb_store import LanceDBStore as LanceDBStore
 from .sqlite_meta import SQLiteMetadataStore as SQLiteMetadataStore
