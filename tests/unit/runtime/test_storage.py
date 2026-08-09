@@ -39,7 +39,19 @@ def test_layout_rejects_a_symlinked_runtime_root(tmp_path: Path) -> None:
     target.mkdir()
     os.symlink(target, layout.root)
 
-    with pytest.raises(StorageLayoutError, match="not a directory"):
+    with pytest.raises(StorageLayoutError, match="symbolic link"):
+        layout.ensure_private_directories()
+
+
+def test_layout_rejects_a_symlinked_application_support_parent(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    library = tmp_path / "Library"
+    library.mkdir()
+    redirected_support = tmp_path / "redirected-support"
+    redirected_support.mkdir()
+    os.symlink(redirected_support, library / "Application Support")
+
+    with pytest.raises(StorageLayoutError, match="symbolic link"):
         layout.ensure_private_directories()
 
 

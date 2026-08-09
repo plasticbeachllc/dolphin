@@ -32,9 +32,9 @@ def invalid_arguments(message: str) -> ToolError:
 
 
 def runtime_not_ready(tool_name: str) -> ToolError:
-    """Return an explicit interim readiness error while services are wired in."""
+    """Return an explicit non-retryable capability gap while services are wired in."""
     return ToolError(
         code="RUNTIME_NOT_READY",
         message=f"Dolphin's {tool_name} service is not initialized yet.",
-        retryable=True,
+        retryable=False,
     )

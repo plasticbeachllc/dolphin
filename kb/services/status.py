@@ -6,6 +6,7 @@ import asyncio
 import os
 import subprocess
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -54,6 +55,13 @@ class StatusResult(_ResultModel):
     next_actions: list[NextAction]
 
 
+@dataclass(frozen=True, slots=True)
+class _WorktreeProbe:
+    resolution: Literal["unregistered", "outside_worktree", "unavailable"]
+    root: Path | None = None
+    unavailable_reason: str | None = None
+
+
 class StatusService:
     """Report cheap local readiness without enrolling or reconciling anything."""
 
@@ -63,8 +71,8 @@ class StatusService:
 
     async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
-        worktree_root = await asyncio.to_thread(_worktree_root, self._cwd)
-        next_actions = [] if worktree_root is None else [_repo_add_action(worktree_root)]
+        probe = await asyncio.to_thread(_probe_worktree, self._cwd)
+        next_actions = _next_actions_for_probe(probe)
 
         return StatusResult(
             version=get_version(),
@@ -88,15 +96,15 @@ class StatusService:
                 tombstone_metadata_bytes=0,
                 awaiting_physical_reclamation=0,
             ),
-            current_workspace_resolution="unregistered" if worktree_root else "outside_worktree",
+            current_workspace_resolution=probe.resolution,
             current_workspace=None,
             current_repository_boundaries=[],
             next_actions=next_actions,
         )
 
 
-def _worktree_root(cwd: Path) -> Path | None:
-    """Resolve only the process's own worktree root; never enroll it."""
+def _probe_worktree(cwd: Path) -> _WorktreeProbe:
+    """Resolve the process worktree without disguising probe failures as absence."""
     try:
         result = subprocess.run(
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
@@ -105,12 +113,31 @@ def _worktree_root(cwd: Path) -> Path | None:
             text=True,
             timeout=1,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    except FileNotFoundError:
+        return _WorktreeProbe(resolution="unavailable", unavailable_reason="Git is unavailable to Dolphin.")
+    except subprocess.TimeoutExpired:
+        return _WorktreeProbe(resolution="unavailable", unavailable_reason="Git worktree detection timed out.")
+    except OSError:
+        return _WorktreeProbe(resolution="unavailable", unavailable_reason="Git worktree detection failed.")
     root = result.stdout.removesuffix("\n")
-    if result.returncode != 0 or not root:
-        return None
-    return Path(root)
+    if result.returncode == 0 and root:
+        return _WorktreeProbe(resolution="unregistered", root=Path(root))
+    if result.returncode == 128 and _is_outside_worktree_error(result.stderr):
+        return _WorktreeProbe(resolution="outside_worktree")
+    return _WorktreeProbe(resolution="unavailable", unavailable_reason="Git worktree detection failed.")
+
+
+def _is_outside_worktree_error(stderr: str | None) -> bool:
+    normalized = (stderr or "").lower()
+    return "not a git repository" in normalized or "not a git work tree" in normalized
+
+
+def _next_actions_for_probe(probe: _WorktreeProbe) -> list[NextAction]:
+    if probe.root is not None:
+        return [_repo_add_action(probe.root)]
+    if probe.unavailable_reason is not None:
+        return [NextAction(action="inspect_git", reason=probe.unavailable_reason)]
+    return []
 
 
 def _repo_add_action(worktree_root: Path) -> NextAction:

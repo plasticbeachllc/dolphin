@@ -66,6 +66,7 @@ async def test_server_returns_structured_success_and_bounded_not_ready_errors() 
     assert success.structured_content == {"readiness": "ready"}
     assert not_ready.is_error is True
     assert not_ready.structured_content["code"] == "RUNTIME_NOT_READY"
+    assert not_ready.structured_content["retryable"] is False
 
 
 @pytest.mark.asyncio

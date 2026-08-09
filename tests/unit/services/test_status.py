@@ -43,18 +43,35 @@ def test_worktree_probe_preserves_surrounding_path_whitespace(monkeypatch: pytes
     completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{expected}\n")
     monkeypatch.setattr(status_module.subprocess, "run", lambda *_args, **_kwargs: completed)
 
-    result = status_module._worktree_root(Path("/tmp"))
+    result = status_module._probe_worktree(Path("/tmp"))
 
-    assert result == Path(expected)
+    assert result.root == Path(expected)
+
+
+@pytest.mark.asyncio
+async def test_status_reports_unavailable_when_git_detection_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def missing_git(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(status_module.subprocess, "run", missing_git)
+
+    result = await StatusService(cwd=tmp_path, environment={})(StatusInput())
+
+    assert result.current_workspace_resolution == "unavailable"
+    assert result.next_actions == [
+        status_module.NextAction(action="inspect_git", reason="Git is unavailable to Dolphin.")
+    ]
 
 
 @pytest.mark.asyncio
 async def test_status_runs_git_probe_off_the_event_loop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def slow_probe(_cwd: Path) -> None:
+    def slow_probe(_cwd: Path) -> status_module._WorktreeProbe:
         time.sleep(0.05)
-        return None
+        return status_module._WorktreeProbe(resolution="outside_worktree")
 
-    monkeypatch.setattr(status_module, "_worktree_root", slow_probe)
+    monkeypatch.setattr(status_module, "_probe_worktree", slow_probe)
     status_task = asyncio.create_task(StatusService(cwd=tmp_path, environment={})(StatusInput()))
     ticker = asyncio.create_task(asyncio.sleep(0.005))
 
