@@ -35,7 +35,7 @@ class RepoAddService:
             self._registry.register_and_submit_initial_index,
             worktree,
             cleanup_receipt=cleanup_receipt,
-            boundaries=parent_scan.repository_boundaries,
+            parent_scan=parent_scan,
         )
         return RepoAddSubmission(
             worktree=worktree,

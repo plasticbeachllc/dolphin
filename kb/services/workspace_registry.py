@@ -31,7 +31,14 @@ from kb.lifecycle_limits import (
     REPO_LIST_PAGE_SIZE,
 )
 from kb.runtime.storage import StorageLayout, StorageLayoutError
-from kb.services.repository_boundaries import RepositoryBoundary, RepositoryBoundaryKind, RepositoryBoundaryState
+from kb.services.repository_boundaries import (
+    ParentScanPlan,
+    RepositoryBoundary,
+    RepositoryBoundaryError,
+    RepositoryBoundaryKind,
+    RepositoryBoundaryState,
+    validate_parent_scan,
+)
 from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
 
 
@@ -305,18 +312,24 @@ class WorkspaceRegistry:
         worktree: GitWorktree,
         *,
         cleanup_receipt: str,
-        boundaries: Sequence[RepositoryBoundary] | None = None,
+        parent_scan: ParentScanPlan | None = None,
     ) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
         self._require_valid_cleanup_receipt(cleanup_receipt)
+        self._require_matching_parent_scan(worktree, parent_scan)
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree, cleanup_receipt)
-                if boundaries is not None:
-                    self._replace_boundaries(connection, registration.workspace_id, boundaries)
+                if parent_scan is not None:
+                    self._replace_boundaries(
+                        connection,
+                        registration.workspace_id,
+                        parent_scan.repository_boundaries,
+                    )
                 self._validate_worktree_snapshot(worktree)
+                self._validate_parent_scan_snapshot(parent_scan)
             except Exception:
                 connection.rollback()
                 raise
@@ -328,19 +341,25 @@ class WorkspaceRegistry:
         worktree: GitWorktree,
         *,
         cleanup_receipt: str,
-        boundaries: Sequence[RepositoryBoundary] | None = None,
+        parent_scan: ParentScanPlan | None = None,
     ) -> tuple[WorkspaceRegistration, WorkspaceOperation]:
         """Persist one discovered snapshot and its initial-index operation atomically."""
         self._require_valid_cleanup_receipt(cleanup_receipt)
+        self._require_matching_parent_scan(worktree, parent_scan)
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree, cleanup_receipt)
-                if boundaries is not None:
-                    self._replace_boundaries(connection, registration.workspace_id, boundaries)
+                if parent_scan is not None:
+                    self._replace_boundaries(
+                        connection,
+                        registration.workspace_id,
+                        parent_scan.repository_boundaries,
+                    )
                 operation = self._submit_initial_index(connection, registration)
                 self._validate_worktree_snapshot(worktree)
+                self._validate_parent_scan_snapshot(parent_scan)
             except Exception:
                 connection.rollback()
                 raise
@@ -625,6 +644,20 @@ class WorkspaceRegistry:
     def _validate_worktree_snapshot(worktree: GitWorktree) -> None:
         """Keep durable registration and operation state bound to the observed Git snapshot."""
         validate_git_worktree_snapshot(worktree)
+
+    @staticmethod
+    def _require_matching_parent_scan(worktree: GitWorktree, parent_scan: ParentScanPlan | None) -> None:
+        if parent_scan is not None and parent_scan.worktree != worktree:
+            raise WorkspaceRegistryError("Dolphin repository boundary snapshot belongs to another worktree")
+
+    @staticmethod
+    def _validate_parent_scan_snapshot(parent_scan: ParentScanPlan | None) -> None:
+        if parent_scan is None:
+            return
+        try:
+            validate_parent_scan(parent_scan)
+        except RepositoryBoundaryError as exc:
+            raise WorkspaceRegistryError("Dolphin repository boundaries changed before registration") from exc
 
     @staticmethod
     def _require_valid_cleanup_receipt(cleanup_receipt: str) -> None:

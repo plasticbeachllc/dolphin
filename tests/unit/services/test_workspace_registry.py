@@ -15,7 +15,7 @@ import pytest
 
 from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
 from kb.runtime.storage import macos_storage_layout
-from kb.services import workspace_registry as workspace_registry_module
+from kb.services import repo_add as repo_add_module, workspace_registry as workspace_registry_module
 from kb.services.repo_add import RepoAddService
 from kb.services.workspace_registry import (
     OperationState,
@@ -541,6 +541,31 @@ async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp
     assert second.registration.cleanup_receipt == cleanup_receipt
     assert second.operation.created is False
     assert second.operation.operation_id == first.operation.operation_id
+
+
+@pytest.mark.asyncio
+async def test_repo_add_rolls_back_when_boundaries_change_before_registration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    service = RepoAddService(registry)
+    original_plan_parent_scan = repo_add_module.plan_parent_scan
+
+    def plan_then_add_boundary(worktree: GitWorktree):
+        plan = original_plan_parent_scan(worktree)
+        _commit_repository(worktree_root / "late-boundary")
+        return plan
+
+    monkeypatch.setattr(repo_add_module, "plan_parent_scan", plan_then_add_boundary)
+
+    with pytest.raises(WorkspaceRegistryError, match="boundaries changed before registration"):
+        await service.submit(worktree_root, _cleanup_receipt("boundary-race"))
+
+    assert registry.list_workspaces(None).items == ()
 
 
 def test_workspace_snapshot_counts_effective_states_and_resolves_exact_root(

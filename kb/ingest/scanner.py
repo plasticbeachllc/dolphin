@@ -98,6 +98,19 @@ def _chunk_is_binary(chunk: bytes) -> bool:
         return True
 
 
+def _directory_snapshot(directory_fd: int) -> tuple[int, int, int, int]:
+    status = os.fstat(directory_fd)
+    return status.st_dev, status.st_ino, status.st_ctime_ns, status.st_mtime_ns
+
+
+def _directory_has_git_marker(directory_fd: int) -> bool:
+    try:
+        os.stat(".git", dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def _inspect_candidate_file(root: Path, rel_path: str, sniff_bytes: int = 65_536) -> tuple[int, bool] | None:
     """Inspect one repository-relative file without following any symlink component."""
     parts = PurePosixPath(rel_path).parts
@@ -106,26 +119,35 @@ def _inspect_candidate_file(root: Path, rel_path: str, sniff_bytes: int = 65_536
 
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     file_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
-    directory_fd: int | None = None
+    directory_fds: list[int] = []
+    nested_directory_snapshots: list[tuple[int, tuple[int, int, int, int]]] = []
     file_fd: int | None = None
     try:
-        directory_fd = os.open(root, directory_flags)
+        directory_fds.append(os.open(root, directory_flags))
         for part in parts[:-1]:
-            next_directory_fd = os.open(part, directory_flags, dir_fd=directory_fd)
-            os.close(directory_fd)
-            directory_fd = next_directory_fd
+            directory_fd = os.open(part, directory_flags, dir_fd=directory_fds[-1])
+            directory_fds.append(directory_fd)
+            if _directory_has_git_marker(directory_fd):
+                return None
+            nested_directory_snapshots.append((directory_fd, _directory_snapshot(directory_fd)))
 
-        file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+        file_fd = os.open(parts[-1], file_flags, dir_fd=directory_fds[-1])
         file_status = os.fstat(file_fd)
         if not stat.S_ISREG(file_status.st_mode):
             return None
-        return file_status.st_size, _chunk_is_binary(os.read(file_fd, sniff_bytes))
+        chunk = os.read(file_fd, sniff_bytes)
+        if any(
+            _directory_has_git_marker(directory_fd) or _directory_snapshot(directory_fd) != snapshot
+            for directory_fd, snapshot in nested_directory_snapshots
+        ):
+            return None
+        return file_status.st_size, _chunk_is_binary(chunk)
     except OSError:
         return None
     finally:
         if file_fd is not None:
             os.close(file_fd)
-        if directory_fd is not None:
+        for directory_fd in reversed(directory_fds):
             os.close(directory_fd)
 
 

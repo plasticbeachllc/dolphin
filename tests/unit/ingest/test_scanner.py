@@ -166,6 +166,28 @@ def test_candidate_inspection_rejects_a_file_replaced_by_a_symlink(
     assert _inspect_candidate_file(tmp_path, "candidate.py") is None
 
 
+def test_candidate_inspection_rejects_a_transient_nested_repository_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    nested_directory = tmp_path / "nested"
+    nested_directory.mkdir()
+    candidate = nested_directory / "candidate.py"
+    candidate.write_text("print('candidate')\n")
+    real_read = os.read
+
+    def read_during_transient_boundary(file_descriptor: int, byte_count: int) -> bytes:
+        chunk = real_read(file_descriptor, byte_count)
+        marker = nested_directory / ".git"
+        marker.mkdir()
+        marker.rmdir()
+        return chunk
+
+    monkeypatch.setattr(os, "read", read_during_transient_boundary)
+
+    assert _inspect_candidate_file(tmp_path, "nested/candidate.py") is None
+
+
 class TestIgnorePatterns:
     """Test ignore pattern functionality."""
 
