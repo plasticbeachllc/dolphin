@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import sqlite3
 import threading
@@ -14,7 +15,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from kb.runtime.storage import StorageLayout
-from kb.services.worktree import GitWorktree
+from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
 
 
 class WorkspaceRegistryError(RuntimeError):
@@ -93,7 +94,9 @@ class WorkspaceRegistry:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_worktree_snapshot(worktree)
                 registration = self._register(connection, worktree)
+                self._validate_worktree_snapshot(worktree)
             except Exception:
                 connection.rollback()
                 raise
@@ -108,8 +111,10 @@ class WorkspaceRegistry:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_worktree_snapshot(worktree)
                 registration = self._register(connection, worktree)
                 operation = self._submit_initial_index(connection, registration)
+                self._validate_worktree_snapshot(worktree)
             except Exception:
                 connection.rollback()
                 raise
@@ -306,12 +311,57 @@ class WorkspaceRegistry:
                         ADD COLUMN common_git_dir_identity TEXT NOT NULL DEFAULT ''
                         """
                     )
+                    self._backfill_v1_repository_identities(connection)
+                    connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
+                    connection.execute("DROP INDEX IF EXISTS workspace_operations_exact_target")
+                    connection.execute(
+                        """
+                        DELETE FROM workspace_operations
+                        WHERE rowid NOT IN (
+                            SELECT MIN(rowid)
+                            FROM workspace_operations
+                            GROUP BY workspace_id, kind, target_head_commit
+                        )
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE UNIQUE INDEX workspace_operations_exact_target
+                        ON workspace_operations (workspace_id, kind, target_head_commit)
+                        """
+                    )
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
             self._initialized = True
+
+    @staticmethod
+    def _validate_worktree_snapshot(worktree: GitWorktree) -> None:
+        """Keep durable registration and operation state bound to the observed Git snapshot."""
+        validate_git_worktree_snapshot(worktree)
+
+    @staticmethod
+    def _backfill_v1_repository_identities(connection: sqlite3.Connection) -> None:
+        """Bind retained v1 rows to their Git directory, pruning unreachable legacy state."""
+        rows = connection.execute("SELECT workspace_id, common_git_dir FROM workspace_registrations").fetchall()
+        for workspace_id, common_git_dir in rows:
+            try:
+                status = os.stat(common_git_dir)
+            except OSError:
+                connection.execute("DELETE FROM workspace_operations WHERE workspace_id = ?", (workspace_id,))
+                connection.execute("DELETE FROM workspace_registrations WHERE workspace_id = ?", (workspace_id,))
+                continue
+            identity = f"{status.st_dev}:{status.st_ino}"
+            connection.execute(
+                """
+                UPDATE workspace_registrations
+                SET repository_id = ?, common_git_dir_identity = ?
+                WHERE workspace_id = ?
+                """,
+                (_repository_id_from_common_git_dir(common_git_dir, identity), identity, workspace_id),
+            )
 
     def _register(self, connection: sqlite3.Connection, worktree: GitWorktree) -> WorkspaceRegistration:
         root = str(worktree.root)
@@ -450,7 +500,11 @@ class WorkspaceRegistry:
 
 def _repository_id(worktree: GitWorktree) -> str:
     """Derive a stable local repository-family key without a caller-controlled name."""
-    identity = f"{worktree.common_git_dir}\0{worktree.common_git_dir_identity}"
+    return _repository_id_from_common_git_dir(str(worktree.common_git_dir), worktree.common_git_dir_identity)
+
+
+def _repository_id_from_common_git_dir(common_git_dir: str, common_git_dir_identity: str) -> str:
+    identity = f"{common_git_dir}\0{common_git_dir_identity}"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return f"repo_{digest[:24]}"
 

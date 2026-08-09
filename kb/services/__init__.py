@@ -10,7 +10,12 @@ from kb.services.workspace_registry import (
     WorkspaceRegistry,
     WorkspaceRegistryError,
 )
-from kb.services.worktree import GitWorktree, WorktreeDiscoveryError, discover_git_worktree
+from kb.services.worktree import (
+    GitWorktree,
+    WorktreeDiscoveryError,
+    discover_git_worktree,
+    validate_git_worktree_snapshot,
+)
 
 __all__ = [
     "GitWorktree",
@@ -26,4 +31,5 @@ __all__ = [
     "WorkspaceRegistryError",
     "default_mcp_handlers",
     "discover_git_worktree",
+    "validate_git_worktree_snapshot",
 ]

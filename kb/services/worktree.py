@@ -32,6 +32,12 @@ async def discover_git_worktree(path: Path) -> GitWorktree:
     return await asyncio.to_thread(_discover_git_worktree, path)
 
 
+def validate_git_worktree_snapshot(worktree: GitWorktree) -> None:
+    """Reject a worktree whose on-disk Git identity changed after discovery."""
+    if _discover_git_worktree(worktree.root) != worktree:
+        raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED")
+
+
 def _discover_git_worktree(path: Path) -> GitWorktree:
     if not path.is_absolute():
         raise WorktreeDiscoveryError("WORKTREE_PATH_NOT_ABSOLUTE")
