@@ -121,23 +121,52 @@ def run_stdio() -> None:
 
 async def _serve_stdio() -> None:
     """Own exactly one stdio connection for the foreground Dolphin process."""
-    from kb.services import WorkspaceSessionScope, default_mcp_handlers
+    from kb.runtime.storage import macos_storage_layout
+    from kb.services import WorkspaceRegistry, WorkspaceSessionScope, default_mcp_handlers
+    from kb.services.operation_runtime import OperationRuntime, OperationRuntimeError
 
     async with stdio_server() as (read_stream, write_stream):
         # MCP 2026-07-28 has no client-roots request surface. Keep the
         # connection-owned scope here; root snapshots can join this boundary
         # when the transport exposes them again.
         session_scope = WorkspaceSessionScope()
-        server = create_server(default_mcp_handlers(session_scope=session_scope))
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="dolphin",
-                server_version=get_version(),
-                capabilities=server.get_capabilities(notification_options=NotificationOptions()),
-            ),
-        )
+        registry = WorkspaceRegistry(macos_storage_layout())
+        runtime = OperationRuntime(registry, mode="mcp", operation_capable=False)
+        runtime_started = False
+        try:
+            await runtime.start()
+            runtime_started = True
+        except OperationRuntimeError:
+            # Keep the diagnostic read surface alive when storage or process
+            # identity prevents safe runtime ownership. Status will report the
+            # underlying registry as blocked while no work can execute.
+            pass
+        try:
+            server = create_server(
+                default_mcp_handlers(
+                    session_scope=session_scope,
+                    registry=registry,
+                    runtime_ownership_available=lambda: runtime.ownership_available,
+                )
+            )
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="dolphin",
+                    server_version=get_version(),
+                    capabilities=server.get_capabilities(notification_options=NotificationOptions()),
+                ),
+            )
+        finally:
+            if runtime_started:
+                try:
+                    await runtime.close()
+                except OperationRuntimeError:
+                    # Runtime loss was exposed through status while the
+                    # connection was active; it must not corrupt stdio during
+                    # transport shutdown.
+                    pass
 
 
 def _complete_handlers(

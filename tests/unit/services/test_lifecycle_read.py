@@ -119,9 +119,29 @@ async def test_repo_list_and_operation_status_return_bounded_durable_projections
     assert operation_status.counters.processed_files == 0
     assert not layout.vectors.exists()
 
-    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
-    registry.set_operation_state(
-        operation.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    now = datetime.now(UTC)
+    runtime = registry.register_runtime(
+        runtime_id="runtime_terminal_projection",
+        pid=100,
+        process_start_identity="start-terminal-projection",
+        mode="mcp",
+        operation_capable=True,
+        pipeline_key="test-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    lease = registry.claim_next_operation(
+        runtime_id=runtime.runtime_id,
+        process_start_identity=runtime.process_start_identity,
+        pipeline_key="test-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    assert lease is not None
+    registry.finish_operation(
+        lease,
+        OperationState.SUCCEEDED,
+        observed_at=now,
     )
     terminal_status = await OperationStatusService(registry)(OperationStatusInput(operation_id=operation.operation_id))
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -16,7 +16,12 @@ from kb.mcp.contracts import StatusInput
 from kb.services.lifecycle_models import NextAction, RepositoryBoundarySummary, WorkspaceSummary
 from kb.services.lifecycle_read import repository_boundary_summary, workspace_summary
 from kb.services.repository_boundaries import RepositoryBoundaryKind, RepositoryBoundaryState
-from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
+from kb.services.workspace_registry import (
+    RuntimeStatusSnapshot,
+    WorkspaceReadSnapshot,
+    WorkspaceRegistry,
+    WorkspaceRegistryError,
+)
 from kb.services.workspace_resolution import (
     MCP_ROOT_LIMIT,
     MCPRootSnapshot,
@@ -52,12 +57,18 @@ class ToolAvailability(_ResultModel):
     open_ref: Literal["available", "unavailable"]
 
 
+class RuntimeHealth(_ResultModel):
+    active_processes: int = Field(ge=0, le=1_024)
+    operation_executors: int = Field(ge=0, le=1_024)
+
+
 class StatusResult(_ResultModel):
     version: str
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
     tool_availability: ToolAvailability
+    runtime: RuntimeHealth
     workspace_counts: EffectiveWorkspaceCounts
     current_workspace_resolution: Literal["resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"]
     current_workspace: WorkspaceSummary | None = None
@@ -83,17 +94,23 @@ class StatusService:
         registry: WorkspaceRegistry | None = None,
         mcp_roots: tuple[Path, ...] = (),
         session_scope: WorkspaceSessionScope | None = None,
+        runtime_ownership_available: Callable[[], bool] | None = None,
     ) -> None:
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = environment if environment is not None else os.environ
         self._registry = registry
         self._mcp_roots = mcp_roots
         self._session_scope = session_scope
+        self._runtime_ownership_available = runtime_ownership_available
 
     async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
+        runtime_ownership_available = (
+            self._runtime_ownership_available() if self._runtime_ownership_available is not None else True
+        )
         probe = await asyncio.to_thread(_probe_worktree, self._cwd)
         registry_snapshot = WorkspaceReadSnapshot(registered=0, indexing=0, ready=0, failed=0, current_workspace=None)
+        runtime_snapshot = RuntimeStatusSnapshot(active_processes=0, operation_executors=0)
         scope_resolution: WorkspaceResolution | None = None
         storage_available = True
         if self._registry is not None:
@@ -103,6 +120,7 @@ class StatusService:
                     if not await asyncio.to_thread(self._registry.schema_is_current):
                         raise WorkspaceRegistryError("Dolphin metadata storage requires initialization")
                     registry_snapshot = await asyncio.to_thread(self._registry.read_workspace_snapshot)
+                    runtime_snapshot = await asyncio.to_thread(self._registry.read_runtime_status)
                     mcp_roots = await _probe_mcp_roots(self._mcp_roots)
                     resolver = WorkspaceResolver(self._registry, session_scope=self._session_scope)
                     scope_resolution = await asyncio.to_thread(
@@ -146,6 +164,14 @@ class StatusService:
         else:
             resolution = probe.resolution
             next_actions = _next_actions_for_probe(probe)
+        if not runtime_ownership_available:
+            next_actions = [
+                NextAction(
+                    action="inspect_runtime",
+                    reason="Dolphin could not establish or renew safe runtime ownership.",
+                ),
+                *next_actions[:7],
+            ]
 
         return StatusResult(
             version=get_version(),
@@ -153,10 +179,14 @@ class StatusService:
             # readiness errors while their application services are built.
             # Do not advertise overall readiness merely because a credential is
             # present: agents use this field to decide whether to proceed.
-            readiness="degraded" if storage_available else "blocked",
+            readiness="degraded" if storage_available and runtime_ownership_available else "blocked",
             credential_present=credential_present,
             credential_variable="DOLPHIN_OPENAI_API_KEY",
             tool_availability=_tool_availability(storage_available),
+            runtime=RuntimeHealth(
+                active_processes=runtime_snapshot.active_processes,
+                operation_executors=runtime_snapshot.operation_executors,
+            ),
             workspace_counts=EffectiveWorkspaceCounts(
                 registered=registry_snapshot.registered,
                 indexing=registry_snapshot.indexing,

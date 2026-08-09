@@ -130,11 +130,15 @@ class OperationStatusService:
             if not await asyncio.to_thread(self._registry.schema_is_current):
                 raise ToolFailure(storage_unavailable())
             operation = await asyncio.to_thread(self._registry.inspect_operation, input_model.operation_id)
+            if operation is None:
+                raise ToolFailure(operation_missing())
+            operation_runtime_available = await asyncio.to_thread(
+                self._registry.compatible_operation_executor_available,
+                operation.pipeline_key,
+            )
         except WorkspaceRegistryError as exc:
             raise ToolFailure(storage_unavailable()) from exc
-        if operation is None:
-            raise ToolFailure(operation_missing())
-        return _operation_status_result(operation)
+        return _operation_status_result(operation, operation_runtime_available=operation_runtime_available)
 
 
 def workspace_summary(snapshot: WorkspaceSnapshot) -> WorkspaceSummary:
@@ -182,9 +186,17 @@ def _repo_list_result(page: WorkspaceListPage) -> RepoListResult:
     )
 
 
-def _operation_status_result(operation: OperationSnapshot) -> OperationStatusResult:
+def _operation_status_result(
+    operation: OperationSnapshot,
+    *,
+    operation_runtime_available: bool = False,
+) -> OperationStatusResult:
     terminal = operation.state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
-    pause_reason = _pause_reason(operation.state)
+    pause_reason = _pause_reason(
+        operation.state,
+        checkpoint_reason=operation.pause_reason,
+        operation_runtime_available=operation_runtime_available,
+    )
     failure = None
     if operation.state is OperationState.FAILED:
         failure = ToolError(
@@ -204,8 +216,20 @@ def _operation_status_result(operation: OperationSnapshot) -> OperationStatusRes
         target_head_commit=operation.target_head_commit,
         workspace_available=operation.workspace_id is not None,
         workspace_id=operation.workspace_id,
-        phase=None,
-        counters=OperationCounters(),
+        phase=operation.phase,
+        counters=(
+            OperationCounters(
+                known_eligible_files=operation.counters.known_eligible_files,
+                processed_files=operation.counters.processed_files,
+                parsed_files=operation.counters.parsed_files,
+                reused_chunks=operation.counters.reused_chunks,
+                embedding_cache_hits=operation.counters.embedding_cache_hits,
+                embedding_cache_misses=operation.counters.embedding_cache_misses,
+                embedded_chunks=operation.counters.embedded_chunks,
+            )
+            if operation.counters is not None
+            else OperationCounters()
+        ),
         pause_reason=pause_reason,
         failure=failure,
         created_at=operation.created_at.isoformat(),
@@ -228,11 +252,16 @@ def _operation_status_result(operation: OperationSnapshot) -> OperationStatusRes
     )
 
 
-def _pause_reason(state: OperationState) -> PauseReason | None:
+def _pause_reason(
+    state: OperationState,
+    *,
+    checkpoint_reason: PauseReason | None,
+    operation_runtime_available: bool,
+) -> PauseReason | None:
     if state is OperationState.QUEUED:
-        return "runtime_absent"
+        return None if operation_runtime_available else "runtime_absent"
     if state is OperationState.AWAITING_APPROVAL:
         return "awaiting_approval"
     if state is OperationState.PAUSED:
-        return "shutdown"
+        return checkpoint_reason or "runtime_absent"
     return None

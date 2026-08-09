@@ -1488,7 +1488,7 @@ class IndexBuildingDetails(BaseModel):
     operation_state: Literal["queued", "running", "paused"]
     phase: Literal["preflight", "scan", "chunk", "embed", "store", "publish"]
     pause_reason: Literal[
-        "runtime_absent", "credential_missing", "disk_pressure", "shutdown"
+        "runtime_absent", "credential_missing", "disk_pressure", "awaiting_approval", "shutdown"
     ] | None = None
     processed_files: int = 0
     known_eligible_files: int | None = None
@@ -2345,7 +2345,7 @@ class OperationCheckpoint(BaseModel):
     completed_manifest_id: str | None = None
     counters: OperationCounters
     pause_reason: Literal[
-        "runtime_absent", "credential_missing", "disk_pressure", "shutdown"
+        "runtime_absent", "credential_missing", "disk_pressure", "awaiting_approval", "shutdown"
     ] | None = None
     checkpointed_at: str
     resume_count: int = Field(default=0, ge=0)
@@ -3013,12 +3013,18 @@ class ToolAvailability(BaseModel):
     open_ref: Literal["available", "unavailable"]
 
 
+class RuntimeHealth(BaseModel):
+    active_processes: int = Field(ge=0, le=1_024)
+    operation_executors: int = Field(ge=0, le=1_024)
+
+
 class StatusResult(BaseModel):
     version: str
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
     tool_availability: ToolAvailability
+    runtime: RuntimeHealth
     workspace_counts: EffectiveWorkspaceCounts
     current_workspace_resolution: Literal[
         "resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"
@@ -4381,6 +4387,8 @@ CI teardown deletes only its exact run workspace. Local evaluation admission fir
 
 ### Phase 2 — one-product runtime
 
+Implementation status (2026-08-09): the Python stdio process now records one capability-bearing runtime owner with PID plus process-start identity, renews a bounded heartbeat, and marks itself stopped on normal connection shutdown. Startup or heartbeat ownership failure leaves the diagnostic read surface available but blocks readiness, and a failed heartbeat immediately makes the runtime unusable for further operation work. The shared SQLite authority now provides exclusive expiring operation leases, atomic oldest-compatible queued/paused claims, monotonic source-free phase/counter checkpoints, persisted executor pipeline compatibility keys, PID-reuse/expiry reconciliation, immediate graceful handoff, and lease-checked terminal completion. `status` reports aggregate active-process and operation-executor counts, while `operation_status` projects real checkpoint phase/counters and distinguishes a compatible live executor from `runtime_absent`. The packaged MCP process deliberately registers as non-executing until the indexing adapter is connected, so `repo_add` remains unavailable and no queued operation is advertised as making progress. Store-wide maintenance/watcher leases, the concrete indexing executor, signal-specific drain tests, publication checkpoints, and foreground CLI execution remain pending.
+
 - [ ] Add the Python MCP SDK dependency and `dolphin mcp` entry point.
 - [ ] Implement the environment-only `DOLPHIN_OPENAI_API_KEY` resolver and exhaustive secret-redaction tests.
 - [ ] Add cleanup-receipt prefix redaction to every structured log, diagnostic, exception, tracing, and test-capture path without classifying the receipt as a global credential or persisting its raw value.
@@ -4418,7 +4426,7 @@ CI teardown deletes only its exact run workspace. Local evaluation admission fir
 
 ### Phase 3 — safe autonomous repository lifecycle
 
-Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts and non-extending terminal expiry. Git enrollment discovery now captures the common Git directory and concrete worktree Git directory in one Git snapshot, binds both to no-follow filesystem identities, revalidates the complete snapshot before registration commits, gives linked worktrees distinct workspace identities within one repository family, rejects path reuse by a replacement Git worktree, and preserves registration plus operation identity across a same-volume move when the prior root has disappeared. The shared repository-boundary foundation now parses authoritative gitlinks directly from bounded NUL-delimited index output, classifies initialized/uninitialized/missing/conflicted submodules without recursive submodule commands, performs a bounded no-follow descendant-marker walk that stops at malformed boundaries, validates reciprocal linked-worktree gitfiles, masks both submodule and independent nested-repository subtrees in sequential and parallel parent scans, revalidates the boundary snapshot after scanning, persists typed summaries, and returns at most eight summaries per read projection without rescanning during `status` or `repo_list`. The transport-independent current-workspace resolver now supports explicit ID, bounded client-root snapshots, connection-local, and probed process-CWD precedence; chooses the deepest registered worktree or persisted child boundary; refuses to collapse a newly created nested worktree into its registered parent; dynamically links separately registered children in boundary summaries; and returns typed ambiguity, missing-scope, uninitialized-submodule, invalid-boundary, and probe-unavailable remediation. The packaged MCP 2026-07-28 stdio transport owns isolated session state but does not yet supply client roots because that protocol version exposes no client-roots request surface; transport wiring therefore remains pending. Public mutation and search handlers remain unavailable. Unsupported missing, cleanup-pending, and forgotten aggregates are deliberately omitted rather than reported as fabricated zeros until their durable states exist. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, full operation checkpoints, and complete matrix tests are implemented.
+Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts, live checkpoint projections, and non-extending terminal expiry. Git enrollment discovery now captures the common Git directory and concrete worktree Git directory in one Git snapshot, binds both to no-follow filesystem identities, revalidates the complete snapshot before registration commits, gives linked worktrees distinct workspace identities within one repository family, rejects path reuse by a replacement Git worktree, and preserves registration plus operation identity across a same-volume move when the prior root has disappeared. The shared repository-boundary foundation now parses authoritative gitlinks directly from bounded NUL-delimited index output, classifies initialized/uninitialized/missing/conflicted submodules without recursive submodule commands, performs a bounded no-follow descendant-marker walk that stops at malformed boundaries, validates reciprocal linked-worktree gitfiles, masks both submodule and independent nested-repository subtrees in sequential and parallel parent scans, revalidates the boundary snapshot after scanning, persists typed summaries, and returns at most eight summaries per read projection without rescanning during `status` or `repo_list`. The transport-independent current-workspace resolver now supports explicit ID, bounded client-root snapshots, connection-local, and probed process-CWD precedence; chooses the deepest registered worktree or persisted child boundary; refuses to collapse a newly created nested worktree into its registered parent; dynamically links separately registered children in boundary summaries; and returns typed ambiguity, missing-scope, uninitialized-submodule, invalid-boundary, and probe-unavailable remediation. The packaged MCP 2026-07-28 stdio transport owns isolated session state but does not yet supply client roots because that protocol version exposes no client-roots request surface; transport wiring therefore remains pending. Public mutation and search handlers remain unavailable, and the stdio runtime remains explicitly non-executing until the indexing adapter exists. Unsupported missing, cleanup-pending, and forgotten aggregates are deliberately omitted rather than reported as fabricated zeros until their durable states exist. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, complete publication checkpoints, and full matrix tests are implemented.
 
 - [ ] Implement observational empty-input `status`: bounded runtime/credential/storage diagnostics, mutually exclusive effective-state counts, aggregate-only forgotten accounting, and at most one deterministically resolved current workspace with no provider, scan, reconciliation, operation, GC, or enrollment side effect.
 - [ ] Implement cursor-only `repo_list` with fixed 25-item pages, deterministic family/workspace ordering, one actionable-list revision, bounded integrity-protected cursor decoding, all-or-nothing invalidation, and no forgotten entries or expansion/filter/sort/page-size controls.
