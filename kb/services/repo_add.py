@@ -28,6 +28,5 @@ class RepoAddService:
     async def submit(self, path: Path) -> RepoAddSubmission:
         """Register an explicit worktree and durably submit or reuse its initial index operation."""
         worktree = await discover_git_worktree(path)
-        registration = await asyncio.to_thread(self._registry.register, worktree)
-        operation = await asyncio.to_thread(self._registry.submit_initial_index, registration)
+        registration, operation = await asyncio.to_thread(self._registry.register_and_submit_initial_index, worktree)
         return RepoAddSubmission(worktree=worktree, registration=registration, operation=operation)

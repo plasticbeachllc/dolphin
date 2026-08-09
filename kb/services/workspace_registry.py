@@ -78,8 +78,24 @@ class WorkspaceRegistry:
             connection.commit()
             return registration
 
+    def register_and_submit_initial_index(
+        self,
+        worktree: GitWorktree,
+    ) -> tuple[WorkspaceRegistration, WorkspaceOperation]:
+        """Persist one discovered snapshot and its initial-index operation atomically."""
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                registration = self._register(connection, worktree)
+                operation = self._submit_initial_index(connection, registration)
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+            return registration, operation
+
     def submit_initial_index(self, registration: WorkspaceRegistration) -> WorkspaceOperation:
-        """Create or reuse one queued initial-index operation for an exact workspace head."""
+        """Create or reuse an operation only when the registration snapshot remains current."""
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -304,6 +320,8 @@ class WorkspaceRegistry:
         repository_id, root, target_head_commit = persisted
         if registration.repository_id != repository_id or registration.root != root:
             raise WorkspaceRegistryError("Dolphin workspace registration identity does not match persisted state")
+        if registration.head_commit != target_head_commit:
+            raise WorkspaceRegistryError("Dolphin workspace registration head does not match persisted state")
 
         existing = connection.execute(
             """

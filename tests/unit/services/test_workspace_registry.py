@@ -95,18 +95,46 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
 
 
 @pytest.mark.asyncio
-async def test_initial_index_submission_uses_the_persisted_workspace_head_and_identity(tmp_path: Path) -> None:
+async def test_initial_index_submission_rejects_a_stale_head_or_forged_identity(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
     registration = registry.register(await discover_git_worktree(worktree_root))
 
-    submitted = registry.submit_initial_index(replace(registration, head_commit="forged-head"))
-
-    assert submitted.target_head_commit == registration.head_commit
+    with pytest.raises(WorkspaceRegistryError, match="head does not match"):
+        registry.submit_initial_index(replace(registration, head_commit="forged-head"))
     with pytest.raises(WorkspaceRegistryError, match="identity does not match"):
         registry.submit_initial_index(replace(registration, root="/forged/root"))
+
+
+@pytest.mark.asyncio
+async def test_initial_index_submission_rejects_a_snapshot_replaced_by_another_registration(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    initial_worktree = await discover_git_worktree(worktree_root)
+    initial_registration = registry.register(initial_worktree)
+
+    registry.register(replace(initial_worktree, head_commit="replacement-head"))
+
+    with pytest.raises(WorkspaceRegistryError, match="head does not match"):
+        registry.submit_initial_index(initial_registration)
+
+
+@pytest.mark.asyncio
+async def test_atomic_registration_and_submission_uses_one_discovered_head(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    worktree = await discover_git_worktree(worktree_root)
+
+    registration, operation = registry.register_and_submit_initial_index(worktree)
+
+    assert operation.workspace_id == registration.workspace_id
+    assert operation.target_head_commit == worktree.head_commit
 
 
 @pytest.mark.asyncio
