@@ -28,6 +28,7 @@ from kb.ingest.cli import (
     rm_repo as kb_rm_repo,
     status as kb_status,
 )
+from kb.mcp.server import run_stdio
 from kb.observability import StructuredLogger
 from kb.store import SQLiteMetadataStore
 from kb.terminal import print_hint, print_status
@@ -55,6 +56,12 @@ def dolphin_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
+
+
+@app.command()
+def mcp() -> None:
+    """Run Dolphin's stdio MCP server."""
+    run_stdio()
 
 
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
