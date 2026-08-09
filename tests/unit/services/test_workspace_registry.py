@@ -271,8 +271,10 @@ async def test_v1_migration_backfills_git_identity_and_installs_exact_target_ded
         operation_count = connection.execute("SELECT COUNT(*) FROM workspace_operations").fetchone()[0]
         indexes = {row[1] for row in connection.execute("PRAGMA index_list('workspace_operations')")}
         version = connection.execute("PRAGMA user_version").fetchone()[0]
+        retained_operation = connection.execute("SELECT operation_id, state FROM workspace_operations").fetchone()
     assert identity == worktree.common_git_dir_identity
     assert operation_count == 1
+    assert retained_operation == ("op_v1_terminal", "succeeded")
     assert "workspace_operations_exact_target" in indexes
     assert version == 2
 
@@ -422,8 +424,11 @@ def _create_v1_registry(layout: StorageLayout, *, root: str, common_git_dir: str
         )
         connection.executemany(
             """
-            INSERT INTO workspace_operations VALUES (?, 'ws_v1', 'initial_index', ?, ?, 'now', 'now')
+            INSERT INTO workspace_operations VALUES (?, 'ws_v1', 'initial_index', ?, ?, ?, ?)
             """,
-            [("op_v1_queued", "queued", head), ("op_v1_terminal", "succeeded", head)],
+            [
+                ("op_v1_terminal", "succeeded", head, "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+                ("op_v1_queued", "queued", head, "2026-01-01T00:01:00+00:00", "2026-01-01T00:01:00+00:00"),
+            ],
         )
         connection.execute("PRAGMA user_version = 1")

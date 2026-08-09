@@ -305,10 +305,21 @@ class WorkspaceRegistry:
                     connection.execute(
                         """
                         DELETE FROM workspace_operations
-                        WHERE rowid NOT IN (
-                            SELECT MIN(rowid)
-                            FROM workspace_operations
-                            GROUP BY workspace_id, kind, target_head_commit
+                        WHERE rowid IN (
+                            SELECT rowid
+                            FROM (
+                                SELECT
+                                    rowid,
+                                    ROW_NUMBER() OVER (
+                                        PARTITION BY workspace_id, kind, target_head_commit
+                                        ORDER BY
+                                            CASE WHEN state = 'succeeded' THEN 0 ELSE 1 END,
+                                            updated_at DESC,
+                                            rowid DESC
+                                    ) AS retention_rank
+                                FROM workspace_operations
+                            )
+                            WHERE retention_rank > 1
                         )
                         """
                     )

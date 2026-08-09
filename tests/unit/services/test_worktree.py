@@ -83,6 +83,36 @@ async def test_discovery_rejects_a_head_that_changes_during_the_probe(
     assert calls == [caller_path, root]
 
 
+def test_git_probe_timeout_defaults_to_five_seconds_and_allows_an_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    observed_timeouts: list[float] = []
+
+    def run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        timeout = kwargs["timeout"]
+        assert isinstance(timeout, int | float)
+        observed_timeouts.append(float(timeout))
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(worktree_module.subprocess, "run", run)
+    monkeypatch.delenv("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS", raising=False)
+    worktree_module._run_git(tmp_path, "status")
+    monkeypatch.setenv("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS", "12.5")
+    worktree_module._run_git(tmp_path, "status")
+
+    assert observed_timeouts == [5.0, 12.5]
+
+
+def test_git_probe_timeout_remains_a_distinct_discovery_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired("git", 5)
+
+    monkeypatch.setattr(worktree_module.subprocess, "run", timeout)
+
+    with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_PROBE_TIMEOUT"):
+        worktree_module._run_git(tmp_path, "status")
+
+
 def _commit_repository(path: Path) -> None:
     _git(path, "init", "-q")
     _git(path, "config", "user.email", "dolphin-tests@example.invalid")

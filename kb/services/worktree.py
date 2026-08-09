@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+_DEFAULT_GIT_PROBE_TIMEOUT_SECONDS = 5.0
 
 
 class WorktreeDiscoveryError(ValueError):
@@ -101,7 +104,7 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
             capture_output=True,
             check=False,
             text=True,
-            timeout=1,
+            timeout=_git_probe_timeout_seconds(),
         )
     except FileNotFoundError as exc:
         raise WorktreeDiscoveryError("GIT_UNAVAILABLE") from exc
@@ -109,3 +112,15 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_TIMEOUT") from exc
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_PROBE_FAILED") from exc
+
+
+def _git_probe_timeout_seconds() -> float:
+    """Resolve a bounded user override without losing a safe enrollment default."""
+    raw = os.environ.get("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS")
+    if raw is None:
+        return _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw)
+    except ValueError:
+        return _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
+    return timeout if timeout > 0 else _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
