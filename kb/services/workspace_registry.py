@@ -285,20 +285,12 @@ class WorkspaceRegistry:
                 )
             boundary_match = None
             if boundary_row is not None:
-                boundary = _boundary_from_row(tuple(boundary_row[3:]))
-                child_row = (
-                    connection.execute(
-                        "SELECT workspace_id FROM workspace_registrations WHERE root = ? LIMIT 1",
-                        (str(boundary.root),),
-                    ).fetchone()
-                    if boundary.root is not None
-                    else None
-                )
-                if child_row is not None:
+                boundary = _boundary_from_row(tuple(boundary_row[3:10]))
+                if boundary_row[10] is not None:
                     boundary = replace(
                         boundary,
                         workspace_id=_bounded_registry_text(
-                            child_row[0],
+                            boundary_row[10],
                             label="workspace ID",
                             max_length=ENTITY_ID_MAX_LENGTH,
                         ),
@@ -963,30 +955,24 @@ class WorkspaceRegistry:
     ) -> tuple[RepositoryBoundary, ...]:
         rows = connection.execute(
             """
-            SELECT kind, relative_path, state, root, expected_commit, observed_commit, dirty
-            FROM workspace_repository_boundaries
-            WHERE workspace_id = ?
-            ORDER BY relative_path
+            SELECT b.kind, b.relative_path, b.state, b.root, b.expected_commit, b.observed_commit, b.dirty,
+                   child.workspace_id
+            FROM workspace_repository_boundaries AS b
+            LEFT JOIN workspace_registrations AS child ON child.root = b.root
+            WHERE b.workspace_id = ?
+            ORDER BY b.relative_path
             LIMIT ?
             """,
             (workspace_id, _MAX_BOUNDARIES_PER_READ),
         ).fetchall()
         boundaries: list[RepositoryBoundary] = []
         for row in rows:
-            boundary = _boundary_from_row(row)
-            child_row = (
-                connection.execute(
-                    "SELECT workspace_id FROM workspace_registrations WHERE root = ? LIMIT 1",
-                    (str(boundary.root),),
-                ).fetchone()
-                if boundary.root is not None
-                else None
-            )
-            if child_row is not None:
+            boundary = _boundary_from_row(tuple(row[:7]))
+            if row[7] is not None:
                 boundary = replace(
                     boundary,
                     workspace_id=_bounded_registry_text(
-                        child_row[0],
+                        row[7],
                         label="workspace ID",
                         max_length=ENTITY_ID_MAX_LENGTH,
                     ),
@@ -1207,12 +1193,14 @@ _DEEPEST_BOUNDARY_FOR_PATH_QUERY = """
             b.root,
             b.expected_commit,
             b.observed_commit,
-            b.dirty
+            b.dirty,
+            child.workspace_id AS child_workspace_id
         FROM workspace_repository_boundaries AS b
         JOIN workspace_registrations AS w ON w.workspace_id = b.workspace_id
+        LEFT JOIN workspace_registrations AS child ON child.root = b.root
     )
     SELECT parent_workspace_id, boundary_root, parent_root, kind, relative_path, state,
-           root, expected_commit, observed_commit, dirty
+           root, expected_commit, observed_commit, dirty, child_workspace_id
     FROM boundary_projection
     WHERE ? = boundary_root
        OR (length(?) > length(boundary_root) AND substr(?, 1, length(boundary_root) + 1) = boundary_root || '/')
