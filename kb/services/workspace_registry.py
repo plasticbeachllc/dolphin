@@ -1509,9 +1509,17 @@ class WorkspaceRegistry:
                                 )
                             ),
                             CHECK (
-                                state = 'staging'
+                                (
+                                    state = 'staging'
+                                    AND manifest_id IS NULL
+                                    AND manifest_digest IS NULL
+                                    AND metadata_item_count IS NULL
+                                    AND keyword_item_count IS NULL
+                                    AND ready_at IS NULL
+                                )
                                 OR (
-                                    vector_commit_token IS NOT NULL
+                                    state IN ('ready', 'published')
+                                    AND vector_commit_token IS NOT NULL
                                     AND manifest_id IS NOT NULL
                                     AND manifest_digest IS NOT NULL
                                     AND metadata_item_count IS NOT NULL
@@ -1564,6 +1572,7 @@ class WorkspaceRegistry:
                             publication_id TEXT NOT NULL,
                             acquired_at TEXT NOT NULL,
                             expires_at TEXT NOT NULL,
+                            CHECK (expires_at > acquired_at),
                             FOREIGN KEY (generation_id, publication_id)
                                 REFERENCES generations(generation_id, publication_id)
                         ) STRICT

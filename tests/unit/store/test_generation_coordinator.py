@@ -292,6 +292,46 @@ def test_writer_acquisition_retries_brief_sqlite_contention(
     assert generation.operation_id == lease.operation.operation_id
 
 
+def test_database_rejects_impossible_generation_and_reader_lease_states(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    coordinator, _registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation = coordinator.create_staging(lease)
+    with sqlite3.connect(layout.metadata_db) as connection:
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                UPDATE generations
+                SET manifest_id = 'invalid_manifest', manifest_digest = 'invalid_digest',
+                    metadata_item_count = 1, keyword_item_count = 1, ready_at = ?
+                WHERE generation_id = ?
+                """,
+                (clock.current.isoformat(), generation.generation_id),
+            )
+        connection.rollback()
+
+    generation_id = _ready_generation(coordinator, lease, clock, suffix="database-invariants")
+    clock.advance(seconds=1)
+    snapshot = coordinator.publish(
+        lease,
+        generation_id,
+        expected_previous_generation_id=None,
+    )
+    acquired_at = clock.current.isoformat()
+    with sqlite3.connect(layout.metadata_db) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO generation_reader_leases (
+                    lease_id, generation_id, publication_id, acquired_at, expires_at
+                ) VALUES ('read_invalid', ?, ?, ?, ?)
+                """,
+                (snapshot.generation_id, snapshot.publication_id, acquired_at, acquired_at),
+            )
+
+
 def _coordinator_with_lease(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
