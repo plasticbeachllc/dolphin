@@ -128,6 +128,47 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
 
 
 @pytest.mark.asyncio
+async def test_new_registry_reads_an_initialized_database_without_a_write_lock(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    layout = macos_storage_layout(home=home)
+    registration = WorkspaceRegistry(layout).register(await discover_git_worktree(worktree_root))
+
+    # A concurrent writer may hold a RESERVED lock, but a fresh registry should
+    # inspect the schema version and perform this read without trying schema DDL.
+    lock_connection = sqlite3.connect(layout.metadata_db, timeout=0)
+    lock_connection.execute("BEGIN IMMEDIATE")
+    try:
+        loaded = WorkspaceRegistry(layout).get_operation("missing-operation")
+    finally:
+        lock_connection.rollback()
+        lock_connection.close()
+
+    assert registration.workspace_id.startswith("ws_")
+    assert loaded is None
+
+
+@pytest.mark.asyncio
+async def test_sqlite_contention_is_reported_as_a_registry_error(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    layout = macos_storage_layout(home=home)
+    registry = WorkspaceRegistry(layout)
+    registry.register(await discover_git_worktree(worktree_root))
+
+    lock_connection = sqlite3.connect(layout.metadata_db, timeout=0)
+    lock_connection.execute("BEGIN EXCLUSIVE")
+    try:
+        with pytest.raises(WorkspaceRegistryError, match="busy or unavailable"):
+            registry.get_operation("missing-operation")
+    finally:
+        lock_connection.rollback()
+        lock_connection.close()
+
+
+@pytest.mark.asyncio
 async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"

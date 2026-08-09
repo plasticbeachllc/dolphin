@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import sqlite3
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -62,6 +63,8 @@ class WorkspaceRegistry:
 
     def __init__(self, layout: StorageLayout) -> None:
         self._layout = layout
+        self._initialized = False
+        self._initialization_lock = threading.Lock()
 
     def register(self, worktree: GitWorktree) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
@@ -139,47 +142,85 @@ class WorkspaceRegistry:
         try:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA busy_timeout = 1000")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS workspace_registrations (
-                    workspace_id TEXT PRIMARY KEY,
-                    repository_id TEXT NOT NULL,
-                    root TEXT NOT NULL UNIQUE,
-                    common_git_dir TEXT NOT NULL,
-                    branch TEXT,
-                    head_commit TEXT NOT NULL,
-                    registration_epoch TEXT NOT NULL,
-                    cleanup_receipt_hash TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                ) STRICT
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS workspace_operations (
-                    operation_id TEXT PRIMARY KEY,
-                    workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
-                    kind TEXT NOT NULL CHECK (kind IN ('initial_index', 'sync', 'recovery')),
-                    state TEXT NOT NULL CHECK (state IN (
-                        'queued', 'running', 'awaiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'
-                    )),
-                    target_head_commit TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                ) STRICT
-                """
-            )
-            connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
-            connection.execute(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
-                ON workspace_operations (workspace_id, kind, target_head_commit)
-                """
-            )
+            self._initialize_schema(connection)
             yield connection
+        except sqlite3.Error as exc:
+            raise WorkspaceRegistryError("Dolphin metadata storage is busy or unavailable") from exc
         finally:
             connection.close()
+
+    def _initialize_schema(self, connection: sqlite3.Connection) -> None:
+        """Perform the one-time, versioned schema migration before normal registry access."""
+        if self._initialized:
+            return
+        with self._initialization_lock:
+            if self._initialized:
+                return
+            version_row = connection.execute("PRAGMA user_version").fetchone()
+            version = int(version_row[0]) if version_row is not None else 0
+            if version == 1:
+                self._initialized = True
+                return
+            if version > 1:
+                raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
+
+            # Only an uninitialized database needs a write lock and DDL. Once the
+            # schema version is established, even a newly constructed registry can
+            # serve reads without contending with indexing workers.
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                version_row = connection.execute("PRAGMA user_version").fetchone()
+                version = int(version_row[0]) if version_row is not None else 0
+                if version == 1:
+                    connection.commit()
+                    self._initialized = True
+                    return
+                if version > 1:
+                    raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS workspace_registrations (
+                        workspace_id TEXT PRIMARY KEY,
+                        repository_id TEXT NOT NULL,
+                        root TEXT NOT NULL UNIQUE,
+                        common_git_dir TEXT NOT NULL,
+                        branch TEXT,
+                        head_commit TEXT NOT NULL,
+                        registration_epoch TEXT NOT NULL,
+                        cleanup_receipt_hash TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    ) STRICT
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS workspace_operations (
+                        operation_id TEXT PRIMARY KEY,
+                        workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
+                        kind TEXT NOT NULL CHECK (kind IN ('initial_index', 'sync', 'recovery')),
+                        state TEXT NOT NULL CHECK (state IN (
+                            'queued', 'running', 'awaiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'
+                        )),
+                        target_head_commit TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    ) STRICT
+                    """
+                )
+                connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
+                connection.execute(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
+                    ON workspace_operations (workspace_id, kind, target_head_commit)
+                    """
+                )
+                connection.execute("PRAGMA user_version = 1")
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
+            self._initialized = True
 
     def _register(self, connection: sqlite3.Connection, worktree: GitWorktree) -> WorkspaceRegistration:
         root = str(worktree.root)
