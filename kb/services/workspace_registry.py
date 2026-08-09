@@ -150,7 +150,7 @@ class OperationSnapshot:
     """One immediate durable operation projection for agent inspection."""
 
     operation_id: str
-    workspace_id: str
+    workspace_id: str | None
     kind: OperationKind
     state: OperationState
     target_head_commit: str

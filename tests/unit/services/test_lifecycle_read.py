@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import stat
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,9 @@ import pytest
 from kb.mcp.contracts import OperationStatusInput, RepoListInput, StatusInput
 from kb.mcp.errors import ToolFailure
 from kb.runtime.storage import macos_storage_layout
-from kb.services.lifecycle_read import OperationStatusService, RepoListService
+from kb.services.lifecycle_read import OperationStatusService, RepoListService, _operation_status_result
 from kb.services.status import StatusService
-from kb.services.workspace_registry import OperationState, WorkspaceRegistry
+from kb.services.workspace_registry import OperationSnapshot, OperationState, WorkspaceRegistry
 from kb.services.worktree import discover_git_worktree
 
 
@@ -130,6 +131,26 @@ async def test_lifecycle_read_errors_are_constant_shape(tmp_path: Path) -> None:
     assert invalid_cursor.value.error.code == "CURSOR_INVALID"
     assert missing_operation.value.error.code == "OPERATION_MISSING"
     assert invalid_cursor.value.error.details["next_action"]["arguments"] == {"cursor": None}
+
+
+def test_operation_status_marks_a_redacted_workspace_unavailable() -> None:
+    observed_at = datetime(2026, 8, 9, tzinfo=UTC)
+    result = _operation_status_result(
+        OperationSnapshot(
+            operation_id="op_forgotten",
+            workspace_id=None,
+            kind="initial_index",
+            state=OperationState.SUCCEEDED,
+            target_head_commit="a" * 40,
+            attempt=1,
+            created_at=observed_at,
+            updated_at=observed_at,
+            terminal_at=observed_at,
+        )
+    )
+
+    assert result.workspace_available is False
+    assert result.workspace_id is None
 
 
 def _commit_repository(path: Path) -> Path:

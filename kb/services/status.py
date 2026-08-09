@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import secrets
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,7 +12,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from kb.cleanup_authority import CLEANUP_RECEIPT_PREFIX
 from kb.mcp.contracts import StatusInput
 from kb.services.lifecycle_models import NextAction, WorkspaceSummary
 from kb.services.lifecycle_read import workspace_summary
@@ -179,20 +177,15 @@ def _is_outside_worktree_error(stderr: str | None) -> bool:
 
 def _next_actions_for_probe(probe: _WorktreeProbe) -> list[NextAction]:
     if probe.root is not None:
-        return [_repo_add_action(probe.root)]
+        return [
+            NextAction(
+                action="registration_unavailable",
+                reason="Dolphin has not registered this Git worktree, but repo_add is unavailable in this runtime.",
+            )
+        ]
     if probe.unavailable_reason is not None:
         return [NextAction(action="inspect_git", reason=probe.unavailable_reason)]
     return []
-
-
-def _repo_add_action(worktree_root: Path) -> NextAction:
-    cleanup_receipt = CLEANUP_RECEIPT_PREFIX + secrets.token_urlsafe(32)
-    return NextAction(
-        action="register_worktree",
-        reason="Dolphin has not registered this Git worktree; retain these exact arguments for safe retry/cleanup.",
-        tool="repo_add",
-        arguments={"path": str(worktree_root), "cleanup_receipt": cleanup_receipt},
-    )
 
 
 def _tool_availability(storage_available: bool) -> ToolAvailability:

@@ -163,7 +163,7 @@ def _operation_status_result(operation: OperationSnapshot) -> OperationStatusRes
         state=operation.state,
         attempt=operation.attempt,
         target_head_commit=operation.target_head_commit,
-        workspace_available=True,
+        workspace_available=operation.workspace_id is not None,
         workspace_id=operation.workspace_id,
         phase=None,
         counters=OperationCounters(),
