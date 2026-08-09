@@ -257,6 +257,7 @@ def workspace_resolution_error(resolution: WorkspaceResolution, *, tool_name: st
     """Project a failed resolution into a bounded, task-ready MCP error."""
     if resolution.outcome is WorkspaceResolutionOutcome.AMBIGUOUS:
         candidates = [_workspace_choice(workspace) for workspace in resolution.workspace_candidates]
+        boundary_candidates = [_boundary_choice(boundary) for boundary in resolution.boundary_candidates]
         unregistered_roots = [str(root) for root in resolution.unregistered_candidates]
         return ToolError(
             code="WORKSPACE_AMBIGUOUS",
@@ -264,6 +265,7 @@ def workspace_resolution_error(resolution: WorkspaceResolution, *, tool_name: st
             retryable=False,
             details={
                 "candidates": candidates,
+                "boundary_candidates": boundary_candidates,
                 "unregistered_roots": unregistered_roots,
                 "candidates_truncated": resolution.candidates_truncated,
                 "next_action": {"tool": "repo_list", "arguments": {"cursor": None}},
@@ -328,6 +330,15 @@ def _workspace_choice(workspace: WorkspaceSnapshot) -> dict[str, str | None]:
         "root": workspace.root,
         "branch": workspace.branch,
         "head_commit": workspace.head_commit,
+    }
+
+
+def _boundary_choice(boundary: BoundaryPathMatch) -> dict[str, str | None]:
+    return {
+        "root": boundary.root,
+        "kind": boundary.boundary.kind.value,
+        "state": boundary.boundary.state.value,
+        "workspace_id": boundary.boundary.workspace_id,
     }
 
 

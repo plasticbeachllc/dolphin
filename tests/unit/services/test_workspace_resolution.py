@@ -214,6 +214,7 @@ def test_boundary_failures_map_to_typed_errors(tmp_path: Path) -> None:
                 kind=RepositoryBoundaryKind.SUBMODULE,
                 relative_path="submodule",
                 state=RepositoryBoundaryState.UNINITIALIZED,
+                workspace_id="ws_submodule",
             ),
         ),
     )
@@ -232,6 +233,28 @@ def test_boundary_failures_map_to_typed_errors(tmp_path: Path) -> None:
 
     assert workspace_resolution_error(uninitialized, tool_name="search").code == "SUBMODULE_UNINITIALIZED"
     assert workspace_resolution_error(invalid, tool_name="search").code == "REPOSITORY_BOUNDARY_INVALID"
+    assert uninitialized.boundary is not None
+    assert invalid.boundary is not None
+    ambiguous = WorkspaceResolution(
+        outcome=WorkspaceResolutionOutcome.AMBIGUOUS,
+        source=WorkspaceResolutionSource.MCP_ROOT,
+        boundary_candidates=(uninitialized.boundary, invalid.boundary),
+    )
+
+    assert workspace_resolution_error(ambiguous, tool_name="search").details["boundary_candidates"] == [
+        {
+            "root": str(tmp_path / "submodule"),
+            "kind": "submodule",
+            "state": "uninitialized",
+            "workspace_id": "ws_submodule",
+        },
+        {
+            "root": str(tmp_path / "nested"),
+            "kind": "nested_git",
+            "state": "invalid",
+            "workspace_id": None,
+        },
+    ]
 
 
 def _registry(tmp_path: Path) -> WorkspaceRegistry:
