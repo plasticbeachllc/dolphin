@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, cast
 
 import mcp.types as mcp_types
@@ -19,35 +20,23 @@ from kb.mcp.registry import TOOL_REGISTRY, ToolSpec, require_frozen_public_regis
 from kb.version import get_version
 
 type ToolResult = BaseModel | Mapping[str, Any]
-type ToolHandler = Callable[[BaseModel], ToolResult | Awaitable[ToolResult]]
+type ToolHandler = Callable[[Any], ToolResult | Awaitable[ToolResult]]
 
 
-def create_server(
-    handlers: Mapping[str, ToolHandler] | None = None,
-    *,
-    specs: Sequence[ToolSpec] = TOOL_REGISTRY,
-    version: str | None = None,
-) -> Server:
-    """Create the fixed Dolphin MCP server without any resources or prompts.
+@dataclass(frozen=True, slots=True)
+class MCPAdapter:
+    """Typed, testable adapter between Dolphin services and MCP callbacks."""
 
-    ``handlers`` is dependency injection for the transport-independent
-    application services. Until a service is supplied, a tool deliberately
-    returns a bounded readiness result instead of disappearing from discovery.
-    """
-    resolved_handlers = _complete_handlers(handlers, specs)
-    require_frozen_public_registry(specs, resolved_handlers)
+    specs: tuple[ToolSpec, ...]
+    handlers: Mapping[str, ToolHandler]
 
-    async def list_tools(
-        _context: Any,
-        _params: mcp_types.PaginatedRequestParams | None,
-    ) -> mcp_types.ListToolsResult:
-        return mcp_types.ListToolsResult(tools=[_wire_tool(spec) for spec in specs])
+    async def list_tools(self) -> mcp_types.ListToolsResult:
+        """Return the frozen discovery list in its canonical order."""
+        return mcp_types.ListToolsResult(tools=[_wire_tool(spec) for spec in self.specs])
 
-    async def call_tool(
-        _context: Any,
-        params: mcp_types.CallToolRequestParams,
-    ) -> mcp_types.CallToolResult:
-        spec = next((candidate for candidate in specs if candidate.name == params.name), None)
+    async def call_tool(self, params: mcp_types.CallToolRequestParams) -> mcp_types.CallToolResult:
+        """Validate one call then delegate it to its registered application service."""
+        spec = next((candidate for candidate in self.specs if candidate.name == params.name), None)
         if spec is None:
             return _error_result(ToolError(code="TOOL_UNKNOWN", message="Unknown Dolphin tool.", retryable=False))
 
@@ -57,7 +46,7 @@ def create_server(
             return _error_result(invalid_arguments(_validation_message(exc)))
 
         try:
-            handler_result = resolved_handlers[spec.name](parsed_input)
+            handler_result = self.handlers[spec.name](parsed_input)
             result = await handler_result if inspect.isawaitable(handler_result) else handler_result
             if not isinstance(result, BaseModel) and not isinstance(result, Mapping):
                 raise TypeError("Dolphin MCP handlers must return a Pydantic model or mapping")
@@ -73,6 +62,33 @@ def create_server(
                 )
             )
 
+
+def create_server(
+    handlers: Mapping[str, ToolHandler] | None = None,
+    *,
+    specs: Sequence[ToolSpec] = TOOL_REGISTRY,
+    version: str | None = None,
+) -> Server:
+    """Create the fixed Dolphin MCP server without any resources or prompts.
+
+    ``handlers`` is dependency injection for the transport-independent
+    application services. Until a service is supplied, a tool deliberately
+    returns a bounded readiness result instead of disappearing from discovery.
+    """
+    adapter = create_adapter(handlers, specs=specs)
+
+    async def list_tools(
+        _context: Any,
+        _params: mcp_types.PaginatedRequestParams | None,
+    ) -> mcp_types.ListToolsResult:
+        return await adapter.list_tools()
+
+    async def call_tool(
+        _context: Any,
+        params: mcp_types.CallToolRequestParams,
+    ) -> mcp_types.CallToolResult:
+        return await adapter.call_tool(params)
+
     return Server(
         "dolphin",
         version=version or get_version(),
@@ -85,6 +101,17 @@ def create_server(
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
+
+
+def create_adapter(
+    handlers: Mapping[str, ToolHandler] | None = None,
+    *,
+    specs: Sequence[ToolSpec] = TOOL_REGISTRY,
+) -> MCPAdapter:
+    """Create a validated service adapter independently of the stdio server."""
+    resolved_handlers = _complete_handlers(handlers, specs)
+    require_frozen_public_registry(specs, resolved_handlers)
+    return MCPAdapter(specs=tuple(specs), handlers=resolved_handlers)
 
 
 def run_stdio() -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from pydantic import ValidationError
 
@@ -93,8 +95,14 @@ def _assert_closed_objects(node: object) -> None:
         return
     if not isinstance(node, dict):
         return
-    if node.get("type") == "object" or "properties" in node:
-        assert node["additionalProperties"] is False
-        assert set(node["required"]) == set(node.get("properties", {}))
-    for value in node.values():
+    schema_node = cast(dict[str, object], node)
+    if schema_node.get("type") == "object" or "properties" in schema_node:
+        additional_properties = schema_node.get("additionalProperties")
+        required = schema_node.get("required")
+        properties = schema_node.get("properties")
+        assert additional_properties is False
+        assert isinstance(required, list)
+        assert isinstance(properties, dict)
+        assert set(required) == set(properties)
+    for value in schema_node.values():
         _assert_closed_objects(value)
