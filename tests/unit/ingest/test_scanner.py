@@ -37,6 +37,7 @@ class TestScannerBasic:
                 "-C",
                 str(repo_path),
                 "add",
+                "-f",
                 "src/app.py",
                 "src/app.ts",
                 "docs/readme.md",
@@ -174,7 +175,7 @@ class TestIgnorePatterns:
         (repo_path / ".env").write_text("SECRET=value\n")
 
         # Add and commit
-        subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo_path), "add", "-f", "-A"], check=True)
         subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True)
 
         ignores = build_ignore_set()

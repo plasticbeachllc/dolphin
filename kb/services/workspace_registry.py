@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import sqlite3
 import threading
@@ -30,12 +31,7 @@ from kb.lifecycle_limits import (
     REPO_LIST_PAGE_SIZE,
 )
 from kb.runtime.storage import StorageLayout, StorageLayoutError
-from kb.services.worktree import (
-    GitWorktree,
-    WorktreeDiscoveryError,
-    git_directory_identity,
-    validate_git_worktree_snapshot,
-)
+from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
 
 
 class WorkspaceRegistryError(RuntimeError):
@@ -50,7 +46,7 @@ class RepoListCursorExpired(ValueError):
     """The repository-list cursor names an obsolete actionable-list revision."""
 
 
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
 _OPERATION_STATUS_RETENTION = timedelta(days=30)
 _REGISTRATION_LOCK_DEADLINE_SECONDS = 15.0
@@ -467,7 +463,7 @@ class WorkspaceRegistry:
                 connection.close()
 
     def _initialize_schema(self, connection: sqlite3.Connection) -> None:
-        """Perform the one-time, versioned schema migration before normal registry access."""
+        """Create the current prerelease schema without carrying legacy migrations."""
         if self._initialized:
             return
         with self._initialization_lock:
@@ -478,8 +474,10 @@ class WorkspaceRegistry:
             if version == _SCHEMA_VERSION:
                 self._initialized = True
                 return
-            if version > _SCHEMA_VERSION:
-                raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
+            if version != 0:
+                raise WorkspaceRegistryError(
+                    "Dolphin metadata storage uses an unsupported prerelease schema; remove it and re-enroll worktrees"
+                )
 
             # Only an uninitialized database needs a write lock and DDL. Once the
             # schema version is established, even a newly constructed registry can
@@ -492,8 +490,11 @@ class WorkspaceRegistry:
                     connection.commit()
                     self._initialized = True
                     return
-                if version > _SCHEMA_VERSION:
-                    raise WorkspaceRegistryError("Dolphin metadata storage has an unsupported schema version")
+                if version != 0:
+                    raise WorkspaceRegistryError(
+                        "Dolphin metadata storage uses an unsupported prerelease schema; "
+                        "remove it and re-enroll worktrees"
+                    )
                 if version == 0:
                     connection.execute(
                         """
@@ -503,6 +504,8 @@ class WorkspaceRegistry:
                             root TEXT NOT NULL UNIQUE,
                             common_git_dir TEXT NOT NULL,
                             common_git_dir_identity TEXT NOT NULL,
+                            worktree_git_dir TEXT NOT NULL,
+                            worktree_git_dir_identity TEXT NOT NULL,
                             branch TEXT,
                             head_commit TEXT NOT NULL,
                             registration_epoch TEXT NOT NULL,
@@ -510,6 +513,12 @@ class WorkspaceRegistry:
                             created_at TEXT NOT NULL,
                             updated_at TEXT NOT NULL
                         ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE UNIQUE INDEX workspace_registrations_git_identity
+                        ON workspace_registrations (common_git_dir_identity, worktree_git_dir_identity)
                         """
                     )
                     connection.execute(
@@ -537,83 +546,12 @@ class WorkspaceRegistry:
                         """
                     )
                     self._create_registry_metadata(connection)
-                elif version == 1:
-                    connection.execute(
-                        """
-                        ALTER TABLE workspace_registrations
-                        ADD COLUMN common_git_dir_identity TEXT NOT NULL DEFAULT ''
-                        """
-                    )
-                    self._backfill_v1_repository_identities(connection)
-                    connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
-                    connection.execute("DROP INDEX IF EXISTS workspace_operations_exact_target")
-                    connection.execute(
-                        """
-                        DELETE FROM workspace_operations
-                        WHERE rowid IN (
-                            SELECT rowid
-                            FROM (
-                                SELECT
-                                    rowid,
-                                    ROW_NUMBER() OVER (
-                                        PARTITION BY workspace_id, kind, target_head_commit
-                                        ORDER BY
-                                            CASE WHEN state = 'succeeded' THEN 0 ELSE 1 END,
-                                            updated_at DESC,
-                                            rowid DESC
-                                    ) AS retention_rank
-                                FROM workspace_operations
-                            )
-                            WHERE retention_rank > 1
-                        )
-                        """
-                    )
-                    self._migrate_operations_to_retryable_attempts(connection)
-                    self._migrate_operation_terminal_timestamps(connection)
-                    self._create_registry_metadata(connection)
-                elif version == 2:
-                    self._migrate_operations_to_retryable_attempts(connection)
-                    self._migrate_operation_terminal_timestamps(connection)
-                    self._create_registry_metadata(connection)
-                elif version == 3:
-                    self._migrate_operation_terminal_timestamps(connection)
-                    self._create_registry_metadata(connection)
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
             self._initialized = True
-
-    @staticmethod
-    def _migrate_operations_to_retryable_attempts(connection: sqlite3.Connection) -> None:
-        """Retain terminal history while allowing a new attempt after failure or cancellation."""
-        connection.execute(
-            """
-            ALTER TABLE workspace_operations
-            ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1 CHECK (attempt >= 1)
-            """
-        )
-        connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
-        connection.execute("DROP INDEX IF EXISTS workspace_operations_exact_target")
-        connection.execute(
-            """
-            CREATE UNIQUE INDEX workspace_operations_reusable_target
-            ON workspace_operations (workspace_id, kind, target_head_commit)
-            WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused', 'succeeded')
-            """
-        )
-
-    @staticmethod
-    def _migrate_operation_terminal_timestamps(connection: sqlite3.Connection) -> None:
-        connection.execute("ALTER TABLE workspace_operations ADD COLUMN terminal_at TEXT")
-        connection.execute(
-            """
-            UPDATE workspace_operations
-            SET terminal_at = updated_at
-            WHERE state IN ('succeeded', 'failed', 'cancelled')
-            """
-        )
 
     @staticmethod
     def _create_registry_metadata(connection: sqlite3.Connection) -> None:
@@ -663,26 +601,6 @@ class WorkspaceRegistry:
                 time.sleep(min(backoff, remaining))
                 backoff = min(backoff * 2, _REGISTRATION_LOCK_MAX_BACKOFF_SECONDS)
 
-    @staticmethod
-    def _backfill_v1_repository_identities(connection: sqlite3.Connection) -> None:
-        """Bind retained v1 rows to their Git directory, pruning unreachable legacy state."""
-        rows = connection.execute("SELECT workspace_id, common_git_dir FROM workspace_registrations").fetchall()
-        for workspace_id, common_git_dir in rows:
-            try:
-                identity = git_directory_identity(Path(common_git_dir))
-            except WorktreeDiscoveryError:
-                connection.execute("DELETE FROM workspace_operations WHERE workspace_id = ?", (workspace_id,))
-                connection.execute("DELETE FROM workspace_registrations WHERE workspace_id = ?", (workspace_id,))
-                continue
-            connection.execute(
-                """
-                UPDATE workspace_registrations
-                SET repository_id = ?, common_git_dir_identity = ?
-                WHERE workspace_id = ?
-                """,
-                (_repository_id_from_common_git_dir(common_git_dir, identity), identity, workspace_id),
-            )
-
     def _register(
         self,
         connection: sqlite3.Connection,
@@ -692,7 +610,8 @@ class WorkspaceRegistry:
         root = str(worktree.root)
         existing = connection.execute(
             """
-            SELECT workspace_id, repository_id, common_git_dir, common_git_dir_identity, cleanup_receipt_hash
+            SELECT workspace_id, repository_id, common_git_dir, common_git_dir_identity,
+                   worktree_git_dir_identity, cleanup_receipt_hash
             FROM workspace_registrations
             WHERE root = ?
             """,
@@ -700,20 +619,87 @@ class WorkspaceRegistry:
         ).fetchone()
         now = datetime.now(UTC).isoformat()
         if existing is not None:
-            workspace_id, repository_id, common_git_dir, common_git_dir_identity, cleanup_receipt_hash = existing
+            (
+                workspace_id,
+                repository_id,
+                common_git_dir,
+                common_git_dir_identity,
+                worktree_git_dir_identity,
+                cleanup_receipt_hash,
+            ) = existing
             if (
-                common_git_dir != str(worktree.common_git_dir)
-                or common_git_dir_identity != worktree.common_git_dir_identity
+                common_git_dir_identity != worktree.common_git_dir_identity
+                or worktree_git_dir_identity != worktree.worktree_git_dir_identity
                 or repository_id != _repository_id(worktree)
             ):
-                raise WorkspaceRegistryError("Dolphin workspace root belongs to a different Git repository")
+                raise WorkspaceRegistryError("Dolphin workspace root belongs to a different Git repository or worktree")
             connection.execute(
                 """
                 UPDATE workspace_registrations
-                SET branch = ?, head_commit = ?, updated_at = ?
+                SET common_git_dir = ?, worktree_git_dir = ?, branch = ?, head_commit = ?, updated_at = ?
                 WHERE workspace_id = ?
                 """,
-                (worktree.branch, worktree.head_commit, now, workspace_id),
+                (
+                    str(worktree.common_git_dir),
+                    str(worktree.worktree_git_dir),
+                    worktree.branch,
+                    worktree.head_commit,
+                    now,
+                    workspace_id,
+                ),
+            )
+            if common_git_dir != str(worktree.common_git_dir):
+                connection.execute(
+                    "UPDATE workspace_registry_meta SET list_revision = list_revision + 1 WHERE singleton = 1"
+                )
+            return WorkspaceRegistration(
+                workspace_id=workspace_id,
+                repository_id=repository_id,
+                root=root,
+                branch=worktree.branch,
+                head_commit=worktree.head_commit,
+                created=False,
+                cleanup_receipt=(
+                    cleanup_receipt
+                    if secrets.compare_digest(cleanup_receipt_hash, _receipt_hash(cleanup_receipt))
+                    else None
+                ),
+            )
+
+        identity_match = connection.execute(
+            """
+            SELECT workspace_id, repository_id, root, cleanup_receipt_hash
+            FROM workspace_registrations
+            WHERE common_git_dir_identity = ? AND worktree_git_dir_identity = ?
+            """,
+            (worktree.common_git_dir_identity, worktree.worktree_git_dir_identity),
+        ).fetchone()
+        if identity_match is not None:
+            workspace_id, repository_id, previous_root, cleanup_receipt_hash = identity_match
+            if repository_id != _repository_id(worktree):
+                raise WorkspaceRegistryError("Dolphin Git filesystem identity is inconsistent")
+            if _path_entry_exists(previous_root):
+                raise WorkspaceRegistryError(
+                    "Dolphin Git worktree identity is already registered at an existing filesystem path"
+                )
+            connection.execute(
+                """
+                UPDATE workspace_registrations
+                SET root = ?, common_git_dir = ?, worktree_git_dir = ?, branch = ?, head_commit = ?, updated_at = ?
+                WHERE workspace_id = ?
+                """,
+                (
+                    root,
+                    str(worktree.common_git_dir),
+                    str(worktree.worktree_git_dir),
+                    worktree.branch,
+                    worktree.head_commit,
+                    now,
+                    workspace_id,
+                ),
+            )
+            connection.execute(
+                "UPDATE workspace_registry_meta SET list_revision = list_revision + 1 WHERE singleton = 1"
             )
             return WorkspaceRegistration(
                 workspace_id=workspace_id,
@@ -735,8 +721,9 @@ class WorkspaceRegistry:
             """
             INSERT INTO workspace_registrations (
                 workspace_id, repository_id, root, common_git_dir, common_git_dir_identity,
-                branch, head_commit, registration_epoch, cleanup_receipt_hash, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                worktree_git_dir, worktree_git_dir_identity, branch, head_commit, registration_epoch,
+                cleanup_receipt_hash, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 workspace_id,
@@ -744,6 +731,8 @@ class WorkspaceRegistry:
                 root,
                 str(worktree.common_git_dir),
                 worktree.common_git_dir_identity,
+                str(worktree.worktree_git_dir),
+                worktree.worktree_git_dir_identity,
                 worktree.branch,
                 worktree.head_commit,
                 f"epoch_{uuid.uuid4().hex}",
@@ -844,13 +833,23 @@ class WorkspaceRegistry:
 
 def _repository_id(worktree: GitWorktree) -> str:
     """Derive a stable local repository-family key without a caller-controlled name."""
-    return _repository_id_from_common_git_dir(str(worktree.common_git_dir), worktree.common_git_dir_identity)
+    return _repository_id_from_common_git_identity(worktree.common_git_dir_identity)
 
 
-def _repository_id_from_common_git_dir(common_git_dir: str, common_git_dir_identity: str) -> str:
-    identity = f"{common_git_dir}\0{common_git_dir_identity}"
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+def _repository_id_from_common_git_identity(common_git_dir_identity: str) -> str:
+    digest = hashlib.sha256(common_git_dir_identity.encode("utf-8")).hexdigest()
     return f"repo_{digest[:24]}"
+
+
+def _path_entry_exists(path: str) -> bool:
+    """Check the prior registered root without following a replacement symlink."""
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise WorkspaceRegistryError("Dolphin cannot verify the prior worktree filesystem path") from exc
+    return True
 
 
 def _receipt_hash(receipt: str) -> str:
