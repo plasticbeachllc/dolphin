@@ -396,7 +396,7 @@ def test_first_install_reader_rechecks_coordination_after_observing_no_install_d
         assert read.result(timeout=5) == text
 
 
-def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path: Path) -> None:
+def test_artifact_store_read_recovers_a_fresh_crash_left_installer_link(tmp_path: Path) -> None:
     layout = macos_storage_layout(home=tmp_path)
     store = ChunkArtifactStore(layout)
     text = "recover this exact artifact after a crashed install"
@@ -404,7 +404,6 @@ def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path
     artifact_path = _artifact_path(layout.artifacts, artifact.artifact_id)
     installer_path = _install_directory(layout.artifacts, artifact.artifact_id) / f"install-{'c' * 32}"
     os.link(artifact_path, installer_path)
-    os.utime(installer_path, ns=(1, 1))
 
     assert artifact_path.stat().st_nlink == 2
     assert store.read_verified(artifact.artifact_id) == text

@@ -211,7 +211,7 @@ def _prune_stale_install_files_locked(install_fd: int) -> None:
                     before = entry.stat(follow_symlinks=False)
                 except FileNotFoundError:
                     continue
-                if before.st_mtime_ns > cutoff_ns:
+                if before.st_nlink == 1 and before.st_mtime_ns > cutoff_ns:
                     continue
                 _validate_install_file(before)
                 try:
