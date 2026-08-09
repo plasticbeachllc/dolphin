@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -100,3 +101,15 @@ def test_metadata_inspection_rejects_without_repairing_unsafe_modes(tmp_path: Pa
         layout.metadata_database_exists()
 
     assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o644
+
+
+def test_artifact_descriptor_rejects_a_noncanonical_layout_without_creating_it(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    redirected = replace(layout, artifacts=tmp_path / "redirected-artifacts")
+
+    with pytest.raises(StorageLayoutError, match="invalid layout"):
+        with redirected.open_artifacts_directory():
+            pytest.fail("invalid artifact layout was opened")
+
+    assert not (tmp_path / "Library").exists()
+    assert not redirected.artifacts.exists()

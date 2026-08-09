@@ -45,6 +45,18 @@ class StorageLayout:
                 return False
             return _private_file_exists(root_fd, self.metadata_db.name, label="metadata database")
 
+    @contextmanager
+    def open_artifacts_directory(self) -> Iterator[int]:
+        """Hold a private no-follow descriptor chain through the artifact root."""
+        if self.artifacts != self.root / "artifacts":
+            raise StorageLayoutError("Dolphin artifact storage has an invalid layout")
+        with _open_runtime_root(self.root) as root_fd:
+            artifacts_fd = _open_or_create_directory(root_fd, self.artifacts.name, private=True)
+            try:
+                yield artifacts_fd
+            finally:
+                os.close(artifacts_fd)
+
 
 def macos_storage_layout(*, home: Path | None = None) -> StorageLayout:
     """Resolve Dolphin's fixed macOS state layout without consulting legacy paths."""
