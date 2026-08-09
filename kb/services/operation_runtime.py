@@ -96,9 +96,17 @@ class OperationRuntime:
 
     @property
     def owner(self) -> RuntimeOwner:
-        if self._owner is None or self._closed:
-            raise OperationRuntimeError("Dolphin operation runtime has not started")
+        if not self.ownership_available or self._owner is None:
+            raise OperationRuntimeError("Dolphin operation runtime ownership is unavailable")
         return self._owner
+
+    @property
+    def ownership_available(self) -> bool:
+        """Report whether this process still has a supervised runtime owner."""
+        if self._owner is None or self._closed:
+            return False
+        heartbeat = self._heartbeat_task
+        return heartbeat is None or not heartbeat.done()
 
     async def start(self) -> RuntimeOwner:
         """Reconcile stale owners, prove this process identity, and register it."""

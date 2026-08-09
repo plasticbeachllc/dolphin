@@ -142,7 +142,13 @@ async def _serve_stdio() -> None:
             # underlying registry as blocked while no work can execute.
             pass
         try:
-            server = create_server(default_mcp_handlers(session_scope=session_scope, registry=registry))
+            server = create_server(
+                default_mcp_handlers(
+                    session_scope=session_scope,
+                    registry=registry,
+                    runtime_ownership_available=lambda: runtime.ownership_available,
+                )
+            )
             await server.run(
                 read_stream,
                 write_stream,
@@ -154,7 +160,13 @@ async def _serve_stdio() -> None:
             )
         finally:
             if runtime_started:
-                await runtime.close()
+                try:
+                    await runtime.close()
+                except OperationRuntimeError:
+                    # Runtime loss was exposed through status while the
+                    # connection was active; it must not corrupt stdio during
+                    # transport shutdown.
+                    pass
 
 
 def _complete_handlers(

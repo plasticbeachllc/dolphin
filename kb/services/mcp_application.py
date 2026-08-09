@@ -18,10 +18,15 @@ def default_mcp_handlers(
     *,
     session_scope: WorkspaceSessionScope,
     registry: WorkspaceRegistry | None = None,
+    runtime_ownership_available: Callable[[], bool] | None = None,
 ) -> dict[str, Callable[[BaseModel], Awaitable[BaseModel]]]:
     """Build handlers for one caller-owned MCP connection scope."""
     resolved_registry = registry or WorkspaceRegistry(macos_storage_layout())
-    status = StatusService(registry=resolved_registry, session_scope=session_scope)
+    status = StatusService(
+        registry=resolved_registry,
+        session_scope=session_scope,
+        runtime_ownership_available=runtime_ownership_available,
+    )
     repo_list = RepoListService(resolved_registry)
     operation_status = OperationStatusService(resolved_registry)
 

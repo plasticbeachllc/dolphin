@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import sqlite3
 import subprocess
@@ -12,11 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from kb.mcp.contracts import OperationStatusInput
+from kb.mcp.contracts import OperationStatusInput, StatusInput
 from kb.runtime.storage import macos_storage_layout
 from kb.services import operation_runtime as operation_runtime_module
 from kb.services.lifecycle_read import OperationStatusService
 from kb.services.operation_runtime import OperationRuntime, OperationRuntimeError, ProcessStartProbe
+from kb.services.status import StatusService
 from kb.services.workspace_registry import (
     OperationCountersSnapshot,
     OperationPauseReason,
@@ -555,6 +557,73 @@ async def test_non_executing_runtime_cannot_claim_operations(
         await runtime.claim_next()
 
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_start_identity_failure_blocks_status(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    runtime = OperationRuntime(
+        registry,
+        mode="mcp",
+        operation_capable=False,
+        process_probe=lambda _pid: ProcessStartProbe(available=False, identity=None),
+        start_heartbeat=False,
+    )
+
+    with pytest.raises(OperationRuntimeError, match="cannot prove"):
+        await runtime.start()
+    status = await StatusService(
+        cwd=tmp_path,
+        environment={},
+        registry=registry,
+        runtime_ownership_available=lambda: runtime.ownership_available,
+    )(StatusInput())
+
+    assert runtime.ownership_available is False
+    assert status.readiness == "blocked"
+    assert status.next_actions[0].action == "inspect_runtime"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_failure_revokes_runtime_use_and_blocks_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    registry, _operation = _registry_with_operation(monkeypatch, tmp_path)
+    runtime = OperationRuntime(
+        registry,
+        mode="mcp",
+        operation_capable=True,
+        process_probe=lambda pid: ProcessStartProbe(available=True, identity=f"start-{pid}"),
+    )
+
+    def fail_heartbeat(**_kwargs: object):
+        raise WorkspaceRegistryError("simulated heartbeat failure")
+
+    monkeypatch.setattr(operation_runtime_module, "RUNTIME_HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(registry, "heartbeat_runtime", fail_heartbeat)
+    await runtime.start()
+    for _ in range(100):
+        if not runtime.ownership_available:
+            break
+        await asyncio.sleep(0.01)
+
+    status = await StatusService(
+        cwd=tmp_path,
+        environment={},
+        registry=registry,
+        runtime_ownership_available=lambda: runtime.ownership_available,
+    )(StatusInput())
+
+    assert runtime.ownership_available is False
+    with pytest.raises(OperationRuntimeError, match="ownership is unavailable"):
+        await runtime.claim_next()
+    assert status.readiness == "blocked"
+    assert status.next_actions[0].action == "inspect_runtime"
+    with pytest.raises(OperationRuntimeError, match="lost runtime ownership"):
+        await runtime.close()
 
 
 def test_process_start_probe_distinguishes_absence_from_probe_failure(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -94,15 +94,20 @@ class StatusService:
         registry: WorkspaceRegistry | None = None,
         mcp_roots: tuple[Path, ...] = (),
         session_scope: WorkspaceSessionScope | None = None,
+        runtime_ownership_available: Callable[[], bool] | None = None,
     ) -> None:
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = environment if environment is not None else os.environ
         self._registry = registry
         self._mcp_roots = mcp_roots
         self._session_scope = session_scope
+        self._runtime_ownership_available = runtime_ownership_available
 
     async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
+        runtime_ownership_available = (
+            self._runtime_ownership_available() if self._runtime_ownership_available is not None else True
+        )
         probe = await asyncio.to_thread(_probe_worktree, self._cwd)
         registry_snapshot = WorkspaceReadSnapshot(registered=0, indexing=0, ready=0, failed=0, current_workspace=None)
         runtime_snapshot = RuntimeStatusSnapshot(active_processes=0, operation_executors=0)
@@ -159,6 +164,14 @@ class StatusService:
         else:
             resolution = probe.resolution
             next_actions = _next_actions_for_probe(probe)
+        if not runtime_ownership_available:
+            next_actions = [
+                NextAction(
+                    action="inspect_runtime",
+                    reason="Dolphin could not establish or renew safe runtime ownership.",
+                ),
+                *next_actions[:7],
+            ]
 
         return StatusResult(
             version=get_version(),
@@ -166,7 +179,7 @@ class StatusService:
             # readiness errors while their application services are built.
             # Do not advertise overall readiness merely because a credential is
             # present: agents use this field to decide whether to proceed.
-            readiness="degraded" if storage_available else "blocked",
+            readiness="degraded" if storage_available and runtime_ownership_available else "blocked",
             credential_present=credential_present,
             credential_variable="DOLPHIN_OPENAI_API_KEY",
             tool_availability=_tool_availability(storage_available),
