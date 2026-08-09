@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from kb.artifacts import ArtifactCorrupt, identify_embedding_input
+import kb.store.generation_content as generation_content_implementation
+from kb.artifacts import ArtifactCorrupt, ChunkTextArtifact, identify_embedding_input
 from kb.generation import GenerationCoordinatorError, PublishedSnapshot, StagingGeneration, VerifiedVectorCommit
 from kb.generation_content import (
     GenerationContentConflict,
@@ -256,18 +257,75 @@ def test_materialization_requires_the_exact_published_snapshot_scope(
 ) -> None:
     context = _generation_context(monkeypatch, tmp_path)
     membership, snapshot = _publish_one(context, suffix="scope", text="scoped text")
-    wrong_workspace = snapshot.model_copy(update={"workspace_id": "ws_unrelated"})
-    wrong_publication = snapshot.model_copy(update={"publication_id": "pub_unrelated"})
-    wrong_generation = snapshot.model_copy(update={"generation_id": "gen_unrelated"})
+    tampered = (
+        snapshot.model_copy(update={"publication_id": "pub_unrelated"}),
+        snapshot.model_copy(update={"generation_id": "gen_unrelated"}),
+        snapshot.model_copy(update={"workspace_id": "ws_unrelated"}),
+        snapshot.model_copy(update={"operation_id": "op_unrelated"}),
+        snapshot.model_copy(update={"target_fingerprint": "git-head-v1:" + "b" * 40}),
+        snapshot.model_copy(update={"pipeline_key": "pipeline-unrelated"}),
+        snapshot.model_copy(update={"manifest_id": "manifest_unrelated"}),
+        snapshot.model_copy(update={"manifest_digest": "f" * 64}),
+        snapshot.model_copy(update={"vector_commit_token": "vector-unrelated"}),
+        snapshot.model_copy(update={"vector_digest": "vector-digest-unrelated"}),
+        snapshot.model_copy(update={"vector_row_count": snapshot.vector_row_count + 1}),
+        snapshot.model_copy(update={"vector_provider": "not-openai"}),
+        snapshot.model_copy(update={"vector_model": "not-the-pinned-model"}),
+        snapshot.model_copy(update={"vector_dimensions": snapshot.vector_dimensions + 1}),
+        snapshot.model_copy(update={"embedding_contract_version": snapshot.embedding_contract_version + 1}),
+        snapshot.model_copy(update={"metadata_item_count": snapshot.metadata_item_count + 1}),
+        snapshot.model_copy(update={"keyword_item_count": snapshot.keyword_item_count + 1}),
+        snapshot.model_copy(update={"revision": snapshot.revision + 1}),
+        snapshot.model_copy(update={"published_at": snapshot.published_at + timedelta(microseconds=1)}),
+    )
 
-    with pytest.raises(PublishedChunkUnavailable):
-        context.content.materialize_published_chunk(wrong_workspace, membership.chunk_instance_id)
-    with pytest.raises(PublishedChunkUnavailable):
-        context.content.materialize_published_chunk(wrong_publication, membership.chunk_instance_id)
-    with pytest.raises(PublishedChunkUnavailable):
-        context.content.materialize_published_chunk(wrong_generation, membership.chunk_instance_id)
+    for altered in tampered:
+        with pytest.raises(PublishedChunkUnavailable, match="exact published snapshot"):
+            context.content.materialize_published_chunk(altered, membership.chunk_instance_id)
     with pytest.raises(PublishedChunkUnavailable):
         context.content.materialize_published_chunk(snapshot, "chunk_unknown")
+
+
+def test_complete_manifest_binding_is_cached_once_per_exact_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    first = _membership(context.artifacts, suffix="cache-first", text="first cached chunk")
+    second = _membership(context.artifacts, suffix="cache-second", text="second cached chunk")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [first, second])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=2),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    original_binding = generation_content_implementation._require_complete_manifest_binding
+    complete_validations = 0
+    original_read = context.artifacts.read_verified_artifact
+    artifact_reads = 0
+
+    def count_binding(connection: sqlite3.Connection, exact_snapshot: PublishedSnapshot) -> None:
+        nonlocal complete_validations
+        complete_validations += 1
+        original_binding(connection, exact_snapshot)
+
+    def count_artifact_read(artifact_id: str) -> tuple[str, ChunkTextArtifact]:
+        nonlocal artifact_reads
+        artifact_reads += 1
+        return original_read(artifact_id)
+
+    monkeypatch.setattr(generation_content_implementation, "_require_complete_manifest_binding", count_binding)
+    monkeypatch.setattr(context.artifacts, "read_verified_artifact", count_artifact_read)
+
+    assert context.content.materialize_published_chunk(snapshot, first.chunk_instance_id) == "first cached chunk"
+    assert context.content.materialize_published_chunk(snapshot, second.chunk_instance_id) == "second cached chunk"
+    assert complete_validations == 1
+    assert artifact_reads == 2
 
 
 def test_materialization_fails_closed_for_membership_or_artifact_corruption(
