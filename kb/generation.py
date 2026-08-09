@@ -148,6 +148,8 @@ class PublishedSnapshot(_GenerationModel):
 
 
 class GenerationReadLease(_GenerationModel):
+    """Pin logical visibility; physical GC must treat the durable lease row as a root."""
+
     lease_id: str = Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     snapshot: PublishedSnapshot
     acquired_at: datetime
@@ -168,7 +170,7 @@ class GenerationReadLease(_GenerationModel):
 
 
 class GenerationCoordinator(Protocol):
-    """Narrow publication authority used by indexing and snapshot readers."""
+    """Publication authority; readers require GC to honor unexpired lease roots."""
 
     def create_staging(self, lease: OperationLease) -> StagingGeneration: ...
 

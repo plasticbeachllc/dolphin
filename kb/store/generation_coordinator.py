@@ -319,11 +319,12 @@ class SQLiteGenerationCoordinator:
                 connection.execute(
                     """
                     INSERT INTO generation_reader_leases (
-                        lease_id, generation_id, publication_id, acquired_at, expires_at
-                    ) VALUES (?, ?, ?, ?, ?)
+                        lease_id, workspace_id, generation_id, publication_id, acquired_at, expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         lease_id,
+                        snapshot.workspace_id,
                         snapshot.generation_id,
                         snapshot.publication_id,
                         acquired.isoformat(),
@@ -347,7 +348,7 @@ class SQLiteGenerationCoordinator:
         with self._connection(read_only=True) as connection:
             row = connection.execute(
                 """
-                SELECT generation_id, publication_id
+                SELECT workspace_id, generation_id, publication_id
                 FROM generation_reader_leases
                 WHERE lease_id = ? AND expires_at > ?
                 """,
@@ -355,8 +356,8 @@ class SQLiteGenerationCoordinator:
             ).fetchone()
             if row is None:
                 raise GenerationReadLeaseUnavailable("Dolphin generation read lease is unavailable or expired")
-            snapshot = _snapshot_by_generation(connection, str(row[0]))
-            if snapshot is None or snapshot.publication_id != row[1]:
+            snapshot = _snapshot_by_generation(connection, str(row[1]))
+            if snapshot is None or snapshot.workspace_id != row[0] or snapshot.publication_id != row[2]:
                 raise GenerationReadLeaseUnavailable("Dolphin generation read lease no longer matches its snapshot")
             return snapshot
 
@@ -367,9 +368,14 @@ class SQLiteGenerationCoordinator:
                 connection.execute(
                     """
                     DELETE FROM generation_reader_leases
-                    WHERE lease_id = ? AND generation_id = ? AND publication_id = ?
+                    WHERE lease_id = ? AND workspace_id = ? AND generation_id = ? AND publication_id = ?
                     """,
-                    (lease.lease_id, lease.snapshot.generation_id, lease.snapshot.publication_id),
+                    (
+                        lease.lease_id,
+                        lease.snapshot.workspace_id,
+                        lease.snapshot.generation_id,
+                        lease.snapshot.publication_id,
+                    ),
                 )
             except Exception:
                 connection.rollback()

@@ -1573,13 +1573,16 @@ class WorkspaceRegistry:
                         """
                         CREATE TABLE generation_reader_leases (
                             lease_id TEXT PRIMARY KEY,
+                            workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
                             generation_id TEXT NOT NULL,
                             publication_id TEXT NOT NULL,
                             acquired_at TEXT NOT NULL,
                             expires_at TEXT NOT NULL,
                             CHECK (expires_at > acquired_at),
                             FOREIGN KEY (generation_id, publication_id)
-                                REFERENCES generations(generation_id, publication_id)
+                                REFERENCES generations(generation_id, publication_id),
+                            FOREIGN KEY (workspace_id, generation_id)
+                                REFERENCES generations(workspace_id, generation_id)
                         ) STRICT
                         """
                     )

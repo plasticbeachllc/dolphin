@@ -386,10 +386,31 @@ def test_database_rejects_impossible_generation_and_reader_lease_states(
             connection.execute(
                 """
                 INSERT INTO generation_reader_leases (
-                    lease_id, generation_id, publication_id, acquired_at, expires_at
-                ) VALUES ('read_invalid', ?, ?, ?, ?)
+                    lease_id, workspace_id, generation_id, publication_id, acquired_at, expires_at
+                ) VALUES ('read_invalid', ?, ?, ?, ?, ?)
                 """,
-                (snapshot.generation_id, snapshot.publication_id, acquired_at, acquired_at),
+                (
+                    snapshot.workspace_id,
+                    snapshot.generation_id,
+                    snapshot.publication_id,
+                    acquired_at,
+                    acquired_at,
+                ),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO generation_reader_leases (
+                    lease_id, workspace_id, generation_id, publication_id, acquired_at, expires_at
+                ) VALUES ('read_wrong_workspace', ?, ?, ?, ?, ?)
+                """,
+                (
+                    other_registration.workspace_id,
+                    snapshot.generation_id,
+                    snapshot.publication_id,
+                    acquired_at,
+                    (clock.current + timedelta(seconds=1)).isoformat(),
+                ),
             )
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
