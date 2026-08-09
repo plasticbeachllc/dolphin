@@ -123,7 +123,7 @@ async def _serve_stdio() -> None:
     """Own exactly one stdio connection for the foreground Dolphin process."""
     from kb.runtime.storage import macos_storage_layout
     from kb.services import WorkspaceRegistry, WorkspaceSessionScope, default_mcp_handlers
-    from kb.services.operation_runtime import OperationRuntime
+    from kb.services.operation_runtime import OperationRuntime, OperationRuntimeError
 
     async with stdio_server() as (read_stream, write_stream):
         # MCP 2026-07-28 has no client-roots request surface. Keep the
@@ -131,7 +131,17 @@ async def _serve_stdio() -> None:
         # when the transport exposes them again.
         session_scope = WorkspaceSessionScope()
         registry = WorkspaceRegistry(macos_storage_layout())
-        async with OperationRuntime(registry, mode="mcp", operation_capable=False):
+        runtime = OperationRuntime(registry, mode="mcp", operation_capable=False)
+        runtime_started = False
+        try:
+            await runtime.start()
+            runtime_started = True
+        except OperationRuntimeError:
+            # Keep the diagnostic read surface alive when storage or process
+            # identity prevents safe runtime ownership. Status will report the
+            # underlying registry as blocked while no work can execute.
+            pass
+        try:
             server = create_server(default_mcp_handlers(session_scope=session_scope, registry=registry))
             await server.run(
                 read_stream,
@@ -142,6 +152,9 @@ async def _serve_stdio() -> None:
                     capabilities=server.get_capabilities(notification_options=NotificationOptions()),
                 ),
             )
+        finally:
+            if runtime_started:
+                await runtime.close()
 
 
 def _complete_handlers(

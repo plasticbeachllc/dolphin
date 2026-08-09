@@ -126,6 +126,7 @@ async def test_repo_list_and_operation_status_return_bounded_durable_projections
         process_start_identity="start-terminal-projection",
         mode="mcp",
         operation_capable=True,
+        pipeline_key="test-pipeline-v1",
         now=now,
         expires_at=now + timedelta(seconds=15),
     )

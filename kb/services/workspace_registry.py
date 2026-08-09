@@ -55,7 +55,7 @@ class RepoListCursorExpired(ValueError):
     """The repository-list cursor names an obsolete actionable-list revision."""
 
 
-_SCHEMA_VERSION = 7
+_SCHEMA_VERSION = 8
 _MAX_BOUNDARIES_PER_READ = 8
 _MAX_STORED_BOUNDARIES = 100_000
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
@@ -190,6 +190,7 @@ class OperationSnapshot:
     phase: OperationPhase | None = None
     counters: OperationCountersSnapshot | None = None
     pause_reason: OperationPauseReason | None = None
+    pipeline_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +232,7 @@ class RuntimeOwner:
     process_start_identity: str
     mode: RuntimeMode
     operation_capable: bool
+    pipeline_key: str | None
     state: RuntimeState
     started_at: datetime
     heartbeat_at: datetime
@@ -440,7 +442,7 @@ class WorkspaceRegistry:
                 SELECT o.operation_id, o.workspace_id, o.kind, o.state, o.target_head_commit, o.attempt,
                        o.created_at, o.updated_at, o.terminal_at, c.phase, c.known_eligible_files,
                        c.processed_files, c.parsed_files, c.reused_chunks, c.embedding_cache_hits,
-                       c.embedding_cache_misses, c.embedded_chunks, c.pause_reason
+                       c.embedding_cache_misses, c.embedded_chunks, c.pause_reason, c.pipeline_key
                 FROM workspace_operations AS o
                 LEFT JOIN operation_checkpoints AS c ON c.operation_id = o.operation_id
                 WHERE o.operation_id = ?
@@ -464,6 +466,7 @@ class WorkspaceRegistry:
         process_start_identity: str,
         mode: RuntimeMode,
         operation_capable: bool,
+        pipeline_key: str | None,
         now: datetime,
         expires_at: datetime,
     ) -> RuntimeOwner:
@@ -474,6 +477,12 @@ class WorkspaceRegistry:
             raise WorkspaceRegistryError("Dolphin runtime mode is invalid")
         if not isinstance(operation_capable, bool):
             raise WorkspaceRegistryError("Dolphin runtime capability is invalid")
+        if operation_capable:
+            if pipeline_key is None:
+                raise WorkspaceRegistryError("Dolphin operation runtime requires a pipeline key")
+            _validate_bounded_key(pipeline_key, label="pipeline key", maximum=_PIPELINE_KEY_MAX_LENGTH)
+        elif pipeline_key is not None:
+            raise WorkspaceRegistryError("Dolphin non-executing runtime cannot advertise a pipeline key")
         encoded_now = _utc_timestamp(now).isoformat()
         encoded_expiry = _utc_timestamp(expires_at).isoformat()
         with self._connection() as connection:
@@ -501,9 +510,9 @@ class WorkspaceRegistry:
                 connection.execute(
                     """
                     INSERT INTO runtime_instances (
-                        runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                        runtime_id, pid, process_start_identity, mode, operation_capable, pipeline_key, state,
                         dolphin_version, schema_version, started_at, heartbeat_at, expires_at
-                    ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
                     """,
                     (
                         runtime_id,
@@ -511,6 +520,7 @@ class WorkspaceRegistry:
                         process_start_identity,
                         mode,
                         int(operation_capable),
+                        pipeline_key,
                         _runtime_version(),
                         _SCHEMA_VERSION,
                         encoded_now,
@@ -528,6 +538,7 @@ class WorkspaceRegistry:
             process_start_identity=process_start_identity,
             mode=mode,
             operation_capable=operation_capable,
+            pipeline_key=pipeline_key,
             state="active",
             started_at=_utc_timestamp(now),
             heartbeat_at=_utc_timestamp(now),
@@ -539,7 +550,7 @@ class WorkspaceRegistry:
         with self._read_connection() as connection:
             rows = connection.execute(
                 """
-                SELECT runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                SELECT runtime_id, pid, process_start_identity, mode, operation_capable, pipeline_key, state,
                        started_at, heartbeat_at, expires_at
                 FROM runtime_instances
                 WHERE state != 'stopped'
@@ -568,6 +579,34 @@ class WorkspaceRegistry:
             raise WorkspaceRegistryError("Dolphin runtime ownership metadata is invalid")
         return RuntimeStatusSnapshot(active_processes=row[0], operation_executors=row[1])
 
+    def compatible_operation_executor_available(
+        self,
+        pipeline_key: str | None,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """Report whether a live executor can claim an operation's pipeline."""
+        if pipeline_key is not None:
+            _validate_bounded_key(pipeline_key, label="pipeline key", maximum=_PIPELINE_KEY_MAX_LENGTH)
+        observed_at = _utc_timestamp(now or datetime.now(UTC)).isoformat()
+        with self._read_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM runtime_instances
+                    WHERE state = 'active'
+                      AND expires_at > ?
+                      AND operation_capable = 1
+                      AND (? IS NULL OR pipeline_key = ?)
+                )
+                """,
+                (observed_at, pipeline_key, pipeline_key),
+            ).fetchone()
+        if row is None or row[0] not in {0, 1}:
+            raise WorkspaceRegistryError("Dolphin runtime compatibility metadata is invalid")
+        return bool(row[0])
+
     def heartbeat_runtime(
         self,
         *,
@@ -586,7 +625,7 @@ class WorkspaceRegistry:
             try:
                 row = connection.execute(
                     """
-                    SELECT runtime_id, pid, process_start_identity, mode, operation_capable, state,
+                    SELECT runtime_id, pid, process_start_identity, mode, operation_capable, pipeline_key, state,
                            started_at, heartbeat_at, expires_at
                     FROM runtime_instances
                     WHERE runtime_id = ?
@@ -697,6 +736,7 @@ class WorkspaceRegistry:
                     process_start_identity=process_start_identity,
                     observed_at=encoded_now,
                     require_operation_capable=True,
+                    pipeline_key=pipeline_key,
                 )
                 self._reconcile_expired_operation_leases(connection, transitioned_at=encoded_now)
                 row = connection.execute(
@@ -941,19 +981,22 @@ class WorkspaceRegistry:
         process_start_identity: str,
         observed_at: str,
         require_operation_capable: bool,
+        pipeline_key: str | None = None,
     ) -> None:
         row = connection.execute(
             """
-            SELECT process_start_identity, operation_capable, state, expires_at
+            SELECT process_start_identity, operation_capable, pipeline_key, state, expires_at
             FROM runtime_instances
             WHERE runtime_id = ?
             """,
             (runtime_id,),
         ).fetchone()
-        if row is None or row[0] != process_start_identity or row[2] != "active" or row[3] <= observed_at:
+        if row is None or row[0] != process_start_identity or row[3] != "active" or row[4] <= observed_at:
             raise WorkspaceRegistryError("Dolphin runtime ownership is inactive or expired")
         if require_operation_capable and row[1] != 1:
             raise WorkspaceRegistryError("Dolphin runtime is not configured to execute operations")
+        if pipeline_key is not None and row[2] != pipeline_key:
+            raise WorkspaceRegistryError("Dolphin runtime pipeline does not match the operation claim")
 
     @staticmethod
     def _require_operation_lease(
@@ -1330,12 +1373,17 @@ class WorkspaceRegistry:
                             process_start_identity TEXT NOT NULL,
                             mode TEXT NOT NULL CHECK (mode IN ('mcp', 'foreground_cli')),
                             operation_capable INTEGER NOT NULL CHECK (operation_capable IN (0, 1)),
+                            pipeline_key TEXT,
                             state TEXT NOT NULL CHECK (state IN ('active', 'draining', 'stopped')),
                             dolphin_version TEXT NOT NULL,
                             schema_version INTEGER NOT NULL,
                             started_at TEXT NOT NULL,
                             heartbeat_at TEXT NOT NULL,
-                            expires_at TEXT NOT NULL
+                            expires_at TEXT NOT NULL,
+                            CHECK (
+                                (operation_capable = 0 AND pipeline_key IS NULL)
+                                OR (operation_capable = 1 AND pipeline_key IS NOT NULL)
+                            )
                         ) STRICT
                         """
                     )
@@ -2143,21 +2191,30 @@ def _runtime_owner_from_row(row: tuple[object, ...]) -> RuntimeOwner:
         max_length=_PROCESS_IDENTITY_MAX_LENGTH,
     )
     mode = _bounded_registry_text(row[3], label="runtime mode", max_length=32)
-    state = _bounded_registry_text(row[5], label="runtime state", max_length=32)
+    pipeline_key = (
+        _bounded_registry_text(row[5], label="pipeline key", max_length=_PIPELINE_KEY_MAX_LENGTH)
+        if row[5] is not None
+        else None
+    )
+    state = _bounded_registry_text(row[6], label="runtime state", max_length=32)
     if mode not in {"mcp", "foreground_cli"} or state not in {"active", "draining", "stopped"}:
         raise WorkspaceRegistryError("Dolphin runtime ownership metadata is invalid")
     if row[4] not in {0, 1}:
         raise WorkspaceRegistryError("Dolphin runtime capability metadata is invalid")
+    operation_capable = bool(row[4])
+    if operation_capable != (pipeline_key is not None):
+        raise WorkspaceRegistryError("Dolphin runtime pipeline metadata is invalid")
     return RuntimeOwner(
         runtime_id=runtime_id,
         pid=pid,
         process_start_identity=process_start_identity,
         mode=cast(RuntimeMode, mode),
-        operation_capable=bool(row[4]),
+        operation_capable=operation_capable,
+        pipeline_key=pipeline_key,
         state=cast(RuntimeState, state),
-        started_at=_parse_registry_timestamp(row[6], label="runtime start timestamp"),
-        heartbeat_at=_parse_registry_timestamp(row[7], label="runtime heartbeat timestamp"),
-        expires_at=_parse_registry_timestamp(row[8], label="runtime expiry timestamp"),
+        started_at=_parse_registry_timestamp(row[7], label="runtime start timestamp"),
+        heartbeat_at=_parse_registry_timestamp(row[8], label="runtime heartbeat timestamp"),
+        expires_at=_parse_registry_timestamp(row[9], label="runtime expiry timestamp"),
     )
 
 
@@ -2421,6 +2478,7 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
     phase = None
     counters = None
     pause_reason = None
+    pipeline_key = None
     if checkpoint_present:
         phase_text = _bounded_registry_text(row[9], label="operation phase", max_length=32)
         if phase_text not in _OPERATION_PHASES:
@@ -2437,6 +2495,7 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
         }:
             raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid pause reason")
         pause_reason = cast(OperationPauseReason | None, pause_text)
+        pipeline_key = _bounded_registry_text(row[18], label="pipeline key", max_length=_PIPELINE_KEY_MAX_LENGTH)
     return OperationSnapshot(
         operation_id=operation_id,
         workspace_id=workspace_id,
@@ -2450,6 +2509,7 @@ def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
         phase=phase,
         counters=counters,
         pause_reason=pause_reason,
+        pipeline_key=pipeline_key,
     )
 
 

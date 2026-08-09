@@ -138,6 +138,7 @@ class OperationRuntime:
                 process_start_identity=own_probe.identity,
                 mode=self._mode,
                 operation_capable=self._operation_capable,
+                pipeline_key=self._pipeline_key if self._operation_capable else None,
                 now=now,
                 expires_at=now + timedelta(seconds=RUNTIME_LEASE_SECONDS),
             )

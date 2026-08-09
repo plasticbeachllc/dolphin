@@ -60,6 +60,40 @@ async def test_stdio_server_discovers_and_calls_lifecycle_reads(tmp_path: Path) 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_stdio_server_keeps_status_available_when_runtime_ownership_cannot_start(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    layout = macos_storage_layout(home=home)
+    layout.ensure_private_metadata_database()
+    with sqlite3.connect(layout.metadata_db) as connection:
+        connection.execute("PRAGMA user_version = 7")
+    environment = dict(os.environ)
+    environment["HOME"] = str(home)
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=["-c", "from kb.mcp.server import run_stdio; run_stdio()"],
+        cwd=os.getcwd(),
+        env=environment,
+    )
+
+    async with stdio_client(parameters) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            status = await session.call_tool("status", {})
+            repo_list = await session.call_tool("repo_list", {"cursor": None})
+
+    assert status.is_error is False
+    assert status.structured_content is not None
+    assert status.structured_content["readiness"] == "blocked"
+    assert status.structured_content["current_workspace_resolution"] == "unavailable"
+    assert status.structured_content["runtime"] == {"active_processes": 0, "operation_executors": 0}
+    assert repo_list.is_error is True
+    assert repo_list.structured_content is not None
+    assert repo_list.structured_content["code"] == "STORAGE_UNAVAILABLE"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_stdio_server_pages_populated_registry_and_expires_terminal_operation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -81,6 +115,7 @@ async def test_stdio_server_pages_populated_registry_and_expires_terminal_operat
         process_start_identity="start-terminal-fixture",
         mode="mcp",
         operation_capable=True,
+        pipeline_key="test-pipeline-v1",
         now=now,
         expires_at=now + timedelta(seconds=15),
     )

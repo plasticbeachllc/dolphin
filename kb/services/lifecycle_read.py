@@ -130,12 +130,15 @@ class OperationStatusService:
             if not await asyncio.to_thread(self._registry.schema_is_current):
                 raise ToolFailure(storage_unavailable())
             operation = await asyncio.to_thread(self._registry.inspect_operation, input_model.operation_id)
-            runtime = await asyncio.to_thread(self._registry.read_runtime_status)
+            if operation is None:
+                raise ToolFailure(operation_missing())
+            operation_runtime_available = await asyncio.to_thread(
+                self._registry.compatible_operation_executor_available,
+                operation.pipeline_key,
+            )
         except WorkspaceRegistryError as exc:
             raise ToolFailure(storage_unavailable()) from exc
-        if operation is None:
-            raise ToolFailure(operation_missing())
-        return _operation_status_result(operation, operation_runtime_available=runtime.operation_executors > 0)
+        return _operation_status_result(operation, operation_runtime_available=operation_runtime_available)
 
 
 def workspace_summary(snapshot: WorkspaceSnapshot) -> WorkspaceSummary:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -141,6 +142,45 @@ async def test_operation_status_projects_checkpoint_and_live_executor_state(
     assert result.counters.known_eligible_files == 12
     assert result.counters.processed_files == 3
     assert result.pause_reason is None
+
+
+@pytest.mark.asyncio
+async def test_operation_status_ignores_executor_with_incompatible_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    registry, operation = _registry_with_operation(monkeypatch, tmp_path)
+    now = datetime.now(UTC)
+    first = _register_runtime(registry, "first", now, pipeline_key="pipeline-v1")
+    lease = registry.claim_next_operation(
+        runtime_id=first.runtime_id,
+        process_start_identity=first.process_start_identity,
+        pipeline_key="pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    assert lease is not None
+    registry.drain_runtime(
+        runtime_id=first.runtime_id,
+        process_start_identity=first.process_start_identity,
+        observed_at=now + timedelta(seconds=1),
+    )
+    with sqlite3.connect(macos_storage_layout(home=tmp_path / "home").metadata_db) as connection:
+        connection.execute(
+            "UPDATE workspace_operations SET state = 'queued' WHERE operation_id = ?",
+            (operation.operation_id,),
+        )
+        connection.execute(
+            "UPDATE operation_checkpoints SET pause_reason = NULL WHERE operation_id = ?",
+            (operation.operation_id,),
+        )
+    _register_runtime(registry, "second", now + timedelta(seconds=1), pipeline_key="pipeline-v2")
+
+    result = await OperationStatusService(registry)(OperationStatusInput(operation_id=operation.operation_id))
+
+    assert registry.read_runtime_status(now=now + timedelta(seconds=1)).operation_executors == 1
+    assert result.state is OperationState.QUEUED
+    assert result.pause_reason == "runtime_absent"
 
 
 def test_heartbeat_renews_runtime_and_owned_operation_lease(
@@ -331,7 +371,7 @@ def test_incompatible_pipeline_cannot_resume_a_checkpoint(
         process_start_identity=first.process_start_identity,
         observed_at=now + timedelta(seconds=1),
     )
-    second = _register_runtime(registry, "second", now + timedelta(seconds=1))
+    second = _register_runtime(registry, "second", now + timedelta(seconds=1), pipeline_key="pipeline-v2")
 
     incompatible = registry.claim_next_operation(
         runtime_id=second.runtime_id,
@@ -462,6 +502,7 @@ async def test_runtime_start_reconciles_pid_reuse_before_resuming_work(
         process_start_identity="old-start",
         mode="mcp",
         operation_capable=True,
+        pipeline_key="dolphin-pipeline-v1",
         now=now,
         expires_at=now + timedelta(seconds=15),
     )
@@ -567,6 +608,7 @@ def _register_runtime(
     now: datetime,
     *,
     lifetime: int = 15,
+    pipeline_key: str = "pipeline-v1",
 ):
     return registry.register_runtime(
         runtime_id=f"runtime_{label}",
@@ -574,6 +616,7 @@ def _register_runtime(
         process_start_identity=f"start-{label}",
         mode="mcp",
         operation_capable=True,
+        pipeline_key=pipeline_key,
         now=now,
         expires_at=now + timedelta(seconds=lifetime),
     )

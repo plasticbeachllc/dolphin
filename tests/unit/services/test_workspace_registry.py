@@ -65,7 +65,7 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert common_git_dir == str(worktree_root / ".git")
     assert common_git_dir_identity == worktree_git_dir_identity
     assert worktree_git_dir == common_git_dir
-    assert version == 7
+    assert version == 8
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 
@@ -787,6 +787,7 @@ def _register_operation_runtime(
         process_start_identity=f"start-{operation.operation_id}-{suffix}",
         mode="mcp",
         operation_capable=True,
+        pipeline_key="test-pipeline-v1",
         now=now,
         expires_at=now + timedelta(seconds=15),
     )
