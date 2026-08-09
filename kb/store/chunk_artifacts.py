@@ -7,6 +7,7 @@ import fcntl
 import os
 import stat
 import struct
+import sys
 import time
 import uuid
 from collections.abc import Sequence
@@ -182,7 +183,7 @@ def _install_no_replace(
         except OSError:
             pass
         if locked:
-            _release_install_lock(install_fd)
+            _release_install_lock_preserving_primary_error(install_fd)
 
 
 def _prune_stale_install_files(install_fd: int) -> None:
@@ -191,7 +192,7 @@ def _prune_stale_install_files(install_fd: int) -> None:
     try:
         _prune_stale_install_files_locked(install_fd)
     finally:
-        _release_install_lock(install_fd)
+        _release_install_lock_preserving_primary_error(install_fd)
 
 
 def _prune_stale_install_files_locked(install_fd: int) -> None:
@@ -274,6 +275,15 @@ def _release_install_lock(install_fd: int) -> None:
         raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
 
 
+def _release_install_lock_preserving_primary_error(install_fd: int) -> None:
+    primary_error_active = sys.exc_info()[0] is not None
+    try:
+        _release_install_lock(install_fd)
+    except ArtifactStoreUnavailable:
+        if not primary_error_active:
+            raise
+
+
 def _acquire_read_lock(install_fd: int) -> None:
     try:
         fcntl.flock(install_fd, fcntl.LOCK_SH)
@@ -300,7 +310,7 @@ def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, 
                     return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
                 finally:
                     if locked:
-                        _release_install_lock(install_fd)
+                        _release_install_lock_preserving_primary_error(install_fd)
                     os.close(install_fd)
             return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
         finally:

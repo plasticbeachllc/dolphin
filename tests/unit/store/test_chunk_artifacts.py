@@ -355,6 +355,32 @@ def test_artifact_store_read_recovers_a_stale_crash_left_installer_link(tmp_path
     assert not installer_path.exists()
 
 
+def test_artifact_store_unlock_failure_does_not_mask_primary_corruption(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    artifact = store.put_exact_text("preserve the primary corruption error")
+    artifact_path = _artifact_path(layout.artifacts, artifact.artifact_id)
+    artifact_path.write_bytes(b"corrupt")
+    real_flock = fcntl.flock
+    unlocks = 0
+
+    def fail_read_unlock(descriptor: int, operation: int) -> None:
+        nonlocal unlocks
+        if operation == fcntl.LOCK_UN:
+            unlocks += 1
+            if unlocks == 2:
+                raise OSError("injected unlock failure")
+        real_flock(descriptor, operation)
+
+    monkeypatch.setattr(fcntl, "flock", fail_read_unlock)
+
+    with pytest.raises(ArtifactCorrupt, match="chunk artifact is corrupt"):
+        store.read_verified(artifact.artifact_id)
+
+
 def test_artifact_store_refuses_unsafe_stale_installer_entries(tmp_path: Path) -> None:
     layout = macos_storage_layout(home=tmp_path)
     store = ChunkArtifactStore(layout)
