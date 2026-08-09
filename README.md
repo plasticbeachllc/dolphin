@@ -195,6 +195,9 @@ Trade-offs: ~2GB disk for model weights, 2-3x slower searches.
 | [Bun](https://bun.sh/)           | MCP bridge runtime (optional) |
 | Git                              | Repository scanning           |
 
+For slow or remote filesystems, `DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS` controls the Git identity-probe timeout. It
+defaults to 5 seconds and is capped at 30 seconds.
+
 ## Troubleshooting
 
 **Server not responding?**

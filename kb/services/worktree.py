@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS = 5.0
+_MAX_GIT_PROBE_TIMEOUT_SECONDS = 30.0
 
 
 class WorktreeDiscoveryError(ValueError):
@@ -44,6 +46,8 @@ def validate_git_worktree_snapshot(worktree: GitWorktree) -> None:
 def _discover_git_worktree(path: Path) -> GitWorktree:
     if not path.is_absolute():
         raise WorktreeDiscoveryError("WORKTREE_PATH_NOT_ABSOLUTE")
+    if "\n" in str(path) or "\r" in str(path):
+        raise WorktreeDiscoveryError("WORKTREE_PATH_LINEBREAK")
     if not path.is_dir():
         raise WorktreeDiscoveryError("WORKTREE_PATH_INVALID")
 
@@ -60,7 +64,7 @@ def _read_git_worktree_snapshot(path: Path) -> GitWorktree:
     return GitWorktree(
         root=Path(root),
         common_git_dir=common_git_dir_path,
-        common_git_dir_identity=_directory_identity(common_git_dir_path),
+        common_git_dir_identity=git_directory_identity(common_git_dir_path),
         head_commit=head_commit,
         branch=branch,
     )
@@ -88,13 +92,15 @@ def _git_snapshot(path: Path) -> tuple[str, str, str, str | None]:
     return values[0], values[1], values[2], branch
 
 
-def _directory_identity(path: Path) -> str:
-    """Bind an on-disk Git directory, not merely its reusable pathname."""
+def git_directory_identity(path: Path) -> str:
+    """Bind a Git directory to its filesystem generation, not merely its reusable pathname."""
     try:
         status = path.stat()
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED") from exc
-    return f"{status.st_dev}:{status.st_ino}"
+    birth_time = getattr(status, "st_birthtime", None)
+    generation = int(birth_time * 1_000_000_000) if birth_time is not None else status.st_ctime_ns
+    return f"{status.st_dev}:{status.st_ino}:{generation}"
 
 
 def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -115,7 +121,7 @@ def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def _git_probe_timeout_seconds() -> float:
-    """Resolve a bounded user override without losing a safe enrollment default."""
+    """Resolve a finite override, clamped to the documented 30-second enrollment maximum."""
     raw = os.environ.get("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS")
     if raw is None:
         return _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
@@ -123,4 +129,6 @@ def _git_probe_timeout_seconds() -> float:
         timeout = float(raw)
     except ValueError:
         return _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
-    return timeout if timeout > 0 else _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
+    if not math.isfinite(timeout) or timeout <= 0:
+        return _DEFAULT_GIT_PROBE_TIMEOUT_SECONDS
+    return min(timeout, _MAX_GIT_PROBE_TIMEOUT_SECONDS)

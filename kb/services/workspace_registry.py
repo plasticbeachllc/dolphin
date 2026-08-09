@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 import sqlite3
 import threading
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 
 from kb.runtime.storage import StorageLayout
-from kb.services.worktree import GitWorktree, validate_git_worktree_snapshot
+from kb.services.worktree import (
+    GitWorktree,
+    WorktreeDiscoveryError,
+    git_directory_identity,
+    validate_git_worktree_snapshot,
+)
 
 
 class WorkspaceRegistryError(RuntimeError):
@@ -23,6 +29,9 @@ class WorkspaceRegistryError(RuntimeError):
 
 
 _SCHEMA_VERSION = 2
+_REGISTRATION_LOCK_DEADLINE_SECONDS = 15.0
+_REGISTRATION_LOCK_INITIAL_BACKOFF_SECONDS = 0.05
+_REGISTRATION_LOCK_MAX_BACKOFF_SECONDS = 0.5
 
 
 class OperationState(StrEnum):
@@ -93,7 +102,7 @@ class WorkspaceRegistry:
         """Atomically create or refresh exactly one concrete worktree registration."""
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree)
                 self._validate_worktree_snapshot(worktree)
@@ -110,7 +119,7 @@ class WorkspaceRegistry:
         """Persist one discovered snapshot and its initial-index operation atomically."""
         self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            self._begin_registration_write(connection)
             try:
                 registration = self._register(connection, worktree)
                 operation = self._submit_initial_index(connection, registration)
@@ -342,17 +351,33 @@ class WorkspaceRegistry:
         validate_git_worktree_snapshot(worktree)
 
     @staticmethod
+    def _begin_registration_write(connection: sqlite3.Connection) -> None:
+        """Acquire the registration write lock with bounded backoff for concurrent final probes."""
+        deadline = time.monotonic() + _REGISTRATION_LOCK_DEADLINE_SECONDS
+        backoff = _REGISTRATION_LOCK_INITIAL_BACKOFF_SECONDS
+        while True:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or ("locked" not in message and "busy" not in message):
+                    raise
+                time.sleep(min(backoff, remaining))
+                backoff = min(backoff * 2, _REGISTRATION_LOCK_MAX_BACKOFF_SECONDS)
+
+    @staticmethod
     def _backfill_v1_repository_identities(connection: sqlite3.Connection) -> None:
         """Bind retained v1 rows to their Git directory, pruning unreachable legacy state."""
         rows = connection.execute("SELECT workspace_id, common_git_dir FROM workspace_registrations").fetchall()
         for workspace_id, common_git_dir in rows:
             try:
-                status = os.stat(common_git_dir)
-            except OSError:
+                identity = git_directory_identity(Path(common_git_dir))
+            except WorktreeDiscoveryError:
                 connection.execute("DELETE FROM workspace_operations WHERE workspace_id = ?", (workspace_id,))
                 connection.execute("DELETE FROM workspace_registrations WHERE workspace_id = ?", (workspace_id,))
                 continue
-            identity = f"{status.st_dev}:{status.st_ino}"
             connection.execute(
                 """
                 UPDATE workspace_registrations

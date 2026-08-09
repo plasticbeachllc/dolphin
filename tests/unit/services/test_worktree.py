@@ -45,6 +45,15 @@ async def test_discovery_rejects_relative_and_non_git_paths(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_discovery_rejects_linebreak_paths_before_using_git(tmp_path: Path) -> None:
+    path = tmp_path / "line\nbreak"
+    path.mkdir()
+
+    with pytest.raises(WorktreeDiscoveryError, match="WORKTREE_PATH_LINEBREAK"):
+        await discover_git_worktree(path)
+
+
+@pytest.mark.asyncio
 async def test_discovery_rejects_a_head_that_changes_during_the_probe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -99,8 +108,12 @@ def test_git_probe_timeout_defaults_to_five_seconds_and_allows_an_override(
     worktree_module._run_git(tmp_path, "status")
     monkeypatch.setenv("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS", "12.5")
     worktree_module._run_git(tmp_path, "status")
+    monkeypatch.setenv("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS", "999")
+    worktree_module._run_git(tmp_path, "status")
+    monkeypatch.setenv("DOLPHIN_GIT_PROBE_TIMEOUT_SECONDS", "inf")
+    worktree_module._run_git(tmp_path, "status")
 
-    assert observed_timeouts == [5.0, 12.5]
+    assert observed_timeouts == [5.0, 12.5, 30.0, 5.0]
 
 
 def test_git_probe_timeout_remains_a_distinct_discovery_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
