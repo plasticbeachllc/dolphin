@@ -33,6 +33,11 @@ PUBLIC_MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
     "open_ref",
 )
 
+# This hash covers the complete discovery-visible contract: order, names,
+# descriptions, annotations, and strict input schemas. Deliberate protocol
+# changes must update this pinned value in the same reviewed change.
+FROZEN_PUBLIC_REGISTRY_DIGEST: Final = "96c04e891b2eca1376ee2dd963eaecd7dbd63a116416e9501677bb163b76e75e"
+
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec:
@@ -161,7 +166,6 @@ def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
 
 def registry_digest(specs: Sequence[ToolSpec] = TOOL_REGISTRY) -> str:
     """Return a stable digest over discovery-visible public tool metadata."""
-    require_frozen_public_registry(specs)
     payload = [
         {
             "name": spec.name,
@@ -191,6 +195,8 @@ def require_frozen_public_registry(
         raise RuntimeError("Dolphin public tool registry contains duplicate names")
     if any(not spec.title or not spec.description for spec in specs):
         raise RuntimeError("Dolphin public tool registry contains incomplete metadata")
+    if registry_digest(specs) != FROZEN_PUBLIC_REGISTRY_DIGEST:
+        raise RuntimeError("Dolphin public tool registry does not match the frozen 0.3.0 contract")
     if handlers is not None and set(handlers) != set(PUBLIC_MCP_TOOL_NAMES):
         raise RuntimeError("public tool handlers do not match the frozen registry")
 

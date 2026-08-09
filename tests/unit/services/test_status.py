@@ -38,6 +38,16 @@ async def test_status_recommends_explicit_repo_add_for_the_current_worktree(tmp_
     assert result.next_actions[0].arguments == {"path": str(tmp_path)}
 
 
+def test_worktree_probe_preserves_surrounding_path_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    expected = "/tmp/ Dolphin worktree "
+    completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{expected}\n")
+    monkeypatch.setattr(status_module.subprocess, "run", lambda *_args, **_kwargs: completed)
+
+    result = status_module._worktree_root(Path("/tmp"))
+
+    assert result == Path(expected)
+
+
 @pytest.mark.asyncio
 async def test_status_runs_git_probe_off_the_event_loop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def slow_probe(_cwd: Path) -> None:

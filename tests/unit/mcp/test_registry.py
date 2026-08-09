@@ -2,19 +2,36 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 
 import pytest
 from pydantic import ValidationError
 
 from kb.mcp.contracts import RepoAddInput, SearchInput
-from kb.mcp.registry import PUBLIC_MCP_TOOL_NAMES, TOOL_REGISTRY, registry_digest, require_frozen_public_registry
+from kb.mcp.registry import (
+    FROZEN_PUBLIC_REGISTRY_DIGEST,
+    PUBLIC_MCP_TOOL_NAMES,
+    TOOL_REGISTRY,
+    registry_digest,
+    require_frozen_public_registry,
+)
 
 
-def test_public_registry_is_exact_and_digest_is_stable() -> None:
+def test_public_registry_matches_the_committed_frozen_contract() -> None:
     assert tuple(spec.name for spec in TOOL_REGISTRY) == PUBLIC_MCP_TOOL_NAMES
     require_frozen_public_registry()
-    assert registry_digest() == registry_digest()
+    assert registry_digest() == FROZEN_PUBLIC_REGISTRY_DIGEST
+
+
+def test_frozen_registry_rejects_every_discovery_surface_drift() -> None:
+    changed_description = (replace(TOOL_REGISTRY[0], description="Different discovery text."), *TOOL_REGISTRY[1:])
+    changed_annotation = (replace(TOOL_REGISTRY[0], read_only=False), *TOOL_REGISTRY[1:])
+    changed_schema = (replace(TOOL_REGISTRY[0], input_model=RepoAddInput), *TOOL_REGISTRY[1:])
+
+    for changed in (changed_description, changed_annotation, changed_schema):
+        with pytest.raises(RuntimeError, match="does not match the frozen"):
+            require_frozen_public_registry(changed)
 
 
 def test_repo_forget_annotations_are_explicit_and_conservative() -> None:

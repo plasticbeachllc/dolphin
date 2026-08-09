@@ -51,3 +51,22 @@ def test_layout_rejects_an_exposed_human_config(tmp_path: Path) -> None:
 
     with pytest.raises(StorageLayoutError, match="unsafe permissions"):
         layout.ensure_private_directories()
+
+
+def test_layout_rejects_an_exposed_metadata_database(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    layout.ensure_private_directories()
+    layout.metadata_db.write_text("sensitive derived data")
+    layout.metadata_db.chmod(0o644)
+
+    with pytest.raises(StorageLayoutError, match="unsafe permissions"):
+        layout.ensure_private_directories()
+
+
+def test_layout_creates_metadata_database_with_private_permissions(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+
+    layout.ensure_private_metadata_database()
+
+    assert layout.metadata_db.is_file()
+    assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o600

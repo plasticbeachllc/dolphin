@@ -26,11 +26,17 @@ class StorageLayout:
     temporary: Path
 
     def ensure_private_directories(self) -> None:
-        """Create state directories with private modes without touching config or data files."""
+        """Create state directories and validate existing sensitive runtime files."""
         _ensure_private_directory(self.root)
         for path in (self.vectors, self.artifacts, self.locks, self.logs, self.temporary):
             _ensure_private_directory(path)
-        _validate_optional_private_file(self.config_file)
+        _validate_optional_private_file(self.config_file, label="configuration")
+        _validate_optional_private_file(self.metadata_db, label="metadata database")
+
+    def ensure_private_metadata_database(self) -> None:
+        """Create the metadata database placeholder privately, or validate it before use."""
+        self.ensure_private_directories()
+        _create_or_validate_private_file(self.metadata_db, label="metadata database")
 
 
 def macos_storage_layout(*, home: Path | None = None) -> StorageLayout:
@@ -62,18 +68,32 @@ def _ensure_private_directory(path: Path) -> None:
     _validate_ownership_and_mode(path, status, required_mode=0o700)
 
 
-def _validate_optional_private_file(path: Path) -> None:
-    """Validate the human-owned config if present; never create or repair it implicitly."""
+def _validate_optional_private_file(path: Path, *, label: str) -> None:
+    """Validate an existing private file without creating it."""
     try:
         status = path.lstat()
     except FileNotFoundError:
         return
     except OSError as exc:
-        raise StorageLayoutError(f"Dolphin configuration cannot be inspected: {path}") from exc
+        raise StorageLayoutError(f"Dolphin {label} cannot be inspected: {path}") from exc
 
     if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
-        raise StorageLayoutError("Dolphin configuration must be a regular file")
+        raise StorageLayoutError(f"Dolphin {label} must be a regular file")
     _validate_ownership_and_mode(path, status, required_mode=0o600)
+
+
+def _create_or_validate_private_file(path: Path, *, label: str) -> None:
+    """Create exactly one regular private file without following a pre-existing link."""
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        _validate_optional_private_file(path, label=label)
+        return
+    except OSError as exc:
+        raise StorageLayoutError(f"Dolphin {label} cannot be created: {path}") from exc
+    else:
+        os.close(descriptor)
+    _validate_optional_private_file(path, label=label)
 
 
 def _validate_ownership_and_mode(path: Path, status: os.stat_result, *, required_mode: int) -> None:

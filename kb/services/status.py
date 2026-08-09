@@ -107,9 +107,10 @@ def _worktree_root(cwd: Path) -> Path | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if result.returncode != 0 or not result.stdout.strip():
+    root = result.stdout.removesuffix("\n")
+    if result.returncode != 0 or not root:
         return None
-    return Path(result.stdout.strip())
+    return Path(root)
 
 
 def _repo_add_action(worktree_root: Path) -> NextAction:
