@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import errno
 import os
 import stat
 from collections.abc import Iterator
@@ -15,24 +14,9 @@ class StorageLayoutError(RuntimeError):
     """The runtime state root cannot be used safely."""
 
 
-_UNSUPPORTED_DIRECTORY_SYNC_ERRNOS = frozenset(
-    {
-        errno.EINVAL,
-        errno.ENOTSUP,
-        errno.EOPNOTSUPP,
-    }
-)
-
-
-def sync_directory(descriptor: int) -> bool:
-    """Sync a directory when its macOS filesystem supports that operation."""
-    try:
-        os.fsync(descriptor)
-    except OSError as exc:
-        if exc.errno in _UNSUPPORTED_DIRECTORY_SYNC_ERRNOS:
-            return False
-        raise
-    return True
+def sync_directory(descriptor: int) -> None:
+    """Durably sync a directory or fail closed when the filesystem cannot."""
+    os.fsync(descriptor)
 
 
 @dataclass(frozen=True, slots=True)

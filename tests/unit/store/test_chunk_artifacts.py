@@ -9,7 +9,7 @@ import stat
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import sha256
 from pathlib import Path
-from threading import Event
+from threading import Barrier, Event
 
 import pytest
 
@@ -20,6 +20,7 @@ from kb.artifacts import (
     ArtifactInputInvalid,
     ArtifactStoreUnavailable,
     ArtifactUnavailable,
+    ChunkTextArtifact,
     EmbeddingContract,
     encode_chunk_text,
     identify_chunk_text,
@@ -108,7 +109,7 @@ def test_repeated_put_verifies_existing_artifact_without_a_temporary_write(
     assert store.put_exact_text(text) == artifact
 
 
-def test_artifact_store_tolerates_unsupported_directory_sync(
+def test_artifact_store_fails_closed_when_directory_sync_is_unsupported(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -122,9 +123,8 @@ def test_artifact_store_tolerates_unsupported_directory_sync(
 
     monkeypatch.setattr(os, "fsync", reject_only_directory_sync)
 
-    artifact = store.put_exact_text("filesystem without directory fsync\n")
-
-    assert store.read_verified(artifact.artifact_id) == "filesystem without directory fsync\n"
+    with pytest.raises(ArtifactStoreUnavailable, match="storage is unavailable"):
+        store.put_exact_text("filesystem without directory fsync\n")
 
 
 def test_artifact_store_round_trips_empty_text_with_zero_lines(tmp_path: Path) -> None:
@@ -449,6 +449,78 @@ def test_artifact_store_read_recovers_a_fresh_crash_left_installer_link(tmp_path
     assert not installer_path.exists()
 
 
+def test_healthy_artifact_reads_do_not_scan_or_take_the_cleanup_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = ChunkArtifactStore(macos_storage_layout(home=tmp_path))
+    text = "healthy reads use only the shared lock\n"
+    artifact = store.put_exact_text(text)
+
+    def reject_cleanup(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("a healthy artifact read attempted stale-installer cleanup")
+
+    monkeypatch.setattr(implementation, "_prune_stale_install_files", reject_cleanup)
+
+    assert store.read_verified(artifact.artifact_id) == text
+
+
+def test_healthy_artifact_readers_hold_compatible_shared_locks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = ChunkArtifactStore(macos_storage_layout(home=tmp_path))
+    text = "concurrent readers remain compatible\n"
+    artifact = store.put_exact_text(text)
+    real_read = implementation._read_verified_file
+    concurrent_reads = Barrier(2)
+
+    def synchronize_reads(parent_fd: int, name: str, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
+        concurrent_reads.wait(timeout=1)
+        return real_read(parent_fd, name, artifact_id)
+
+    monkeypatch.setattr(implementation, "_read_verified_file", synchronize_reads)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reads = [executor.submit(store.read_verified, artifact.artifact_id) for _ in range(2)]
+
+    assert [read.result(timeout=1) for read in reads] == [text, text]
+
+
+@pytest.mark.parametrize(
+    ("operation", "message"),
+    [
+        ("read", "read lock is unavailable"),
+        ("write", "installation lock is unavailable"),
+    ],
+)
+def test_artifact_lock_waits_are_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    operation: str,
+    message: str,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    text = "bound every artifact lock wait\n"
+    artifact = store.put_exact_text(text)
+    install_directory = _install_directory(layout.artifacts, artifact.artifact_id)
+    held_lock = os.open(install_directory, os.O_RDONLY)
+    monkeypatch.setattr(implementation, "_INSTALL_LOCK_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(implementation, "_INSTALL_LOCK_RETRY_SECONDS", 0.001)
+
+    try:
+        fcntl.flock(held_lock, fcntl.LOCK_EX)
+        with pytest.raises(ArtifactStoreUnavailable, match=message):
+            if operation == "read":
+                store.read_verified(artifact.artifact_id)
+            else:
+                store.put_exact_text(text)
+    finally:
+        fcntl.flock(held_lock, fcntl.LOCK_UN)
+        os.close(held_lock)
+
+
 def test_artifact_store_unlock_failure_does_not_mask_primary_corruption(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -465,7 +537,7 @@ def test_artifact_store_unlock_failure_does_not_mask_primary_corruption(
         nonlocal unlocks
         if operation == fcntl.LOCK_UN:
             unlocks += 1
-            if unlocks == 2:
+            if unlocks == 1:
                 raise OSError("injected unlock failure")
         real_flock(descriptor, operation)
 

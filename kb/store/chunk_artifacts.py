@@ -39,6 +39,8 @@ _INSTALL_FILE_PREFIX = "install-"
 _STALE_INSTALL_MINIMUM_AGE_SECONDS = 5 * 60
 _STALE_INSTALL_SCAN_LIMIT = 256
 _STALE_INSTALL_PRUNE_LIMIT = 32
+_INSTALL_LOCK_TIMEOUT_SECONDS = 5.0
+_INSTALL_LOCK_RETRY_SECONDS = 0.01
 
 
 class ChunkArtifactStore:
@@ -195,8 +197,14 @@ def _install_no_replace(
             _release_install_lock_preserving_primary_error(install_fd)
 
 
-def _prune_stale_install_files(install_fd: int) -> None:
-    if not _try_acquire_cleanup_lock(install_fd):
+def _prune_stale_install_files(install_fd: int, *, wait_for_lock: bool = False) -> None:
+    if wait_for_lock:
+        _acquire_bounded_lock(
+            install_fd,
+            fcntl.LOCK_EX,
+            error_message="Dolphin chunk artifact cleanup lock is unavailable",
+        )
+    elif not _try_acquire_cleanup_lock(install_fd):
         return
     try:
         _prune_stale_install_files_locked(install_fd)
@@ -261,10 +269,26 @@ def _prune_stale_install_files_locked(install_fd: int) -> None:
 
 
 def _acquire_install_lock(install_fd: int) -> None:
-    try:
-        fcntl.flock(install_fd, fcntl.LOCK_EX)
-    except OSError:
-        raise ArtifactStoreUnavailable("Dolphin chunk artifact installation lock is unavailable") from None
+    _acquire_bounded_lock(
+        install_fd,
+        fcntl.LOCK_EX,
+        error_message="Dolphin chunk artifact installation lock is unavailable",
+    )
+
+
+def _acquire_bounded_lock(install_fd: int, operation: int, *, error_message: str) -> None:
+    deadline = time.monotonic() + _INSTALL_LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            fcntl.flock(install_fd, operation | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ArtifactStoreUnavailable(error_message) from None
+            time.sleep(min(_INSTALL_LOCK_RETRY_SECONDS, remaining))
+        except OSError:
+            raise ArtifactStoreUnavailable(error_message) from None
 
 
 def _try_acquire_cleanup_lock(install_fd: int) -> bool:
@@ -294,10 +318,11 @@ def _release_install_lock_preserving_primary_error(install_fd: int) -> None:
 
 
 def _acquire_read_lock(install_fd: int) -> None:
-    try:
-        fcntl.flock(install_fd, fcntl.LOCK_SH)
-    except OSError:
-        raise ArtifactStoreUnavailable("Dolphin chunk artifact read lock is unavailable") from None
+    _acquire_bounded_lock(
+        install_fd,
+        fcntl.LOCK_SH,
+        error_message="Dolphin chunk artifact read lock is unavailable",
+    )
 
 
 def _read_verified_from_root(artifacts_fd: int, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
@@ -329,16 +354,39 @@ def _read_verified_with_install_lock(
     install_fd: int,
     artifact_id: str,
 ) -> tuple[str, ChunkTextArtifact]:
+    try:
+        try:
+            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id)
+        except ArtifactCorrupt:
+            if not _artifact_may_have_crash_left_installer(shard_fd, artifact_id[2:]):
+                raise
+            _prune_stale_install_files(install_fd, wait_for_lock=True)
+            return _read_verified_under_shared_lock(shard_fd, install_fd, artifact_id)
+    finally:
+        os.close(install_fd)
+
+
+def _read_verified_under_shared_lock(
+    shard_fd: int,
+    install_fd: int,
+    artifact_id: str,
+) -> tuple[str, ChunkTextArtifact]:
     locked = False
     try:
-        _prune_stale_install_files(install_fd)
         _acquire_read_lock(install_fd)
         locked = True
         return _read_verified_file(shard_fd, artifact_id[2:], artifact_id)
     finally:
         if locked:
             _release_install_lock_preserving_primary_error(install_fd)
-        os.close(install_fd)
+
+
+def _artifact_may_have_crash_left_installer(shard_fd: int, final_name: str) -> bool:
+    try:
+        status = os.stat(final_name, dir_fd=shard_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return stat.S_ISREG(status.st_mode) and status.st_nlink == 2
 
 
 def _read_verified_file(parent_fd: int, name: str, artifact_id: str) -> tuple[str, ChunkTextArtifact]:

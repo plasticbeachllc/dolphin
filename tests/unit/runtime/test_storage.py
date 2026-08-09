@@ -143,20 +143,18 @@ def test_artifact_descriptor_syncs_each_new_parent_entry_once(
     assert len(synced_descriptors) == first_open_syncs
 
 
-@pytest.mark.parametrize(
-    "unsupported_errno",
-    sorted({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}),
-)
-def test_directory_sync_accepts_unsupported_filesystem_semantics(
+def test_directory_sync_fails_closed_when_filesystem_durability_is_unsupported(
     monkeypatch: pytest.MonkeyPatch,
-    unsupported_errno: int,
 ) -> None:
     def reject_directory_sync(_descriptor: int) -> None:
-        raise OSError(unsupported_errno, "directory sync unsupported")
+        raise OSError(errno.EINVAL, "directory sync unsupported")
 
     monkeypatch.setattr(os, "fsync", reject_directory_sync)
 
-    assert sync_directory(123) is False
+    with pytest.raises(OSError) as error:
+        sync_directory(123)
+
+    assert error.value.errno == errno.EINVAL
 
 
 def test_directory_sync_preserves_real_io_failures(monkeypatch: pytest.MonkeyPatch) -> None:
