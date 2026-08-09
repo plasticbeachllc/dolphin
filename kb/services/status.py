@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from collections.abc import Mapping
@@ -60,14 +61,18 @@ class StatusService:
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = environment if environment is not None else os.environ
 
-    def __call__(self, _input: StatusInput) -> StatusResult:
+    async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
-        worktree_root = _worktree_root(self._cwd)
+        worktree_root = await asyncio.to_thread(_worktree_root, self._cwd)
         next_actions = [] if worktree_root is None else [_repo_add_action(worktree_root)]
 
         return StatusResult(
             version=get_version(),
-            readiness="ready" if credential_present else "degraded",
+            # Most public tools are intentionally still represented by bounded
+            # readiness errors while their application services are built.
+            # Do not advertise overall readiness merely because a credential is
+            # present: agents use this field to decide whether to proceed.
+            readiness="degraded",
             credential_present=credential_present,
             credential_variable="DOLPHIN_OPENAI_API_KEY",
             workspace_counts=EffectiveWorkspaceCounts(

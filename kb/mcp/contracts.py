@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class StrictInput(BaseModel):
@@ -35,6 +35,14 @@ class RepoAddInput(StrictInput):
     """Explicitly register one concrete Git worktree."""
 
     path: Path = Field(description="Absolute path to the concrete Git worktree root.")
+
+    @field_validator("path")
+    @classmethod
+    def require_absolute_path(cls, path: Path) -> Path:
+        """Keep relative client paths out of the frozen public contract."""
+        if not path.is_absolute():
+            raise ValueError("path must be absolute")
+        return path
 
 
 class RepoForgetInput(StrictInput):

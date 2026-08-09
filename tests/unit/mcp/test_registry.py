@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from kb.mcp.contracts import SearchInput
+from kb.mcp.contracts import RepoAddInput, SearchInput
 from kb.mcp.registry import PUBLIC_MCP_TOOL_NAMES, TOOL_REGISTRY, registry_digest, require_frozen_public_registry
 
 
@@ -79,6 +79,11 @@ def test_search_rejects_mixed_query_and_continuation_fields() -> None:
                 }
             }
         )
+
+
+def test_repo_add_rejects_relative_paths() -> None:
+    with pytest.raises(ValidationError, match="path must be absolute"):
+        RepoAddInput.model_validate({"path": "."})
 
 
 def _assert_closed_objects(node: object) -> None:
