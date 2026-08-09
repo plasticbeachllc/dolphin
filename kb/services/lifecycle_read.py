@@ -8,9 +8,16 @@ from typing import Literal
 
 from pydantic import Field
 
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH, REPO_LIST_PAGE_SIZE
 from kb.mcp.contracts import OperationStatusInput, RepoListInput
 from kb.mcp.errors import ToolError, ToolFailure, cursor_expired, cursor_invalid, operation_missing, storage_unavailable
-from kb.services.lifecycle_models import LifecycleResultModel, NextAction, RepositoryFamilySummary, WorkspaceSummary
+from kb.services.lifecycle_models import (
+    LifecycleResultModel,
+    NextAction,
+    RepositoryBoundarySummary,
+    RepositoryFamilySummary,
+    WorkspaceSummary,
+)
 from kb.services.workspace_registry import (
     OperationSnapshot,
     OperationState,
@@ -22,7 +29,6 @@ from kb.services.workspace_registry import (
     WorkspaceSnapshot,
 )
 
-REPO_LIST_PAGE_SIZE = 25
 type PauseReason = Literal[
     "runtime_absent",
     "credential_missing",
@@ -35,12 +41,12 @@ type PauseReason = Literal[
 class RepoListItem(LifecycleResultModel):
     repository: RepositoryFamilySummary
     workspace: WorkspaceSummary
-    repository_boundaries: list[dict[str, str]]
+    repository_boundaries: list[RepositoryBoundarySummary] = Field(max_length=8)
 
 
 class RepoListResult(LifecycleResultModel):
     items: list[RepoListItem] = Field(max_length=REPO_LIST_PAGE_SIZE)
-    next_cursor: str | None
+    next_cursor: str | None = Field(max_length=REPO_LIST_CURSOR_MAX_LENGTH)
 
 
 class OperationCounters(LifecycleResultModel):

@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from kb.cleanup_authority import CLEANUP_RECEIPT_LENGTH, CLEANUP_RECEIPT_PATTERN
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
 
 
 class StrictInput(BaseModel):
@@ -29,7 +30,7 @@ class RepoListInput(StrictInput):
     """Page through actionable workspace registrations."""
 
     cursor: str | None = Field(
-        max_length=1_024,
+        max_length=REPO_LIST_CURSOR_MAX_LENGTH,
         description="Opaque cursor from repo_list; null starts the first page.",
     )
 

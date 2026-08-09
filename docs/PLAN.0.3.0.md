@@ -3058,6 +3058,8 @@ class RepoListResult(BaseModel):
 
 The initial `repo_list` request omits `cursor`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts from an empty input rather than merging inconsistent pages.
 
+Production projections also bound every string and nested collection rather than relying on the 25-item page cap alone. Repository/workspace IDs are at most 64 characters, display labels at most 512, roots at most 4,096, branches at most 1,024, and head identifiers at most 64. Each workspace carries at most eight boundary summaries, each boundary has at most six bounded string fields, and cursors are capped at 8,192 characters on both input and output; cursor generation fails closed before exceeding that limit.
+
 ### 7.31 Exact operation snapshot
 
 ```python
@@ -4425,7 +4427,7 @@ CI teardown deletes only its exact run workspace. Local evaluation admission fir
 
 ### Phase 3 — safe autonomous repository lifecycle
 
-Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts and non-extending terminal expiry. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, full operation checkpoints, and complete matrix tests are implemented.
+Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts and non-extending terminal expiry. Unsupported missing, cleanup-pending, and forgotten aggregates are deliberately omitted rather than reported as fabricated zeros until their durable states exist. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, full operation checkpoints, and complete matrix tests are implemented.
 
 - [ ] Implement observational empty-input `status`: bounded runtime/credential/storage diagnostics, mutually exclusive effective-state counts, aggregate-only forgotten accounting, and at most one deterministically resolved current workspace with no provider, scan, reconciliation, operation, GC, or enrollment side effect.
 - [ ] Implement cursor-only `repo_list` with fixed 25-item pages, deterministic family/workspace ordering, one actionable-list revision, bounded integrity-protected cursor decoding, all-or-nothing invalidation, and no forgotten entries or expansion/filter/sort/page-size controls.

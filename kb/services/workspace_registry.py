@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from kb.cleanup_authority import is_valid_cleanup_receipt
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH, REPO_LIST_PAGE_SIZE
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.worktree import (
     GitWorktree,
@@ -43,9 +44,7 @@ class RepoListCursorExpired(ValueError):
 
 
 _SCHEMA_VERSION = 4
-_REPO_LIST_PAGE_SIZE = 25
 _REPO_LIST_CURSOR_PREFIX = "dolphin-repo-list-v1_"
-_REPO_LIST_CURSOR_MAX_LENGTH = 1_024
 _OPERATION_STATUS_RETENTION = timedelta(days=30)
 _REGISTRATION_LOCK_DEADLINE_SECONDS = 15.0
 _REGISTRATION_LOCK_INITIAL_BACKOFF_SECONDS = 0.05
@@ -240,17 +239,17 @@ class WorkspaceRegistry:
                     )
                 rows = connection.execute(
                     _WORKSPACE_PAGE_QUERY_WITH_CURSOR if after_key is not None else _WORKSPACE_PAGE_QUERY,
-                    (*after_key, _REPO_LIST_PAGE_SIZE + 1) if after_key is not None else (_REPO_LIST_PAGE_SIZE + 1,),
+                    (*after_key, REPO_LIST_PAGE_SIZE + 1) if after_key is not None else (REPO_LIST_PAGE_SIZE + 1,),
                 ).fetchall()
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
 
-        page_rows = rows[:_REPO_LIST_PAGE_SIZE]
+        page_rows = rows[:REPO_LIST_PAGE_SIZE]
         items = tuple(_workspace_snapshot(row[:8]) for row in page_rows)
         next_cursor = None
-        if len(rows) > _REPO_LIST_PAGE_SIZE and page_rows:
+        if len(rows) > REPO_LIST_PAGE_SIZE and page_rows:
             next_cursor = _encode_repo_list_cursor(
                 store_id=store_id,
                 revision=revision,
@@ -989,9 +988,15 @@ def _encode_repo_list_cursor(
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+    max_envelope_bytes = ((REPO_LIST_CURSOR_MAX_LENGTH - len(_REPO_LIST_CURSOR_PREFIX)) * 3) // 4
+    if len(payload) + 2 + 32 > max_envelope_bytes:
+        raise WorkspaceRegistryError("Dolphin repository-list cursor exceeds its public size bound")
     signature = hmac.digest(secret, b"dolphin:repo-list:v1\x00" + payload, "sha256")
     encoded = base64.urlsafe_b64encode(len(payload).to_bytes(2, "big") + payload + signature).decode("ascii")
-    return _REPO_LIST_CURSOR_PREFIX + encoded.rstrip("=")
+    cursor = _REPO_LIST_CURSOR_PREFIX + encoded.rstrip("=")
+    if len(cursor) > REPO_LIST_CURSOR_MAX_LENGTH:
+        raise WorkspaceRegistryError("Dolphin repository-list cursor exceeds its public size bound")
+    return cursor
 
 
 def _decode_repo_list_cursor(
@@ -1001,7 +1006,7 @@ def _decode_repo_list_cursor(
     revision: int,
     secret: bytes,
 ) -> tuple[str, str, str, str]:
-    if not cursor.startswith(_REPO_LIST_CURSOR_PREFIX) or len(cursor) > _REPO_LIST_CURSOR_MAX_LENGTH:
+    if not cursor.startswith(_REPO_LIST_CURSOR_PREFIX) or len(cursor) > REPO_LIST_CURSOR_MAX_LENGTH:
         raise RepoListCursorInvalid
     encoded = cursor.removeprefix(_REPO_LIST_CURSOR_PREFIX)
     try:

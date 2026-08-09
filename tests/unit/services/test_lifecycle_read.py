@@ -9,11 +9,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
 from kb.mcp.contracts import OperationStatusInput, RepoListInput, StatusInput
 from kb.mcp.errors import ToolFailure
 from kb.runtime.storage import macos_storage_layout
-from kb.services.lifecycle_read import OperationStatusService, RepoListService, _operation_status_result
+from kb.services.lifecycle_models import RepositoryFamilySummary, WorkspaceSummary
+from kb.services.lifecycle_read import (
+    OperationStatusService,
+    RepoListItem,
+    RepoListResult,
+    RepoListService,
+    _operation_status_result,
+)
 from kb.services.status import StatusService
 from kb.services.workspace_registry import OperationSnapshot, OperationState, WorkspaceRegistry
 from kb.services.worktree import discover_git_worktree
@@ -32,6 +41,8 @@ async def test_empty_lifecycle_reads_do_not_create_registry_state(tmp_path: Path
     assert repo_list.items == []
     assert repo_list.next_cursor is None
     assert status.workspace_counts.registered == 0
+    assert set(status.workspace_counts.model_dump()) == {"registered", "indexing", "ready", "failed"}
+    assert "forgotten" not in status.model_dump()
     assert status.tool_availability.repo_list == "available"
     assert not layout.metadata_db.exists()
 
@@ -151,6 +162,44 @@ def test_operation_status_marks_a_redacted_workspace_unavailable() -> None:
 
     assert result.workspace_available is False
     assert result.workspace_id is None
+
+
+def test_repo_list_result_models_enforce_string_collection_and_cursor_bounds() -> None:
+    workspace = WorkspaceSummary(
+        id="ws_1",
+        repository_id="repo_1",
+        display_name="workspace",
+        root="/workspace",
+        branch="develop",
+        head_commit="a" * 40,
+        state="ready",
+    )
+    repository = RepositoryFamilySummary(id="repo_1", display_name="repository")
+
+    with pytest.raises(ValidationError):
+        WorkspaceSummary(
+            id="ws_1",
+            repository_id="repo_1",
+            display_name="x" * 513,
+            root="/workspace",
+            branch="develop",
+            head_commit="a" * 40,
+            state="ready",
+        )
+    with pytest.raises(ValidationError):
+        RepoListItem(
+            repository=repository,
+            workspace=workspace,
+            repository_boundaries=[{} for _ in range(9)],
+        )
+    with pytest.raises(ValidationError):
+        RepoListItem(
+            repository=repository,
+            workspace=workspace,
+            repository_boundaries=[{"path": "x" * 257}],
+        )
+    with pytest.raises(ValidationError):
+        RepoListResult(items=[], next_cursor="x" * (REPO_LIST_CURSOR_MAX_LENGTH + 1))
 
 
 def _commit_repository(path: Path) -> Path:

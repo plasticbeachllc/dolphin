@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from kb.mcp.contracts import StatusInput
-from kb.services.lifecycle_models import NextAction, WorkspaceSummary
+from kb.services.lifecycle_models import NextAction, RepositoryBoundarySummary, WorkspaceSummary
 from kb.services.lifecycle_read import workspace_summary
 from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
 from kb.services.worktree import sanitized_git_environment
@@ -28,15 +28,7 @@ class EffectiveWorkspaceCounts(_ResultModel):
     registered: int = Field(ge=0)
     indexing: int = Field(ge=0)
     ready: int = Field(ge=0)
-    missing: int = Field(ge=0)
-    cleanup_pending: int = Field(ge=0)
     failed: int = Field(ge=0)
-
-
-class ForgottenStateAggregates(_ResultModel):
-    replay_tombstones: int = Field(ge=0)
-    tombstone_metadata_bytes: int = Field(ge=0)
-    awaiting_physical_reclamation: int = Field(ge=0)
 
 
 class ToolAvailability(_ResultModel):
@@ -57,11 +49,10 @@ class StatusResult(_ResultModel):
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
     tool_availability: ToolAvailability
     workspace_counts: EffectiveWorkspaceCounts
-    forgotten: ForgottenStateAggregates
     current_workspace_resolution: Literal["resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"]
     current_workspace: WorkspaceSummary | None = None
-    current_repository_boundaries: list[dict[str, str]]
-    next_actions: list[NextAction]
+    current_repository_boundaries: list[RepositoryBoundarySummary] = Field(max_length=8)
+    next_actions: list[NextAction] = Field(max_length=8)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,14 +120,7 @@ class StatusService:
                 registered=registry_snapshot.registered,
                 indexing=registry_snapshot.indexing,
                 ready=registry_snapshot.ready,
-                missing=0,
-                cleanup_pending=0,
                 failed=registry_snapshot.failed,
-            ),
-            forgotten=ForgottenStateAggregates(
-                replay_tombstones=0,
-                tombstone_metadata_bytes=0,
-                awaiting_physical_reclamation=0,
             ),
             current_workspace_resolution=resolution,
             current_workspace=current_workspace,

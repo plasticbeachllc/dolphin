@@ -13,6 +13,7 @@ from shutil import rmtree
 
 import pytest
 
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services import workspace_registry as workspace_registry_module
 from kb.services.repo_add import RepoAddService
@@ -529,7 +530,7 @@ def test_repo_list_cursor_is_bounded_revision_bound_and_integrity_protected(
     assert page_of_25.next_cursor is None
     assert len(first_page.items) == 25
     assert first_page.next_cursor is not None
-    assert len(first_page.next_cursor) <= 1_024
+    assert len(first_page.next_cursor) <= REPO_LIST_CURSOR_MAX_LENGTH
     assert len(second_page.items) == 1
     assert second_page.next_cursor is None
     assert [item.workspace_display_name for item in first_page.items] == [f"repo-{index:03d}" for index in range(25)]
@@ -551,6 +552,16 @@ def test_repo_list_cursor_is_bounded_revision_bound_and_integrity_protected(
     registry.register(_fake_worktree(tmp_path / "repositories", 26), cleanup_receipt=_cleanup_receipt("new-member"))
     with pytest.raises(RepoListCursorExpired):
         registry.list_workspaces(first_page.next_cursor)
+
+
+def test_repo_list_cursor_generation_fails_closed_before_exceeding_its_public_bound() -> None:
+    with pytest.raises(WorkspaceRegistryError, match="cursor exceeds"):
+        workspace_registry_module._encode_repo_list_cursor(
+            store_id="store_1",
+            revision=1,
+            key=("x" * REPO_LIST_CURSOR_MAX_LENGTH, "repo_1", "workspace", "ws_1"),
+            secret=b"x" * 32,
+        )
 
 
 def test_operation_snapshot_expires_terminal_status_without_extending_it(
