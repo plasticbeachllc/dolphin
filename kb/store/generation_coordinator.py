@@ -13,6 +13,7 @@ from typing import Literal, cast
 
 from pydantic import ValidationError
 
+from kb.artifacts import ArtifactCorrupt, identify_chunk_artifact_set
 from kb.generation import (
     GenerationConflict,
     GenerationCoordinatorError,
@@ -24,9 +25,11 @@ from kb.generation import (
     VerifiedGenerationManifest,
     VerifiedVectorCommit,
 )
+from kb.generation_content import StagedChunkMembership, identify_chunk_membership, identify_generation_content_manifest
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
+from kb.store.chunk_artifacts import ChunkArtifactStore
 
 _READ_LEASE_MAXIMUM = timedelta(seconds=60)
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
@@ -163,6 +166,7 @@ class SQLiteGenerationCoordinator:
                     generation.metadata_item_count,
                     generation.keyword_item_count,
                 )
+                _require_persisted_content_manifest(connection, manifest)
                 if generation.state in {"ready", "published"}:
                     if existing != supplied or generation.vector_row_count != manifest.vector_row_count:
                         raise GenerationConflict("Dolphin generation already records a different complete manifest")
@@ -207,6 +211,7 @@ class SQLiteGenerationCoordinator:
     ) -> PublishedSnapshot:
         if expected_previous_generation_id is not None:
             _bounded(expected_previous_generation_id, "expected generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
+        self._verify_generation_artifacts(generation_id)
         observed_at = _timestamp(self._clock())
         with self._connection() as connection:
             _begin_write(connection)
@@ -219,6 +224,7 @@ class SQLiteGenerationCoordinator:
                 ).fetchone()
                 current_generation_id = str(current_row[0]) if current_row is not None else None
                 if generation.state == "published" and current_generation_id == generation_id:
+                    _require_generation_content_binding(connection, generation)
                     if generation.previous_generation_id != expected_previous_generation_id:
                         raise GenerationConflict("Dolphin publication replay has a different predecessor")
                     snapshot = _snapshot_by_generation(connection, generation_id)
@@ -230,6 +236,7 @@ class SQLiteGenerationCoordinator:
                     raise GenerationConflict("Dolphin published generation changed before pointer swap")
                 if generation.state != "ready":
                     raise GenerationCoordinatorError("Dolphin generation is not ready for publication")
+                _require_generation_content_binding(connection, generation)
                 head_row = connection.execute(
                     "SELECT head_commit FROM workspace_registrations WHERE workspace_id = ?",
                     (generation.workspace_id,),
@@ -277,6 +284,47 @@ class SQLiteGenerationCoordinator:
                 raise
             connection.commit()
         return snapshot
+
+    def _verify_generation_artifacts(self, generation_id: str) -> None:
+        _bounded(generation_id, "generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
+        with self._connection(read_only=True) as connection:
+            manifest = _content_manifest_for_generation(connection, generation_id)
+            if manifest is None:
+                return
+            rows = connection.execute(
+                """
+                SELECT artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+                FROM generation_chunk_memberships
+                WHERE generation_id = ?
+                GROUP BY artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+                ORDER BY artifact_id
+                """,
+                (generation_id,),
+            ).fetchall()
+        artifacts = ChunkArtifactStore(self._layout)
+        observed = {}
+        for row in rows:
+            _text, descriptor = artifacts.read_verified_artifact(str(row[0]))
+            expected = (str(row[0]), int(row[1]), int(row[2]), int(row[3]))
+            actual = (
+                descriptor.artifact_id,
+                descriptor.utf8_bytes,
+                descriptor.characters,
+                descriptor.lines,
+            )
+            if actual != expected:
+                raise ArtifactCorrupt("Dolphin generation artifact does not match its manifest")
+            observed[descriptor.artifact_id] = descriptor
+        artifact_set = identify_chunk_artifact_set(
+            tuple(observed),
+            total_utf8_bytes=sum(artifact.utf8_bytes for artifact in observed.values()),
+        )
+        if (
+            artifact_set.set_digest != manifest.artifact_set_digest
+            or artifact_set.artifact_count != manifest.artifact_count
+            or artifact_set.total_utf8_bytes != manifest.artifact_utf8_bytes
+        ):
+            raise ArtifactCorrupt("Dolphin generation artifact set does not match its manifest")
 
     def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None:
         _bounded(workspace_id, "workspace ID", maximum=_PRIVATE_ID_MAX_LENGTH)
@@ -474,6 +522,129 @@ def _require_generation_identity(
         or generation.pipeline_key != pipeline_key
     ):
         raise GenerationConflict("Dolphin operation already links to an incompatible generation")
+
+
+def _require_persisted_content_manifest(
+    connection: sqlite3.Connection,
+    manifest: VerifiedGenerationManifest,
+) -> None:
+    persisted = _content_manifest_for_generation(connection, manifest.generation_id)
+    if persisted != manifest:
+        raise GenerationCoordinatorError("Dolphin generation content manifest is unavailable or incompatible")
+    _require_content_counts(connection, manifest)
+
+
+def _content_manifest_for_generation(
+    connection: sqlite3.Connection,
+    generation_id: str,
+) -> VerifiedGenerationManifest | None:
+    row = connection.execute(
+        """
+        SELECT manifest_id, manifest_digest, artifact_set_digest, artifact_count,
+               artifact_utf8_bytes, metadata_item_count, keyword_item_count, vector_row_count
+        FROM generation_content_manifests WHERE generation_id = ?
+        """,
+        (generation_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return VerifiedGenerationManifest(
+            generation_id=generation_id,
+            manifest_id=str(row[0]),
+            manifest_digest=str(row[1]),
+            artifact_set_digest=str(row[2]),
+            artifact_count=int(row[3]),
+            artifact_utf8_bytes=int(row[4]),
+            metadata_item_count=int(row[5]),
+            keyword_item_count=int(row[6]),
+            vector_row_count=int(row[7]),
+        )
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise GenerationCoordinatorError("Dolphin generation content manifest is invalid") from exc
+
+
+def _require_generation_content_binding(
+    connection: sqlite3.Connection,
+    generation: StagingGeneration,
+) -> None:
+    row = connection.execute(
+        """
+        SELECT manifest_id, manifest_digest, metadata_item_count, keyword_item_count,
+               vector_row_count, artifact_set_digest, artifact_count, artifact_utf8_bytes
+        FROM generation_content_manifests WHERE generation_id = ?
+        """,
+        (generation.generation_id,),
+    ).fetchone()
+    if row is None or tuple(row[:5]) != (
+        generation.manifest_id,
+        generation.manifest_digest,
+        generation.metadata_item_count,
+        generation.keyword_item_count,
+        generation.vector_row_count,
+    ):
+        raise GenerationCoordinatorError("Dolphin generation content binding is unavailable or incompatible")
+    manifest = _content_manifest_for_generation(connection, generation.generation_id)
+    if manifest is None:
+        raise GenerationCoordinatorError("Dolphin generation content binding is unavailable or incompatible")
+    _require_content_counts(connection, manifest)
+
+
+def _require_content_counts(
+    connection: sqlite3.Connection,
+    manifest: VerifiedGenerationManifest,
+) -> None:
+    rows = connection.execute(
+        """
+        SELECT chunk_instance_id, artifact_id, artifact_utf8_bytes, artifact_characters,
+               artifact_lines, relative_path, source_file_fingerprint, start_line, end_line,
+               language, chunker_key, embedding_cache_key, membership_digest
+        FROM generation_chunk_memberships
+        WHERE generation_id = ?
+        ORDER BY chunk_instance_id
+        """,
+        (manifest.generation_id,),
+    ).fetchall()
+    try:
+        memberships = tuple(_membership_from_row(row) for row in rows)
+    except ValidationError as exc:
+        raise GenerationCoordinatorError("Dolphin generation chunk membership is invalid") from exc
+    artifacts = {}
+    for membership, row in zip(memberships, rows, strict=True):
+        if identify_chunk_membership(manifest.generation_id, membership) != row[12]:
+            raise GenerationCoordinatorError("Dolphin generation chunk membership digest is invalid")
+        existing = artifacts.setdefault(membership.artifact.artifact_id, membership.artifact)
+        if existing != membership.artifact:
+            raise GenerationCoordinatorError("Dolphin generation artifact metadata is inconsistent")
+    artifact_set = identify_chunk_artifact_set(
+        tuple(artifacts),
+        total_utf8_bytes=sum(artifact.utf8_bytes for artifact in artifacts.values()),
+    )
+    observed = identify_generation_content_manifest(manifest.generation_id, memberships, artifact_set)
+    if observed != manifest:
+        raise GenerationCoordinatorError("Dolphin generation chunk membership counts are incompatible")
+
+
+def _membership_from_row(row: tuple[object, ...]) -> StagedChunkMembership:
+    return StagedChunkMembership.model_validate(
+        {
+            "chunk_instance_id": row[0],
+            "artifact": {
+                "artifact_id": row[1],
+                "format": "dolphin-chunk-text-v1",
+                "utf8_bytes": row[2],
+                "characters": row[3],
+                "lines": row[4],
+            },
+            "relative_path": row[5],
+            "source_file_fingerprint": row[6],
+            "start_line": row[7],
+            "end_line": row[8],
+            "language": row[9],
+            "chunker_key": row[10],
+            "embedding_cache_key": row[11],
+        }
+    )
 
 
 _GENERATION_COLUMNS = """

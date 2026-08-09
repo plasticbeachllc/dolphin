@@ -65,7 +65,7 @@ async def test_register_persists_only_the_caller_cleanup_receipt_hash(tmp_path: 
     assert common_git_dir == str(worktree_root / ".git")
     assert common_git_dir_identity == worktree_git_dir_identity
     assert worktree_git_dir == common_git_dir
-    assert version == 9
+    assert version == 10
     assert registration.cleanup_receipt not in layout.metadata_db.read_text(errors="ignore")
 
 

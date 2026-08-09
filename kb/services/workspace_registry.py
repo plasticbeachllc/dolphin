@@ -1556,6 +1556,55 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE TABLE generation_content_manifests (
+                            generation_id TEXT PRIMARY KEY REFERENCES generations(generation_id)
+                                ON DELETE CASCADE,
+                            manifest_id TEXT NOT NULL UNIQUE,
+                            manifest_digest TEXT NOT NULL CHECK (length(manifest_digest) = 64),
+                            artifact_set_digest TEXT NOT NULL CHECK (length(artifact_set_digest) = 64),
+                            artifact_count INTEGER NOT NULL CHECK (artifact_count >= 0),
+                            artifact_utf8_bytes INTEGER NOT NULL CHECK (artifact_utf8_bytes >= 0),
+                            metadata_item_count INTEGER NOT NULL CHECK (metadata_item_count >= 0),
+                            keyword_item_count INTEGER NOT NULL CHECK (keyword_item_count >= 0),
+                            vector_row_count INTEGER NOT NULL CHECK (vector_row_count >= 0),
+                            created_at TEXT NOT NULL
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE generation_chunk_memberships (
+                            chunk_instance_id TEXT PRIMARY KEY,
+                            generation_id TEXT NOT NULL REFERENCES generations(generation_id)
+                                ON DELETE CASCADE,
+                            artifact_id TEXT NOT NULL CHECK (length(artifact_id) = 64),
+                            artifact_utf8_bytes INTEGER NOT NULL CHECK (artifact_utf8_bytes >= 0),
+                            artifact_characters INTEGER NOT NULL CHECK (artifact_characters >= 0),
+                            artifact_lines INTEGER NOT NULL CHECK (artifact_lines >= 0),
+                            relative_path TEXT NOT NULL CHECK (
+                                length(relative_path) BETWEEN 1 AND 4096
+                            ),
+                            source_file_fingerprint TEXT NOT NULL CHECK (
+                                length(source_file_fingerprint) = 64
+                            ),
+                            start_line INTEGER NOT NULL CHECK (start_line >= 1),
+                            end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+                            language TEXT NOT NULL CHECK (length(language) BETWEEN 1 AND 128),
+                            chunker_key TEXT NOT NULL CHECK (length(chunker_key) BETWEEN 1 AND 256),
+                            embedding_cache_key TEXT NOT NULL CHECK (length(embedding_cache_key) = 64),
+                            membership_digest TEXT NOT NULL CHECK (length(membership_digest) = 64),
+                            UNIQUE (generation_id, chunk_instance_id)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX generation_chunk_memberships_generation_artifact
+                        ON generation_chunk_memberships (generation_id, artifact_id, chunk_instance_id)
+                        """
+                    )
+                    connection.execute(
+                        """
                         CREATE TABLE workspace_publications (
                             workspace_id TEXT PRIMARY KEY REFERENCES workspace_registrations(workspace_id),
                             generation_id TEXT NOT NULL UNIQUE REFERENCES generations(generation_id),

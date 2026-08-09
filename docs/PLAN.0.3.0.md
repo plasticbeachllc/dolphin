@@ -4391,6 +4391,8 @@ Implementation status (2026-08-09): the Python stdio process now records one cap
 
 Native Apple Silicon storage qualification now instruments Application Support initialization and immutable artifact installation through real macOS filesystem syscalls, asserting successful directory-descriptor syncs on the supported hardware. Directory durability fails closed when the filesystem rejects it. Repeated artifact puts verify the existing immutable envelope under the install lock before allocating or syncing temporary bytes; all blocking artifact lock acquisitions have a fixed deadline, while healthy reads take only a shared lock and invoke exclusive cleanup solely for the exact two-link crash-recovery path.
 
+The generation-content foundation now persists strict canonical chunk-instance membership and one content-addressed manifest per staging generation under exact live operation-lease authority. Readiness and publication recompute the complete membership/descriptor/artifact-set binding, publication re-verifies every immutable artifact, and materialization requires the exact generation/workspace/publication/manifest snapshot tuple before returning verified text. Physical artifacts and staging/ready rows remain unsearchable; FTS5/vector retrieval wiring, reader-lease materialization admission, and GC reachability remain pending.
+
 - [ ] Add the Python MCP SDK dependency and `dolphin mcp` entry point.
 - [ ] Implement the environment-only `DOLPHIN_OPENAI_API_KEY` resolver and exhaustive secret-redaction tests.
 - [ ] Add cleanup-receipt prefix redaction to every structured log, diagnostic, exception, tracing, and test-capture path without classifying the receipt as a global credential or persisting its raw value.

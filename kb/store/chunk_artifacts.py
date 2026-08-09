@@ -78,11 +78,15 @@ class ChunkArtifactStore:
         return descriptor
 
     def read_verified(self, artifact_id: str) -> str:
+        text, _descriptor = self.read_verified_artifact(artifact_id)
+        return text
+
+    def read_verified_artifact(self, artifact_id: str) -> tuple[str, ChunkTextArtifact]:
+        """Return exact text plus its independently verified immutable descriptor."""
         require_artifact_id(artifact_id)
         try:
             with self._layout.open_artifacts_directory() as artifacts_fd:
-                text, _descriptor = _read_verified_from_root(artifacts_fd, artifact_id)
-                return text
+                return _read_verified_from_root(artifacts_fd, artifact_id)
         except StorageLayoutError:
             raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable") from None
 

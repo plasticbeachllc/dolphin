@@ -1,0 +1,408 @@
+"""Generation-scoped chunk membership and authorized materialization tests."""
+
+from __future__ import annotations
+
+import hashlib
+import sqlite3
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from kb.artifacts import ArtifactCorrupt, identify_embedding_input
+from kb.generation import GenerationCoordinatorError, PublishedSnapshot, StagingGeneration, VerifiedVectorCommit
+from kb.generation_content import (
+    GenerationContentConflict,
+    GenerationContentError,
+    PublishedChunkUnavailable,
+    StagedChunkMembership,
+)
+from kb.runtime.storage import StorageLayout, macos_storage_layout
+from kb.services.workspace_registry import OperationLease, WorkspaceRegistry
+from kb.services.worktree import GitWorktree
+from kb.store.chunk_artifacts import ChunkArtifactStore
+from kb.store.generation_content import SQLiteGenerationContentStore
+from kb.store.generation_coordinator import SQLiteGenerationCoordinator
+
+
+def test_staged_content_is_invisible_until_publication_then_materializes_exact_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="visible", text="exact published text\r\nλ\n")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+
+    assert context.coordinator.current_snapshot(context.lease.operation.workspace_id) is None
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    assert context.coordinator.current_snapshot(context.lease.operation.workspace_id) is None
+
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+
+    materialized = context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+
+    assert materialized == "exact published text\r\nλ\n"
+
+
+def test_manifest_staging_is_idempotent_but_rejects_different_content(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="idempotent", text="same immutable text")
+
+    first = context.content.stage_manifest(context.lease, context.generation, [membership])
+    repeated = context.content.stage_manifest(context.lease, context.generation, [membership])
+    changed = membership.model_copy(update={"relative_path": "src/changed.py"})
+
+    assert repeated == first
+    assert first.artifact_count == 1
+    assert first.metadata_item_count == 1
+    with pytest.raises(GenerationContentConflict, match="different chunk content"):
+        context.content.stage_manifest(context.lease, context.generation, [changed])
+
+
+def test_manifest_deduplicates_shared_artifacts_without_collapsing_membership(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    first = _membership(context.artifacts, suffix="shared-first", text="shared exact bytes")
+    second = first.model_copy(
+        update={
+            "chunk_instance_id": "chunk_shared_second",
+            "relative_path": "src/second.py",
+            "source_file_fingerprint": "2" * 64,
+        }
+    )
+
+    manifest = context.content.stage_manifest(context.lease, context.generation, [second, first])
+
+    assert manifest.artifact_count == 1
+    assert manifest.metadata_item_count == 2
+    assert manifest.artifact_utf8_bytes == len(b"shared exact bytes")
+
+
+def test_readiness_rejects_unpersisted_or_incomplete_membership(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="binding", text="bound text")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    unpersisted = manifest.model_copy(update={"manifest_digest": "f" * 64})
+
+    with pytest.raises(GenerationCoordinatorError, match="unavailable or incompatible"):
+        context.coordinator.mark_ready(context.lease, unpersisted)
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "DELETE FROM generation_chunk_memberships WHERE chunk_instance_id = ?",
+            (membership.chunk_instance_id,),
+        )
+    with pytest.raises(GenerationCoordinatorError, match="counts are incompatible"):
+        context.coordinator.mark_ready(context.lease, manifest)
+
+
+def test_manifest_staging_requires_the_exact_live_operation_lease(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="lease", text="lease-authorized text")
+    wrong_lease = replace(context.lease, lease_id="lease_unrelated")
+    expired_store = SQLiteGenerationContentStore(
+        context.layout,
+        context.artifacts,
+        clock=lambda: context.lease.expires_at,
+    )
+    clock_values = iter((context.generation.created_at, context.lease.expires_at))
+    expires_during_verification = SQLiteGenerationContentStore(
+        context.layout,
+        context.artifacts,
+        clock=lambda: next(clock_values),
+    )
+
+    with pytest.raises(GenerationContentError, match="lease is unavailable or expired"):
+        context.content.stage_manifest(wrong_lease, context.generation, [membership])
+    with pytest.raises(GenerationContentError, match="lease is unavailable or expired"):
+        expired_store.stage_manifest(context.lease, context.generation, [membership])
+    with pytest.raises(GenerationContentError, match="lease is unavailable or expired"):
+        expires_during_verification.stage_manifest(context.lease, context.generation, [membership])
+
+
+def test_readiness_and_publication_recompute_persisted_membership_digests(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="recompute", text="recompute manifest")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE generation_chunk_memberships SET relative_path = 'src/tampered.py' WHERE chunk_instance_id = ?",
+            (membership.chunk_instance_id,),
+        )
+    with pytest.raises(GenerationCoordinatorError, match="membership digest is invalid"):
+        context.coordinator.mark_ready(context.lease, manifest)
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE generation_chunk_memberships SET relative_path = ? WHERE chunk_instance_id = ?",
+            (membership.relative_path, membership.chunk_instance_id),
+        )
+    context.coordinator.mark_ready(context.lease, manifest)
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE generation_chunk_memberships SET language = 'rust' WHERE chunk_instance_id = ?",
+            (membership.chunk_instance_id,),
+        )
+    with pytest.raises(GenerationCoordinatorError, match="membership digest is invalid"):
+        context.coordinator.mark_ready(context.lease, manifest)
+    with pytest.raises(GenerationCoordinatorError, match="membership digest is invalid"):
+        context.coordinator.publish(
+            context.lease,
+            context.generation.generation_id,
+            expected_previous_generation_id=None,
+        )
+
+
+def test_materialization_requires_the_exact_published_snapshot_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership, snapshot = _publish_one(context, suffix="scope", text="scoped text")
+    wrong_workspace = snapshot.model_copy(update={"workspace_id": "ws_unrelated"})
+    wrong_publication = snapshot.model_copy(update={"publication_id": "pub_unrelated"})
+    wrong_generation = snapshot.model_copy(update={"generation_id": "gen_unrelated"})
+
+    with pytest.raises(PublishedChunkUnavailable):
+        context.content.materialize_published_chunk(wrong_workspace, membership.chunk_instance_id)
+    with pytest.raises(PublishedChunkUnavailable):
+        context.content.materialize_published_chunk(wrong_publication, membership.chunk_instance_id)
+    with pytest.raises(PublishedChunkUnavailable):
+        context.content.materialize_published_chunk(wrong_generation, membership.chunk_instance_id)
+    with pytest.raises(PublishedChunkUnavailable):
+        context.content.materialize_published_chunk(snapshot, "chunk_unknown")
+
+
+def test_materialization_fails_closed_for_membership_or_artifact_corruption(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership, snapshot = _publish_one(context, suffix="corrupt", text="verified source")
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE generation_chunk_memberships SET relative_path = 'src/swapped.py' WHERE chunk_instance_id = ?",
+            (membership.chunk_instance_id,),
+        )
+    with pytest.raises(GenerationContentError, match="membership is corrupt"):
+        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            "UPDATE generation_chunk_memberships SET relative_path = ? WHERE chunk_instance_id = ?",
+            (membership.relative_path, membership.chunk_instance_id),
+        )
+    artifact_path = (
+        context.layout.artifacts
+        / "dolphin-chunk-text-v1"
+        / membership.artifact.artifact_id[:2]
+        / membership.artifact.artifact_id[2:]
+    )
+    artifact_path.write_bytes(b"corrupt")
+    with pytest.raises(ArtifactCorrupt):
+        context.content.materialize_published_chunk(snapshot, membership.chunk_instance_id)
+
+
+def test_publication_reverifies_every_manifest_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="publish-corrupt", text="publish only verified bytes")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    artifact_path = (
+        context.layout.artifacts
+        / "dolphin-chunk-text-v1"
+        / membership.artifact.artifact_id[:2]
+        / membership.artifact.artifact_id[2:]
+    )
+    artifact_path.write_bytes(b"corrupt before publication")
+
+    with pytest.raises(ArtifactCorrupt):
+        context.coordinator.publish(
+            context.lease,
+            context.generation.generation_id,
+            expected_previous_generation_id=None,
+        )
+
+    assert context.coordinator.current_snapshot(context.lease.operation.workspace_id) is None
+
+
+def test_membership_contract_rejects_noncanonical_paths_and_ranges() -> None:
+    base = {
+        "chunk_instance_id": "chunk_invalid",
+        "artifact": {
+            "artifact_id": "1" * 64,
+            "format": "dolphin-chunk-text-v1",
+            "utf8_bytes": 1,
+            "characters": 1,
+            "lines": 1,
+        },
+        "relative_path": "../escape.py",
+        "source_file_fingerprint": "2" * 64,
+        "start_line": 2,
+        "end_line": 1,
+        "language": "python",
+        "chunker_key": "python-v1",
+        "embedding_cache_key": "3" * 64,
+    }
+
+    with pytest.raises(ValidationError):
+        StagedChunkMembership.model_validate(base)
+
+
+@dataclass(frozen=True)
+class _GenerationContext:
+    layout: StorageLayout
+    registry: WorkspaceRegistry
+    coordinator: SQLiteGenerationCoordinator
+    content: SQLiteGenerationContentStore
+    artifacts: ChunkArtifactStore
+    lease: OperationLease
+    generation: StagingGeneration
+
+
+def _generation_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> _GenerationContext:
+    root = tmp_path / "repository"
+    root.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    layout = macos_storage_layout(home=home)
+    registry = WorkspaceRegistry(layout)
+    monkeypatch.setattr("kb.services.workspace_registry.validate_git_worktree_snapshot", lambda _worktree: None)
+    _registration, _operation = registry.register_and_submit_initial_index(
+        GitWorktree(
+            root=root,
+            common_git_dir=root / ".git",
+            common_git_dir_identity="common-generation-content",
+            worktree_git_dir=root / ".git",
+            worktree_git_dir_identity="worktree-generation-content",
+            head_commit="a" * 40,
+            branch="develop",
+        ),
+        cleanup_receipt=_cleanup_receipt("generation-content"),
+    )
+    now = datetime(2026, 8, 9, 12, tzinfo=UTC)
+    runtime = registry.register_runtime(
+        runtime_id="runtime_generation_content",
+        pid=102,
+        process_start_identity="start-generation-content",
+        mode="mcp",
+        operation_capable=True,
+        pipeline_key="generation-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=30),
+    )
+    lease = registry.claim_next_operation(
+        runtime_id=runtime.runtime_id,
+        process_start_identity=runtime.process_start_identity,
+        pipeline_key="generation-pipeline-v1",
+        now=now,
+        expires_at=now + timedelta(seconds=15),
+    )
+    assert lease is not None
+    coordinator = SQLiteGenerationCoordinator(layout, clock=lambda: now)
+    artifacts = ChunkArtifactStore(layout)
+    return _GenerationContext(
+        layout=layout,
+        registry=registry,
+        coordinator=coordinator,
+        content=SQLiteGenerationContentStore(layout, artifacts, clock=lambda: now),
+        artifacts=artifacts,
+        lease=lease,
+        generation=coordinator.create_staging(lease),
+    )
+
+
+def _membership(
+    artifacts: ChunkArtifactStore,
+    *,
+    suffix: str,
+    text: str,
+) -> StagedChunkMembership:
+    return StagedChunkMembership(
+        chunk_instance_id=f"chunk_{suffix}",
+        artifact=artifacts.put_exact_text(text),
+        relative_path=f"src/{suffix}.py",
+        source_file_fingerprint=hashlib.sha256(f"file:{suffix}".encode()).hexdigest(),
+        start_line=1,
+        end_line=max(1, text.count("\n") + 1),
+        language="python",
+        chunker_key="python-tree-sitter-v1",
+        embedding_cache_key=identify_embedding_input(text).cache_key,
+    )
+
+
+def _publish_one(
+    context: _GenerationContext,
+    *,
+    suffix: str,
+    text: str,
+) -> tuple[StagedChunkMembership, PublishedSnapshot]:
+    membership = _membership(context.artifacts, suffix=suffix, text=text)
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    return membership, snapshot
+
+
+def _vector_commit(generation_id: str, *, row_count: int) -> VerifiedVectorCommit:
+    return VerifiedVectorCommit(
+        generation_id=generation_id,
+        backend_token="vector-commit-generation-content",
+        manifest_digest="vector-digest-generation-content",
+        row_count=row_count,
+    )
+
+
+def _cleanup_receipt(seed: str) -> str:
+    token = hashlib.sha256(seed.encode()).hexdigest()[:43]
+    return f"dolphin-cleanup-v1_{token}"

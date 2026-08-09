@@ -13,16 +13,21 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from kb.artifacts import identify_embedding_input
 from kb.generation import (
     GenerationConflict,
     GenerationCoordinatorError,
     GenerationReadLeaseUnavailable,
+    StagingGeneration,
     VerifiedGenerationManifest,
     VerifiedVectorCommit,
 )
+from kb.generation_content import StagedChunkMembership
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
+from kb.store.chunk_artifacts import ChunkArtifactStore
+from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
 
 
@@ -30,7 +35,7 @@ def test_staging_and_component_readiness_remain_invisible_until_atomic_publicati
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    coordinator, registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         created = list(executor.map(lambda _index: coordinator.create_staging(lease), range(2)))
@@ -47,10 +52,11 @@ def test_staging_and_component_readiness_remain_invisible_until_atomic_publicati
     assert vector_ready.vector_row_count == 11
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
 
+    manifest = _stage_content(layout, generation, lease, clock, suffix="v1", count=11)
     clock.advance(seconds=1)
     ready = coordinator.mark_ready(
         lease,
-        _manifest(generation.generation_id, suffix="v1", vector_row_count=11, item_count=7),
+        manifest,
     )
     assert ready.state == "ready"
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
@@ -97,23 +103,18 @@ def test_incomplete_or_mismatched_components_never_publish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, _registry, _layout, _worktree, lease, _clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    coordinator, _registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
     generation = coordinator.create_staging(lease)
+    manifest = _stage_content(layout, generation, lease, clock, suffix="incomplete", count=1)
 
     with pytest.raises(GenerationCoordinatorError, match="vectors are not durably verified"):
-        coordinator.mark_ready(
-            lease,
-            _manifest(generation.generation_id, suffix="v1", vector_row_count=1),
-        )
+        coordinator.mark_ready(lease, manifest)
     coordinator.record_vector_ready(
         lease,
         _vector_commit(generation.generation_id, suffix="v1", row_count=2),
     )
     with pytest.raises(GenerationConflict, match="count does not match"):
-        coordinator.mark_ready(
-            lease,
-            _manifest(generation.generation_id, suffix="v1", vector_row_count=1),
-        )
+        coordinator.mark_ready(lease, manifest)
 
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
     with pytest.raises(GenerationCoordinatorError, match="not ready"):
@@ -144,8 +145,8 @@ def test_publication_rejects_a_workspace_target_that_advanced_after_staging(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
-    generation_id = _ready_generation(coordinator, lease, clock, suffix="stale-target")
+    coordinator, registry, layout, worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation_id = _ready_generation(coordinator, layout, lease, clock, suffix="stale-target")
     advanced_worktree = GitWorktree(
         root=worktree.root,
         common_git_dir=worktree.common_git_dir,
@@ -174,8 +175,8 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, worktree, first_lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
-    first_generation = _ready_generation(coordinator, first_lease, clock, suffix="first")
+    coordinator, registry, layout, worktree, first_lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    first_generation = _ready_generation(coordinator, layout, first_lease, clock, suffix="first")
     clock.advance(seconds=1)
     first = coordinator.publish(
         first_lease,
@@ -217,7 +218,7 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
     assert second_lease is not None
     assert second_lease.operation.operation_id == next_operation.operation_id
     clock.advance(seconds=1)
-    second_generation = _ready_generation(coordinator, second_lease, clock, suffix="second")
+    second_generation = _ready_generation(coordinator, layout, second_lease, clock, suffix="second")
 
     clock.advance(seconds=1)
     with pytest.raises(GenerationConflict, match="changed before pointer swap"):
@@ -279,7 +280,7 @@ def test_acquiring_a_reader_prunes_abandoned_expired_reader_leases(
     tmp_path: Path,
 ) -> None:
     coordinator, _registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
-    generation_id = _ready_generation(coordinator, lease, clock, suffix="reader-prune")
+    generation_id = _ready_generation(coordinator, layout, lease, clock, suffix="reader-prune")
     clock.advance(seconds=1)
     snapshot = coordinator.publish(
         lease,
@@ -358,7 +359,7 @@ def test_database_rejects_impossible_generation_and_reader_lease_states(
             )
         connection.rollback()
 
-    generation_id = _ready_generation(coordinator, lease, clock, suffix="database-invariants")
+    generation_id = _ready_generation(coordinator, layout, lease, clock, suffix="database-invariants")
     clock.advance(seconds=1)
     snapshot = coordinator.publish(
         lease,
@@ -475,6 +476,7 @@ def _coordinator_with_lease(
 
 def _ready_generation(
     coordinator: SQLiteGenerationCoordinator,
+    layout: StorageLayout,
     lease: OperationLease,
     clock: _TestClock,
     *,
@@ -486,11 +488,9 @@ def _ready_generation(
         lease,
         _vector_commit(generation.generation_id, suffix=suffix, row_count=3),
     )
+    manifest = _stage_content(layout, generation, lease, clock, suffix=suffix, count=3)
     clock.advance(seconds=1)
-    coordinator.mark_ready(
-        lease,
-        _manifest(generation.generation_id, suffix=suffix, vector_row_count=3, item_count=2),
-    )
+    coordinator.mark_ready(lease, manifest)
     return generation.generation_id
 
 
@@ -519,18 +519,35 @@ def _vector_commit(generation_id: str, *, suffix: str, row_count: int) -> Verifi
     )
 
 
-def _manifest(
-    generation_id: str,
+def _stage_content(
+    layout: StorageLayout,
+    generation: StagingGeneration,
+    lease: OperationLease,
+    clock: _TestClock,
     *,
     suffix: str,
-    vector_row_count: int,
-    item_count: int = 1,
+    count: int,
 ) -> VerifiedGenerationManifest:
-    return VerifiedGenerationManifest(
-        generation_id=generation_id,
-        manifest_id=f"manifest_{suffix}",
-        manifest_digest=f"manifest-digest-{suffix}",
-        metadata_item_count=item_count,
-        keyword_item_count=item_count,
-        vector_row_count=vector_row_count,
+    artifacts = ChunkArtifactStore(layout)
+    memberships = []
+    for index in range(count):
+        text = f"{suffix} exact chunk {index}\n"
+        artifact = artifacts.put_exact_text(text)
+        memberships.append(
+            StagedChunkMembership(
+                chunk_instance_id=f"chunk_{suffix}_{index}",
+                artifact=artifact,
+                relative_path=f"src/{suffix}-{index}.py",
+                source_file_fingerprint=hashlib.sha256(f"{suffix}:{index}".encode()).hexdigest(),
+                start_line=index + 1,
+                end_line=index + 1,
+                language="python",
+                chunker_key="python-tree-sitter-v1",
+                embedding_cache_key=identify_embedding_input(text).cache_key,
+            )
+        )
+    return SQLiteGenerationContentStore(layout, artifacts, clock=clock).stage_manifest(
+        lease,
+        generation,
+        memberships,
     )
