@@ -38,6 +38,13 @@ class StorageLayout:
             _ensure_runtime_members(self, root_fd)
             _create_or_validate_private_file(root_fd, self.metadata_db.name, label="metadata database")
 
+    def metadata_database_exists(self) -> bool:
+        """Validate existing metadata storage without creating or repairing any state."""
+        with _open_existing_runtime_root(self.root) as root_fd:
+            if root_fd is None:
+                return False
+            return _private_file_exists(root_fd, self.metadata_db.name, label="metadata database")
+
 
 def macos_storage_layout(*, home: Path | None = None) -> StorageLayout:
     """Resolve Dolphin's fixed macOS state layout without consulting legacy paths."""
@@ -78,6 +85,38 @@ def _open_runtime_root(root: Path) -> Iterator[int]:
             os.close(descriptor)
 
 
+@contextmanager
+def _open_existing_runtime_root(root: Path) -> Iterator[int | None]:
+    """Hold a validation-only descriptor chain, yielding none when runtime state is absent."""
+    if root.name != "Dolphin" or root.parent.name != "Application Support" or root.parent.parent.name != "Library":
+        raise StorageLayoutError("Dolphin runtime root has an invalid layout")
+
+    home = root.parent.parent.parent
+    descriptors: list[int] = []
+    try:
+        home_fd = _open_existing_directory(home, label="home directory", private=False)
+        if home_fd is None:
+            yield None
+            return
+        descriptors.append(home_fd)
+        parent_fd = home_fd
+        for name, label, private in (
+            ("Library", "Library directory", False),
+            ("Application Support", "Application Support directory", False),
+            ("Dolphin", "runtime root", True),
+        ):
+            descriptor = _open_existing_directory(name, parent_fd=parent_fd, label=label, private=private)
+            if descriptor is None:
+                yield None
+                return
+            descriptors.append(descriptor)
+            parent_fd = descriptor
+        yield descriptors[-1]
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def _ensure_runtime_members(layout: StorageLayout, root_fd: int) -> None:
     for path in (layout.vectors, layout.artifacts, layout.locks, layout.logs, layout.temporary):
         descriptor = _open_or_create_directory(root_fd, path.name, private=True)
@@ -112,6 +151,32 @@ def _open_directory(path: Path | str, *, label: str, private: bool, parent_fd: i
     return descriptor
 
 
+def _open_existing_directory(
+    path: Path | str,
+    *,
+    label: str,
+    private: bool,
+    parent_fd: int | None = None,
+) -> int | None:
+    try:
+        descriptor = os.open(path, _directory_open_flags(), dir_fd=parent_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise StorageLayoutError(f"Dolphin {label} is unavailable or is a symbolic link") from exc
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISDIR(status.st_mode):
+            raise StorageLayoutError(f"Dolphin {label} is not a directory")
+        _validate_owned_descriptor(status, label=label)
+        if private and stat.S_IMODE(status.st_mode) != 0o700:
+            raise StorageLayoutError(f"Dolphin {label} has unsafe permissions")
+    except Exception:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
 def _validate_optional_private_file(parent_fd: int, name: str, *, label: str) -> None:
     try:
         descriptor = os.open(name, _file_open_flags(), dir_fd=parent_fd)
@@ -126,6 +191,25 @@ def _validate_optional_private_file(parent_fd: int, name: str, *, label: str) ->
         _validate_private_descriptor(descriptor, status, label=label, required_mode=0o600)
     finally:
         os.close(descriptor)
+
+
+def _private_file_exists(parent_fd: int, name: str, *, label: str) -> bool:
+    try:
+        descriptor = os.open(name, _file_open_flags(), dir_fd=parent_fd)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise StorageLayoutError(f"Dolphin {label} cannot be inspected safely") from exc
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            raise StorageLayoutError(f"Dolphin {label} must be a regular file")
+        _validate_owned_descriptor(status, label=label)
+        if stat.S_IMODE(status.st_mode) != 0o600:
+            raise StorageLayoutError(f"Dolphin {label} has unsafe permissions")
+    finally:
+        os.close(descriptor)
+    return True
 
 
 def _create_or_validate_private_file(parent_fd: int, name: str, *, label: str) -> None:

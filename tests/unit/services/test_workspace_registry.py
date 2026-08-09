@@ -7,16 +7,25 @@ import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from shutil import rmtree
 
 import pytest
 
+from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services import workspace_registry as workspace_registry_module
 from kb.services.repo_add import RepoAddService
-from kb.services.workspace_registry import OperationState, WorkspaceOperation, WorkspaceRegistry, WorkspaceRegistryError
-from kb.services.worktree import WorktreeDiscoveryError, discover_git_worktree
+from kb.services.workspace_registry import (
+    OperationState,
+    RepoListCursorExpired,
+    RepoListCursorInvalid,
+    WorkspaceOperation,
+    WorkspaceRegistry,
+    WorkspaceRegistryError,
+)
+from kb.services.worktree import GitWorktree, WorktreeDiscoveryError, discover_git_worktree
 
 
 @pytest.mark.asyncio
@@ -367,13 +376,13 @@ async def test_v1_migration_backfills_git_identity_and_installs_retryable_attemp
         indexes = {row[1] for row in connection.execute("PRAGMA index_list('workspace_operations')")}
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         retained_operation = connection.execute(
-            "SELECT operation_id, state, attempt FROM workspace_operations"
+            "SELECT operation_id, state, attempt, terminal_at FROM workspace_operations"
         ).fetchone()
     assert identity == worktree.common_git_dir_identity
     assert operation_count == 1
-    assert retained_operation == ("op_v1_terminal", "succeeded", 1)
+    assert retained_operation == ("op_v1_terminal", "succeeded", 1, "2026-01-01T00:00:00+00:00")
     assert "workspace_operations_reusable_target" in indexes
-    assert version == 3
+    assert version == 4
 
 
 @pytest.mark.asyncio
@@ -465,6 +474,161 @@ async def test_repo_add_service_coordinates_registration_and_operation_reuse(tmp
     assert second.operation.operation_id == first.operation.operation_id
 
 
+def test_workspace_snapshot_counts_effective_states_and_resolves_exact_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    worktree = _fake_worktree(tmp_path / "repositories", 1)
+    registration, operation = registry.register_and_submit_initial_index(
+        worktree,
+        cleanup_receipt=_cleanup_receipt("status-counts"),
+    )
+
+    indexing = registry.read_workspace_snapshot(worktree.root)
+    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
+    registry.set_operation_state(
+        operation.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    )
+    ready = registry.read_workspace_snapshot(worktree.root)
+
+    assert indexing.indexing == 1
+    assert indexing.current_workspace is not None
+    assert indexing.current_workspace.workspace_id == registration.workspace_id
+    assert ready.ready == 1
+    assert ready.indexing == 0
+    assert ready.current_workspace is not None
+    assert ready.current_workspace.state == "ready"
+
+
+def test_repo_list_cursor_is_bounded_revision_bound_and_integrity_protected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    for index in range(24):
+        registry.register(
+            _fake_worktree(tmp_path / "repositories", index), cleanup_receipt=_cleanup_receipt(str(index))
+        )
+
+    page_of_24 = registry.list_workspaces(None)
+    registry.register(_fake_worktree(tmp_path / "repositories", 24), cleanup_receipt=_cleanup_receipt("24"))
+    page_of_25 = registry.list_workspaces(None)
+    registry.register(_fake_worktree(tmp_path / "repositories", 25), cleanup_receipt=_cleanup_receipt("25"))
+    first_page = registry.list_workspaces(None)
+    second_page = registry.list_workspaces(first_page.next_cursor)
+
+    assert len(page_of_24.items) == 24
+    assert page_of_24.next_cursor is None
+    assert len(page_of_25.items) == 25
+    assert page_of_25.next_cursor is None
+    assert len(first_page.items) == 25
+    assert first_page.next_cursor is not None
+    assert len(first_page.next_cursor) <= REPO_LIST_CURSOR_MAX_LENGTH
+    assert len(second_page.items) == 1
+    assert second_page.next_cursor is None
+    assert [item.workspace_display_name for item in first_page.items] == [f"repo-{index:03d}" for index in range(25)]
+
+    tampered = first_page.next_cursor[:-1] + ("A" if first_page.next_cursor[-1] != "A" else "B")
+    with pytest.raises(RepoListCursorInvalid):
+        registry.list_workspaces(tampered)
+
+    other_home = tmp_path / "other-home"
+    other_home.mkdir()
+    other_registry = WorkspaceRegistry(macos_storage_layout(home=other_home))
+    other_registry.register(
+        _fake_worktree(tmp_path / "other-repositories", 1),
+        cleanup_receipt=_cleanup_receipt("other-store"),
+    )
+    with pytest.raises(RepoListCursorInvalid):
+        other_registry.list_workspaces(first_page.next_cursor)
+
+    registry.register(_fake_worktree(tmp_path / "repositories", 26), cleanup_receipt=_cleanup_receipt("new-member"))
+    with pytest.raises(RepoListCursorExpired):
+        registry.list_workspaces(first_page.next_cursor)
+
+
+def test_repo_list_cursor_generation_fails_closed_before_exceeding_its_public_bound() -> None:
+    with pytest.raises(WorkspaceRegistryError, match="cursor exceeds"):
+        workspace_registry_module._encode_repo_list_cursor(
+            store_id="store_1",
+            revision=1,
+            key=("x" * REPO_LIST_CURSOR_MAX_LENGTH, "repo_1", "workspace", "ws_1"),
+            secret=b"x" * 32,
+        )
+
+
+def test_operation_snapshot_expires_terminal_status_without_extending_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    _, operation = registry.register_and_submit_initial_index(
+        _fake_worktree(tmp_path / "repositories", 1),
+        cleanup_receipt=_cleanup_receipt("operation-expiry"),
+    )
+    registry.set_operation_state(operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
+    registry.set_operation_state(
+        operation.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
+    )
+    snapshot = registry.inspect_operation(operation.operation_id)
+
+    assert snapshot is not None
+    assert snapshot.terminal_at is not None
+    assert (
+        registry.inspect_operation(
+            operation.operation_id,
+            now=snapshot.terminal_at + timedelta(days=30) - timedelta(microseconds=1),
+        )
+        is not None
+    )
+    assert (
+        registry.inspect_operation(
+            operation.operation_id,
+            now=snapshot.terminal_at + timedelta(days=30),
+        )
+        is None
+    )
+    assert snapshot.created_at <= datetime.now(UTC)
+
+
+@pytest.mark.parametrize(
+    ("field_index", "value"),
+    [
+        (0, "o" * 129),
+        (4, "a" * 65),
+        (6, "2" * 65),
+        (7, "2" * 65),
+        (8, "2" * 65),
+    ],
+)
+def test_operation_snapshot_boundary_rejects_oversized_metadata(field_index: int, value: str) -> None:
+    row: list[object] = [
+        "op_valid",
+        "ws_valid",
+        "initial_index",
+        "succeeded",
+        "a" * 40,
+        1,
+        "2026-08-09T12:00:00+00:00",
+        "2026-08-09T12:01:00+00:00",
+        "2026-08-09T12:01:00+00:00",
+    ]
+    row[field_index] = value
+
+    with pytest.raises(WorkspaceRegistryError, match="invalid"):
+        workspace_registry_module._operation_snapshot_from_row(tuple(row))
+
+
 def _commit_repository(path: Path) -> Path:
     path.mkdir(parents=True)
     _initialize_repository(path)
@@ -477,6 +641,18 @@ def _commit_repository(path: Path) -> Path:
 def _cleanup_receipt(seed: str) -> str:
     token = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:43]
     return f"dolphin-cleanup-v1_{token}"
+
+
+def _fake_worktree(parent: Path, index: int) -> GitWorktree:
+    root = parent / f"repo-{index:03d}"
+    root.mkdir(parents=True)
+    return GitWorktree(
+        root=root,
+        common_git_dir=root / ".git",
+        common_git_dir_identity=f"identity-{index}",
+        head_commit=f"{index:040x}",
+        branch="main",
+    )
 
 
 def _commit_change(path: Path) -> None:

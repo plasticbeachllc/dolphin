@@ -2999,15 +2999,18 @@ class EffectiveWorkspaceCounts(BaseModel):
     registered: int = Field(ge=0)
     indexing: int = Field(ge=0)
     ready: int = Field(ge=0)
-    missing: int = Field(ge=0)
-    cleanup_pending: int = Field(ge=0)
     failed: int = Field(ge=0)
 
 
-class ForgottenStateAggregates(BaseModel):
-    replay_tombstones: int = Field(ge=0)
-    tombstone_metadata_bytes: int = Field(ge=0)
-    awaiting_physical_reclamation: int = Field(ge=0)
+class ToolAvailability(BaseModel):
+    status: Literal["available", "unavailable"]
+    repo_list: Literal["available", "unavailable"]
+    repo_add: Literal["available", "unavailable"]
+    repo_forget: Literal["available", "unavailable"]
+    repo_sync: Literal["available", "unavailable"]
+    operation_status: Literal["available", "unavailable"]
+    search: Literal["available", "unavailable"]
+    open_ref: Literal["available", "unavailable"]
 
 
 class StatusResult(BaseModel):
@@ -3015,8 +3018,8 @@ class StatusResult(BaseModel):
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
+    tool_availability: ToolAvailability
     workspace_counts: EffectiveWorkspaceCounts
-    forgotten: ForgottenStateAggregates
     current_workspace_resolution: Literal[
         "resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"
     ]
@@ -3028,7 +3031,7 @@ class StatusResult(BaseModel):
 class RepoListInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    cursor: str | None = None
+    cursor: str | None
 
 
 class RepoListItem(BaseModel):
@@ -3042,9 +3045,11 @@ class RepoListResult(BaseModel):
     next_cursor: str | None
 ```
 
-`current_workspace` is non-null if and only if `current_workspace_resolution == "resolved"`; `status` never substitutes a candidate when resolution is ambiguous. Counts use effective mutually exclusive states, so a live cleanup intent contributes to `cleanup_pending` rather than its underlying state. The forgotten aggregate is separate and contains no entry-level identity. Production models may group detailed runtime/storage diagnostics into bounded typed submodels, but may not add workspace enumeration or credential values to this result.
+`current_workspace` is non-null if and only if `current_workspace_resolution == "resolved"`; `status` never substitutes a candidate when resolution is ambiguous. The shipped counts include only the durable mutually exclusive states the current registry can represent: `registered`, `indexing`, `ready`, and `failed`. Missing, cleanup-pending, and forgotten aggregates must not appear as fabricated zeros; they may be added only with their durable state implementation and corresponding contract update. Production models may group detailed runtime/storage diagnostics into bounded typed submodels, but may not add workspace enumeration or credential values to this result.
 
-The initial `repo_list` request omits `cursor`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts from an empty input rather than merging inconsistent pages.
+The initial `repo_list` request sends `{"cursor": null}`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts with `{"cursor": null}` rather than merging inconsistent pages.
+
+Production projections also bound every string and nested collection rather than relying on the 25-item page cap alone. Repository/workspace IDs are at most 64 characters, display labels at most 512, roots at most 4,096, branches at most 1,024, and head identifiers at most 64. Each workspace carries at most eight boundary summaries, each boundary has at most six bounded string fields, and cursors are capped at 8,192 characters on both input and output; cursor generation fails closed before exceeding that limit.
 
 ### 7.31 Exact operation snapshot
 
@@ -3057,15 +3062,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class OperationStatusInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation_id: str
+    operation_id: str = Field(min_length=1, max_length=128)
 
 
 class OperationStatusResult(BaseModel):
-    operation_id: str
+    operation_id: str = Field(min_length=1, max_length=128)
     kind: Literal["initial_index", "sync", "recovery"]
     state: OperationState
+    attempt: int = Field(ge=1)
+    target_head_commit: str = Field(min_length=1, max_length=64)
     workspace_available: bool
-    workspace_id: str | None
+    workspace_id: str | None = Field(default=None, min_length=1, max_length=64)
     phase: Literal["preflight", "scan", "chunk", "embed", "store", "publish"] | None
     counters: OperationCounters
     reuse: ReuseSummary | None
@@ -3077,15 +3084,15 @@ class OperationStatusResult(BaseModel):
         "shutdown",
     ] | None
     failure: DolphinToolError | None
-    created_at: str
-    last_progress_at: str | None
-    terminal_at: str | None
-    status_expires_at: str | None
+    created_at: str = Field(min_length=1, max_length=64)
+    last_progress_at: str | None = Field(default=None, max_length=64)
+    terminal_at: str | None = Field(default=None, max_length=64)
+    status_expires_at: str | None = Field(default=None, max_length=64)
     recommended_poll_after_ms: int | None = Field(default=None, ge=250, le=5_000)
-    next_actions: list[NextAction]
+    next_actions: list[NextAction] = Field(max_length=8)
 ```
 
-`terminal_at` and `status_expires_at` are both present exactly for `succeeded`, `failed`, or `cancelled`, and the latter is always 30 days after the former. `recommended_poll_after_ms` is present only for nonterminal states; it is response guidance, not a server-side wait. `failure` is present only for `failed`, while approval and resource pauses use typed state/pause details and remediations rather than masquerading as terminal errors.
+`terminal_at` and `status_expires_at` are both present exactly for `succeeded`, `failed`, or `cancelled`, and the latter is always 30 days after the former. `attempt` starts at one and increases only when a failed/cancelled target is explicitly requeued as a new operation; successful and active exact-target work remains deduplicated. `recommended_poll_after_ms` is present only for nonterminal states; it is response guidance, not a server-side wait. `failure` is present only for `failed`, while approval and resource pauses use typed state/pause details and remediations rather than masquerading as terminal errors.
 
 While its registration remains actionable, `workspace_available` is true and `workspace_id` names that exact workspace. After forget, the retained operation summary sets `workspace_available = false` and `workspace_id = None`; exact inspection never reintroduces the forgotten workspace to resolution or listings. Logical expiry is checked before serialization. Physical compaction deletes only bounded operation/checkpoint/audit detail proven unnecessary to nonterminal recovery and never follows operation fields into derived data.
 
@@ -4410,6 +4417,8 @@ CI teardown deletes only its exact run workspace. Local evaluation admission fir
 - [ ] Add clean native Apple Silicon macOS 14+ install-and-start smoke tests on every supported major that assert wheel-only dependency resolution, compatible Mach-O deployment targets, and no compiler invocation.
 
 ### Phase 3 — safe autonomous repository lifecycle
+
+Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts and non-extending terminal expiry. Unsupported missing, cleanup-pending, and forgotten aggregates are deliberately omitted rather than reported as fabricated zeros until their durable states exist. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, full operation checkpoints, and complete matrix tests are implemented.
 
 - [ ] Implement observational empty-input `status`: bounded runtime/credential/storage diagnostics, mutually exclusive effective-state counts, aggregate-only forgotten accounting, and at most one deterministically resolved current workspace with no provider, scan, reconciliation, operation, GC, or enrollment side effect.
 - [ ] Implement cursor-only `repo_list` with fixed 25-item pages, deterministic family/workspace ordering, one actionable-list revision, bounded integrity-protected cursor decoding, all-or-nothing invalidation, and no forgotten entries or expansion/filter/sort/page-size controls.

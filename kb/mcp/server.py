@@ -95,8 +95,8 @@ def create_server(
         title="Dolphin",
         description="Semantic code search and repository knowledge for coding agents.",
         instructions=(
-            "Register the exact current Git worktree with repo_add before repository-scoped work. "
-            "Use search for evidence and open_ref for deeper current-file context."
+            "Call status first and honor its per-tool availability. When repo_add is available, register the exact "
+            "current Git worktree before repository-scoped work. Use operation_status only for an exact operation ID."
         ),
         on_list_tools=list_tools,
         on_call_tool=call_tool,

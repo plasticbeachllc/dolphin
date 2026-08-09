@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kb.mcp.contracts import RepoAddInput, StatusInput
+from kb.mcp.contracts import StatusInput
 from kb.services import status as status_module
 from kb.services.status import StatusService
 
@@ -26,7 +26,7 @@ async def test_status_reports_credential_state_without_disclosing_the_value(tmp_
 
 
 @pytest.mark.asyncio
-async def test_status_recommends_explicit_repo_add_for_the_current_worktree(tmp_path: Path) -> None:
+async def test_status_reports_registration_unavailable_without_generating_credentials(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
 
     result = await StatusService(cwd=tmp_path, environment={})(StatusInput())
@@ -34,12 +34,11 @@ async def test_status_recommends_explicit_repo_add_for_the_current_worktree(tmp_
     assert result.readiness == "degraded"
     assert result.current_workspace_resolution == "unregistered"
     assert len(result.next_actions) == 1
-    assert result.next_actions[0].tool == "repo_add"
-    arguments = result.next_actions[0].arguments
-    assert arguments is not None
-    parsed = RepoAddInput.model_validate(arguments)
-    assert parsed.path == tmp_path
-    assert parsed.cleanup_receipt.startswith("dolphin-cleanup-v1_")
+    assert result.next_actions[0] == status_module.NextAction(
+        action="registration_unavailable",
+        reason="Dolphin has not registered this Git worktree, but repo_add is unavailable in this runtime.",
+    )
+    assert "cleanup_receipt" not in result.model_dump_json()
 
 
 @pytest.mark.asyncio
@@ -54,11 +53,10 @@ async def test_status_worktree_probe_ignores_ambient_git_selection(
     monkeypatch.setenv("GIT_DIR", str(ambient_root / ".git"))
     monkeypatch.setenv("GIT_WORK_TREE", str(ambient_root))
 
-    result = await StatusService(cwd=requested_root, environment={})(StatusInput())
+    probe = status_module._probe_worktree(requested_root)
 
-    arguments = result.next_actions[0].arguments
-    assert arguments is not None
-    assert arguments["path"] == str(requested_root)
+    assert probe.resolution == "unregistered"
+    assert probe.root == requested_root
 
 
 def test_worktree_probe_preserves_surrounding_path_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
