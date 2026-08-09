@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -167,22 +167,18 @@ class GenerationReadLease(_GenerationModel):
 class GenerationCoordinator(Protocol):
     """Narrow publication authority used by indexing and snapshot readers."""
 
-    def create_staging(self, lease: OperationLease, *, now: datetime) -> StagingGeneration: ...
+    def create_staging(self, lease: OperationLease) -> StagingGeneration: ...
 
     def record_vector_ready(
         self,
         lease: OperationLease,
         commit: VerifiedVectorCommit,
-        *,
-        now: datetime,
     ) -> StagingGeneration: ...
 
     def mark_ready(
         self,
         lease: OperationLease,
         manifest: VerifiedGenerationManifest,
-        *,
-        now: datetime,
     ) -> StagingGeneration: ...
 
     def publish(
@@ -191,7 +187,6 @@ class GenerationCoordinator(Protocol):
         generation_id: str,
         *,
         expected_previous_generation_id: str | None,
-        now: datetime,
     ) -> PublishedSnapshot: ...
 
     def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None: ...
@@ -200,10 +195,9 @@ class GenerationCoordinator(Protocol):
         self,
         workspace_id: str,
         *,
-        now: datetime,
-        expires_at: datetime,
+        lease_duration: timedelta,
     ) -> GenerationReadLease: ...
 
-    def snapshot_for_lease(self, lease_id: str, *, now: datetime) -> PublishedSnapshot: ...
+    def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot: ...
 
     def release_read(self, lease: GenerationReadLease) -> None: ...

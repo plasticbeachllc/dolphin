@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
+import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -27,31 +30,32 @@ def test_staging_and_component_readiness_remain_invisible_until_atomic_publicati
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, _worktree, lease, now = _coordinator_with_lease(monkeypatch, tmp_path)
+    coordinator, registry, _layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        created = list(executor.map(lambda _index: coordinator.create_staging(lease, now=now), range(2)))
+        created = list(executor.map(lambda _index: coordinator.create_staging(lease), range(2)))
     generation = created[0]
 
     assert created[1].generation_id == generation.generation_id
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
 
+    clock.advance(seconds=1)
     vector_ready = coordinator.record_vector_ready(
         lease,
         _vector_commit(generation.generation_id, suffix="v1", row_count=11),
-        now=now + timedelta(seconds=1),
     )
     assert vector_ready.vector_row_count == 11
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
 
+    clock.advance(seconds=1)
     ready = coordinator.mark_ready(
         lease,
         _manifest(generation.generation_id, suffix="v1", vector_row_count=11, item_count=7),
-        now=now + timedelta(seconds=2),
     )
     assert ready.state == "ready"
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
 
+    clock.advance(seconds=1)
     with ThreadPoolExecutor(max_workers=2) as executor:
         published = list(
             executor.map(
@@ -59,7 +63,6 @@ def test_staging_and_component_readiness_remain_invisible_until_atomic_publicati
                     lease,
                     generation.generation_id,
                     expected_previous_generation_id=None,
-                    now=now + timedelta(seconds=3),
                 ),
                 range(2),
             )
@@ -80,25 +83,22 @@ def test_incomplete_or_mismatched_components_never_publish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, _registry, _layout, _worktree, lease, now = _coordinator_with_lease(monkeypatch, tmp_path)
-    generation = coordinator.create_staging(lease, now=now)
+    coordinator, _registry, _layout, _worktree, lease, _clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation = coordinator.create_staging(lease)
 
     with pytest.raises(GenerationCoordinatorError, match="vectors are not durably verified"):
         coordinator.mark_ready(
             lease,
             _manifest(generation.generation_id, suffix="v1", vector_row_count=1),
-            now=now + timedelta(seconds=1),
         )
     coordinator.record_vector_ready(
         lease,
         _vector_commit(generation.generation_id, suffix="v1", row_count=2),
-        now=now + timedelta(seconds=1),
     )
     with pytest.raises(GenerationConflict, match="count does not match"):
         coordinator.mark_ready(
             lease,
             _manifest(generation.generation_id, suffix="v1", vector_row_count=1),
-            now=now + timedelta(seconds=2),
         )
 
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
@@ -107,7 +107,6 @@ def test_incomplete_or_mismatched_components_never_publish(
             lease,
             generation.generation_id,
             expected_previous_generation_id=None,
-            now=now + timedelta(seconds=3),
         )
 
 
@@ -131,8 +130,8 @@ def test_publication_rejects_a_workspace_target_that_advanced_after_staging(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, worktree, lease, now = _coordinator_with_lease(monkeypatch, tmp_path)
-    generation_id = _ready_generation(coordinator, lease, now, suffix="stale-target")
+    coordinator, registry, _layout, worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation_id = _ready_generation(coordinator, lease, clock, suffix="stale-target")
     advanced_worktree = GitWorktree(
         root=worktree.root,
         common_git_dir=worktree.common_git_dir,
@@ -147,12 +146,12 @@ def test_publication_rejects_a_workspace_target_that_advanced_after_staging(
         cleanup_receipt=_cleanup_receipt("generation-coordinator"),
     )
 
+    clock.advance(seconds=1)
     with pytest.raises(GenerationConflict, match="workspace target changed"):
         coordinator.publish(
             lease,
             generation_id,
             expected_previous_generation_id=None,
-            now=now + timedelta(seconds=3),
         )
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
 
@@ -161,26 +160,25 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, registry, _layout, worktree, first_lease, now = _coordinator_with_lease(monkeypatch, tmp_path)
-    first_generation = _ready_generation(coordinator, first_lease, now, suffix="first")
+    coordinator, registry, _layout, worktree, first_lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    first_generation = _ready_generation(coordinator, first_lease, clock, suffix="first")
+    clock.advance(seconds=1)
     first = coordinator.publish(
         first_lease,
         first_generation,
         expected_previous_generation_id=None,
-        now=now + timedelta(seconds=3),
     )
+    clock.advance(seconds=1)
     read_lease = coordinator.acquire_read(
         first.workspace_id,
-        now=now + timedelta(seconds=4),
-        expires_at=now + timedelta(seconds=14),
+        lease_duration=timedelta(seconds=10),
     )
     with pytest.raises(GenerationCoordinatorError, match="lease window is invalid"):
         coordinator.acquire_read(
             first.workspace_id,
-            now=now + timedelta(seconds=4),
-            expires_at=now + timedelta(seconds=65),
+            lease_duration=timedelta(seconds=61),
         )
-    registry.finish_operation(first_lease, OperationState.SUCCEEDED, observed_at=now + timedelta(seconds=4))
+    registry.finish_operation(first_lease, OperationState.SUCCEEDED, observed_at=clock.current)
 
     next_worktree = GitWorktree(
         root=worktree.root,
@@ -199,19 +197,20 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
         runtime_id=first_lease.runtime_id,
         process_start_identity="start-worker",
         pipeline_key="generation-pipeline-v1",
-        now=now + timedelta(seconds=5),
-        expires_at=now + timedelta(seconds=20),
+        now=clock.current + timedelta(seconds=1),
+        expires_at=clock.current + timedelta(seconds=16),
     )
     assert second_lease is not None
     assert second_lease.operation.operation_id == next_operation.operation_id
-    second_generation = _ready_generation(coordinator, second_lease, now + timedelta(seconds=5), suffix="second")
+    clock.advance(seconds=1)
+    second_generation = _ready_generation(coordinator, second_lease, clock, suffix="second")
 
+    clock.advance(seconds=1)
     with pytest.raises(GenerationConflict, match="changed before pointer swap"):
         coordinator.publish(
             second_lease,
             second_generation,
             expected_previous_generation_id=None,
-            now=now + timedelta(seconds=8),
         )
     assert coordinator.current_snapshot(first.workspace_id) == first
 
@@ -219,14 +218,14 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
         second_lease,
         second_generation,
         expected_previous_generation_id=first.generation_id,
-        now=now + timedelta(seconds=8),
     )
 
     assert second.revision == 2
     assert coordinator.current_snapshot(first.workspace_id) == second
-    assert coordinator.snapshot_for_lease(read_lease.lease_id, now=now + timedelta(seconds=9)) == first
+    assert coordinator.snapshot_for_lease(read_lease.lease_id) == first
+    clock.current = read_lease.expires_at
     with pytest.raises(GenerationReadLeaseUnavailable, match="expired"):
-        coordinator.snapshot_for_lease(read_lease.lease_id, now=now + timedelta(seconds=14))
+        coordinator.snapshot_for_lease(read_lease.lease_id)
     coordinator.release_read(read_lease)
     coordinator.release_read(read_lease)
 
@@ -235,16 +234,62 @@ def test_expired_operation_lease_cannot_change_generation_visibility(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    coordinator, _registry, _layout, _worktree, lease, now = _coordinator_with_lease(monkeypatch, tmp_path)
-    generation = coordinator.create_staging(lease, now=now)
+    coordinator, _registry, _layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation = coordinator.create_staging(lease)
 
+    clock.current = lease.expires_at
     with pytest.raises(GenerationCoordinatorError, match="unavailable or expired"):
         coordinator.record_vector_ready(
             lease,
             _vector_commit(generation.generation_id, suffix="v1", row_count=1),
-            now=lease.expires_at,
         )
     assert coordinator.current_snapshot(lease.operation.workspace_id) is None
+
+
+def test_acquiring_a_reader_prunes_abandoned_expired_reader_leases(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    coordinator, _registry, layout, _worktree, lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation_id = _ready_generation(coordinator, lease, clock, suffix="reader-prune")
+    clock.advance(seconds=1)
+    snapshot = coordinator.publish(
+        lease,
+        generation_id,
+        expected_previous_generation_id=None,
+    )
+    abandoned = coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=2))
+    clock.current = abandoned.expires_at
+
+    replacement = coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=2))
+
+    with sqlite3.connect(layout.metadata_db) as connection:
+        lease_ids = {str(row[0]) for row in connection.execute("SELECT lease_id FROM generation_reader_leases")}
+    assert abandoned.lease_id not in lease_ids
+    assert replacement.lease_id in lease_ids
+
+
+def test_writer_acquisition_retries_brief_sqlite_contention(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    coordinator, _registry, layout, _worktree, lease, _clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    lock_connection = sqlite3.connect(layout.metadata_db, timeout=0, isolation_level=None, check_same_thread=False)
+    lock_connection.execute("BEGIN IMMEDIATE")
+
+    def release_lock() -> None:
+        time.sleep(1.2)
+        lock_connection.rollback()
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            release = executor.submit(release_lock)
+            generation = coordinator.create_staging(lease)
+            release.result()
+    finally:
+        lock_connection.close()
+
+    assert generation.operation_id == lease.operation.operation_id
 
 
 def _coordinator_with_lease(
@@ -256,7 +301,7 @@ def _coordinator_with_lease(
     StorageLayout,
     GitWorktree,
     OperationLease,
-    datetime,
+    _TestClock,
 ]:
     root = tmp_path / "repository"
     root.mkdir()
@@ -297,26 +342,27 @@ def _coordinator_with_lease(
         expires_at=now + timedelta(seconds=15),
     )
     assert lease is not None
-    return SQLiteGenerationCoordinator(layout), registry, layout, worktree, lease, now
+    clock = _TestClock(now)
+    return SQLiteGenerationCoordinator(layout, clock=clock), registry, layout, worktree, lease, clock
 
 
 def _ready_generation(
     coordinator: SQLiteGenerationCoordinator,
     lease: OperationLease,
-    now: datetime,
+    clock: _TestClock,
     *,
     suffix: str,
 ) -> str:
-    generation = coordinator.create_staging(lease, now=now)
+    generation = coordinator.create_staging(lease)
+    clock.advance(seconds=1)
     coordinator.record_vector_ready(
         lease,
         _vector_commit(generation.generation_id, suffix=suffix, row_count=3),
-        now=now + timedelta(seconds=1),
     )
+    clock.advance(seconds=1)
     coordinator.mark_ready(
         lease,
         _manifest(generation.generation_id, suffix=suffix, vector_row_count=3, item_count=2),
-        now=now + timedelta(seconds=2),
     )
     return generation.generation_id
 
@@ -324,6 +370,17 @@ def _ready_generation(
 def _cleanup_receipt(seed: str) -> str:
     token = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:43]
     return f"dolphin-cleanup-v1_{token}"
+
+
+@dataclass
+class _TestClock:
+    current: datetime
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, *, seconds: int) -> None:
+        self.current += timedelta(seconds=seconds)
 
 
 def _vector_commit(generation_id: str, *, suffix: str, row_count: int) -> VerifiedVectorCommit:

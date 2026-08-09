@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,10 @@ from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
 
 _READ_LEASE_MAXIMUM = timedelta(seconds=60)
+_WRITE_LOCK_DEADLINE_SECONDS = 3.0
+_WRITE_LOCK_INITIAL_BACKOFF_SECONDS = 0.025
+_WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
+_EXPIRED_READ_LEASE_PRUNE_LIMIT = 256
 _PRIVATE_ID_MAX_LENGTH = 128
 _PRIVATE_VALUE_MAX_LENGTH = 256
 
@@ -35,13 +40,14 @@ _PRIVATE_VALUE_MAX_LENGTH = 256
 class SQLiteGenerationCoordinator:
     """Publish complete generations through one SQLite compare-and-swap pointer."""
 
-    def __init__(self, layout: StorageLayout) -> None:
+    def __init__(self, layout: StorageLayout, *, clock: Callable[[], datetime] | None = None) -> None:
         self._layout = layout
+        self._clock = clock or _system_utc_now
 
-    def create_staging(self, lease: OperationLease, *, now: datetime) -> StagingGeneration:
-        observed_at = _timestamp(now)
+    def create_staging(self, lease: OperationLease) -> StagingGeneration:
+        observed_at = _timestamp(self._clock())
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
                 authority = _require_operation_authority(connection, lease, observed_at)
                 existing = connection.execute(_GENERATION_BY_OPERATION, (lease.operation.operation_id,)).fetchone()
@@ -83,12 +89,10 @@ class SQLiteGenerationCoordinator:
         self,
         lease: OperationLease,
         commit: VerifiedVectorCommit,
-        *,
-        now: datetime,
     ) -> StagingGeneration:
-        observed_at = _timestamp(now)
+        observed_at = _timestamp(self._clock())
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
                 _require_operation_authority(connection, lease, observed_at)
                 generation = _require_generation(connection, commit.generation_id, lease)
@@ -139,12 +143,10 @@ class SQLiteGenerationCoordinator:
         self,
         lease: OperationLease,
         manifest: VerifiedGenerationManifest,
-        *,
-        now: datetime,
     ) -> StagingGeneration:
-        observed_at = _timestamp(now)
+        observed_at = _timestamp(self._clock())
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
                 _require_operation_authority(connection, lease, observed_at)
                 generation = _require_generation(connection, manifest.generation_id, lease)
@@ -201,13 +203,12 @@ class SQLiteGenerationCoordinator:
         generation_id: str,
         *,
         expected_previous_generation_id: str | None,
-        now: datetime,
     ) -> PublishedSnapshot:
         if expected_previous_generation_id is not None:
             _bounded(expected_previous_generation_id, "expected generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        observed_at = _timestamp(now)
+        observed_at = _timestamp(self._clock())
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
                 authority = _require_operation_authority(connection, lease, observed_at)
                 generation = _require_generation(connection, generation_id, lease)
@@ -282,17 +283,31 @@ class SQLiteGenerationCoordinator:
         self,
         workspace_id: str,
         *,
-        now: datetime,
-        expires_at: datetime,
+        lease_duration: timedelta,
     ) -> GenerationReadLease:
         _bounded(workspace_id, "workspace ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        acquired = _utc(now)
-        expiry = _utc(expires_at)
-        if expiry <= acquired or expiry - acquired > _READ_LEASE_MAXIMUM:
+        if not isinstance(lease_duration, timedelta) or lease_duration <= timedelta(0):
             raise GenerationCoordinatorError("Dolphin generation read lease window is invalid")
+        if lease_duration > _READ_LEASE_MAXIMUM:
+            raise GenerationCoordinatorError("Dolphin generation read lease window is invalid")
+        acquired = _utc(self._clock())
+        expiry = acquired + lease_duration
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
+                connection.execute(
+                    """
+                    DELETE FROM generation_reader_leases
+                    WHERE lease_id IN (
+                        SELECT lease_id
+                        FROM generation_reader_leases
+                        WHERE expires_at <= ?
+                        ORDER BY expires_at, lease_id
+                        LIMIT ?
+                    )
+                    """,
+                    (acquired.isoformat(), _EXPIRED_READ_LEASE_PRUNE_LIMIT),
+                )
                 snapshot = _current_snapshot(connection, workspace_id)
                 if snapshot is None:
                     raise GenerationReadLeaseUnavailable("Dolphin workspace has no published snapshot")
@@ -322,9 +337,9 @@ class SQLiteGenerationCoordinator:
             expires_at=expiry,
         )
 
-    def snapshot_for_lease(self, lease_id: str, *, now: datetime) -> PublishedSnapshot:
+    def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot:
         _bounded(lease_id, "generation read lease ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        observed_at = _timestamp(now)
+        observed_at = _timestamp(self._clock())
         with self._connection(read_only=True) as connection:
             row = connection.execute(
                 """
@@ -343,7 +358,7 @@ class SQLiteGenerationCoordinator:
 
     def release_read(self, lease: GenerationReadLease) -> None:
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            _begin_write(connection)
             try:
                 connection.execute(
                     """
@@ -632,3 +647,24 @@ def _parse_timestamp(value: object, label: str) -> datetime:
 
 def _optional_timestamp(value: object, label: str) -> datetime | None:
     return None if value is None else _parse_timestamp(value, label)
+
+
+def _system_utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _begin_write(connection: sqlite3.Connection) -> None:
+    """Acquire SQLite's writer slot with short bounded contention backoff."""
+    deadline = time.monotonic() + _WRITE_LOCK_DEADLINE_SECONDS
+    backoff = _WRITE_LOCK_INITIAL_BACKOFF_SECONDS
+    while True:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            return
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or ("locked" not in message and "busy" not in message):
+                raise
+            time.sleep(min(backoff, remaining))
+            backoff = min(backoff * 2, _WRITE_LOCK_MAX_BACKOFF_SECONDS)
