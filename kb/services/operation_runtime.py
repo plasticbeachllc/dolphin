@@ -116,7 +116,7 @@ class OperationRuntime:
         if self._owner is not None:
             return self._owner
 
-        now = self._now()
+        reconciliation_time = self._now()
         try:
             owners = (
                 await asyncio.to_thread(self._registry.list_runtime_owners)
@@ -135,13 +135,14 @@ class OperationRuntime:
                     self._registry.reconcile_stale_runtime,
                     runtime_id=owner.runtime_id,
                     process_start_identity=owner.process_start_identity,
-                    observed_at=now,
+                    observed_at=reconciliation_time,
                     stale_identity_proven=stale_identity_proven,
                 )
 
             own_probe = await asyncio.to_thread(self._process_probe, self._pid)
             if not own_probe.available or own_probe.identity is None:
                 raise OperationRuntimeError("Dolphin cannot prove this process start identity")
+            registration_time = self._now()
             runtime_id = f"runtime_{uuid.uuid4().hex}"
             self._owner = await asyncio.to_thread(
                 self._registry.register_runtime,
@@ -151,8 +152,8 @@ class OperationRuntime:
                 mode=self._mode,
                 operation_capable=self._operation_capable,
                 pipeline_key=self._pipeline_key if self._operation_capable else None,
-                now=now,
-                expires_at=now + timedelta(seconds=RUNTIME_LEASE_SECONDS),
+                now=registration_time,
+                expires_at=registration_time + timedelta(seconds=RUNTIME_LEASE_SECONDS),
             )
         except WorkspaceRegistryError as exc:
             raise OperationRuntimeError("Dolphin could not establish runtime ownership") from exc

@@ -713,6 +713,31 @@ async def test_runtime_start_bounds_concurrent_owner_process_probes(tmp_path: Pa
     await runtime.close()
 
 
+@pytest.mark.asyncio
+async def test_runtime_start_refreshes_registration_time_after_reconciliation(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    before_reconciliation = datetime(2026, 8, 9, 12, tzinfo=UTC)
+    after_reconciliation = before_reconciliation + timedelta(seconds=30)
+    clock_values = iter((before_reconciliation, after_reconciliation, after_reconciliation))
+    runtime = OperationRuntime(
+        registry,
+        mode="mcp",
+        operation_capable=False,
+        pid=999,
+        clock=lambda: next(clock_values),
+        process_probe=lambda _pid: ProcessStartProbe(available=True, identity="start-current"),
+        start_heartbeat=False,
+    )
+
+    owner = await runtime.start()
+
+    assert owner.started_at == after_reconciliation
+    assert owner.expires_at == after_reconciliation + timedelta(seconds=operation_runtime_module.RUNTIME_LEASE_SECONDS)
+    await runtime.close()
+
+
 def _registry_with_operation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
