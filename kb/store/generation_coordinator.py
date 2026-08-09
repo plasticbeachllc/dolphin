@@ -211,13 +211,19 @@ class SQLiteGenerationCoordinator:
     ) -> PublishedSnapshot:
         if expected_previous_generation_id is not None:
             _bounded(expected_previous_generation_id, "expected generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
-        self._verify_generation_artifacts(generation_id)
+        self._preflight_publish_authority(lease, generation_id)
         observed_at = _timestamp(self._clock())
         with self._connection() as connection:
             _begin_write(connection)
             try:
                 authority = _require_operation_authority(connection, lease, observed_at)
                 generation = _require_generation(connection, generation_id, lease)
+                self._verify_generation_artifacts(connection, generation_id)
+                authority = _require_operation_authority(
+                    connection,
+                    lease,
+                    _timestamp(self._clock()),
+                )
                 current_row = connection.execute(
                     "SELECT generation_id, revision FROM workspace_publications WHERE workspace_id = ?",
                     (generation.workspace_id,),
@@ -285,22 +291,27 @@ class SQLiteGenerationCoordinator:
             connection.commit()
         return snapshot
 
-    def _verify_generation_artifacts(self, generation_id: str) -> None:
-        _bounded(generation_id, "generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
+    def _preflight_publish_authority(self, lease: OperationLease, generation_id: str) -> None:
+        observed_at = _timestamp(self._clock())
         with self._connection(read_only=True) as connection:
-            manifest = _content_manifest_for_generation(connection, generation_id)
-            if manifest is None:
-                return
-            rows = connection.execute(
-                """
-                SELECT artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
-                FROM generation_chunk_memberships
-                WHERE generation_id = ?
-                GROUP BY artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
-                ORDER BY artifact_id
-                """,
-                (generation_id,),
-            ).fetchall()
+            _require_operation_authority(connection, lease, observed_at)
+            _require_generation(connection, generation_id, lease)
+
+    def _verify_generation_artifacts(self, connection: sqlite3.Connection, generation_id: str) -> None:
+        _bounded(generation_id, "generation ID", maximum=_PRIVATE_ID_MAX_LENGTH)
+        manifest = _content_manifest_for_generation(connection, generation_id)
+        if manifest is None:
+            return
+        rows = connection.execute(
+            """
+            SELECT artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+            FROM generation_chunk_memberships
+            WHERE generation_id = ?
+            GROUP BY artifact_id, artifact_utf8_bytes, artifact_characters, artifact_lines
+            ORDER BY artifact_id
+            """,
+            (generation_id,),
+        ).fetchall()
         artifacts = ChunkArtifactStore(self._layout)
         observed = {}
         for row in rows:

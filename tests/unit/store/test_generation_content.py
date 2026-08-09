@@ -312,6 +312,78 @@ def test_publication_reverifies_every_manifest_artifact(
     assert context.coordinator.current_snapshot(context.lease.operation.workspace_id) is None
 
 
+def test_publication_authorizes_before_artifact_io(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="publish-authority", text="authorized publication")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    wrong_lease = replace(context.lease, lease_id="lease_unrelated")
+
+    def unexpected_artifact_io(
+        _coordinator: SQLiteGenerationCoordinator,
+        _connection: sqlite3.Connection,
+        _generation_id: str,
+    ) -> None:
+        raise AssertionError("artifact verification ran before publication authority")
+
+    monkeypatch.setattr(SQLiteGenerationCoordinator, "_verify_generation_artifacts", unexpected_artifact_io)
+
+    with pytest.raises(GenerationCoordinatorError, match="lease is unavailable or expired"):
+        context.coordinator.publish(
+            wrong_lease,
+            context.generation.generation_id,
+            expected_previous_generation_id=None,
+        )
+
+
+def test_publication_reverifies_artifacts_while_holding_the_visibility_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _generation_context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="publish-lock", text="locked publication")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, row_count=1),
+    )
+    context.coordinator.mark_ready(context.lease, manifest)
+    original = SQLiteGenerationCoordinator._verify_generation_artifacts
+    observed_write_lock = False
+
+    def verify_under_lock(
+        coordinator: SQLiteGenerationCoordinator,
+        connection: sqlite3.Connection,
+        generation_id: str,
+    ) -> None:
+        nonlocal observed_write_lock
+        competing = sqlite3.connect(context.layout.metadata_db, timeout=0, isolation_level=None)
+        try:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                competing.execute("BEGIN IMMEDIATE")
+            observed_write_lock = True
+        finally:
+            competing.close()
+        original(coordinator, connection, generation_id)
+
+    monkeypatch.setattr(SQLiteGenerationCoordinator, "_verify_generation_artifacts", verify_under_lock)
+
+    context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+
+    assert observed_write_lock is True
+
+
 def test_membership_contract_rejects_noncanonical_paths_and_ranges() -> None:
     base = {
         "chunk_instance_id": "chunk_invalid",
