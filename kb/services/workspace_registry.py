@@ -1570,7 +1570,8 @@ class WorkspaceRegistry:
                             content_revision INTEGER NOT NULL DEFAULT 1 CHECK (content_revision >= 1),
                             validated_content_revision INTEGER
                                 CHECK (validated_content_revision IS NULL OR validated_content_revision >= 1),
-                            created_at TEXT NOT NULL
+                            created_at TEXT NOT NULL,
+                            UNIQUE (generation_id, manifest_id)
                         ) STRICT
                         """
                     )
@@ -1640,6 +1641,108 @@ class WorkspaceRegistry:
                             UPDATE generation_content_manifests
                             SET content_revision = content_revision + 1
                             WHERE generation_id = OLD.generation_id;
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE generation_keyword_commits (
+                            generation_id TEXT PRIMARY KEY REFERENCES generations(generation_id)
+                                ON DELETE CASCADE,
+                            manifest_id TEXT NOT NULL,
+                            manifest_digest TEXT NOT NULL CHECK (length(manifest_digest) = 64),
+                            commit_digest TEXT NOT NULL CHECK (length(commit_digest) = 64),
+                            item_count INTEGER NOT NULL CHECK (item_count >= 0),
+                            keyword_revision INTEGER NOT NULL DEFAULT 1 CHECK (keyword_revision >= 1),
+                            validated_keyword_revision INTEGER CHECK (
+                                validated_keyword_revision IS NULL OR validated_keyword_revision >= 1
+                            ),
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY (generation_id, manifest_id)
+                                REFERENCES generation_content_manifests(generation_id, manifest_id)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TABLE generation_keyword_documents (
+                            document_rowid INTEGER PRIMARY KEY,
+                            generation_id TEXT NOT NULL,
+                            chunk_instance_id TEXT NOT NULL,
+                            artifact_id TEXT NOT NULL CHECK (length(artifact_id) = 64),
+                            relative_path TEXT NOT NULL CHECK (length(relative_path) BETWEEN 1 AND 4096),
+                            language TEXT NOT NULL CHECK (length(language) BETWEEN 1 AND 128),
+                            text TEXT NOT NULL,
+                            UNIQUE (generation_id, chunk_instance_id),
+                            FOREIGN KEY (generation_id, chunk_instance_id)
+                                REFERENCES generation_chunk_memberships(generation_id, chunk_instance_id)
+                                ON DELETE CASCADE,
+                            FOREIGN KEY (generation_id)
+                                REFERENCES generation_keyword_commits(generation_id)
+                                ON DELETE CASCADE
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE VIRTUAL TABLE generation_keyword_fts USING fts5(
+                            text,
+                            relative_path,
+                            language,
+                            content = 'generation_keyword_documents',
+                            content_rowid = 'document_rowid',
+                            tokenize = 'unicode61 remove_diacritics 2'
+                        )
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_keyword_documents_insert
+                        AFTER INSERT ON generation_keyword_documents
+                        BEGIN
+                            UPDATE generation_keyword_commits
+                            SET keyword_revision = keyword_revision + 1
+                            WHERE generation_id = NEW.generation_id;
+                            INSERT INTO generation_keyword_fts(rowid, text, relative_path, language)
+                            VALUES (NEW.document_rowid, NEW.text, NEW.relative_path, NEW.language);
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_keyword_documents_update
+                        AFTER UPDATE ON generation_keyword_documents
+                        BEGIN
+                            UPDATE generation_keyword_commits
+                            SET keyword_revision = keyword_revision + 1
+                            WHERE generation_id = OLD.generation_id;
+                            UPDATE generation_keyword_commits
+                            SET keyword_revision = keyword_revision + 1
+                            WHERE generation_id = NEW.generation_id
+                              AND NEW.generation_id <> OLD.generation_id;
+                            INSERT INTO generation_keyword_fts(
+                                generation_keyword_fts, rowid, text, relative_path, language
+                            ) VALUES (
+                                'delete', OLD.document_rowid, OLD.text, OLD.relative_path, OLD.language
+                            );
+                            INSERT INTO generation_keyword_fts(rowid, text, relative_path, language)
+                            VALUES (NEW.document_rowid, NEW.text, NEW.relative_path, NEW.language);
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_keyword_documents_delete
+                        AFTER DELETE ON generation_keyword_documents
+                        BEGIN
+                            UPDATE generation_keyword_commits
+                            SET keyword_revision = keyword_revision + 1
+                            WHERE generation_id = OLD.generation_id;
+                            INSERT INTO generation_keyword_fts(
+                                generation_keyword_fts, rowid, text, relative_path, language
+                            ) VALUES (
+                                'delete', OLD.document_rowid, OLD.text, OLD.relative_path, OLD.language
+                            );
                         END
                         """
                     )

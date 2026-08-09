@@ -27,6 +27,11 @@ from kb.generation import (
     VerifiedVectorCommit,
 )
 from kb.generation_content import StagedChunkMembership, identify_chunk_membership, identify_generation_content_manifest
+from kb.generation_keyword import (
+    GenerationKeywordDocument,
+    VerifiedGenerationKeywordCommit,
+    identify_generation_keyword_commit,
+)
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
@@ -187,14 +192,14 @@ class SQLiteGenerationCoordinator:
                 if generation.state in {"ready", "published"}:
                     if existing != supplied or generation.vector_row_count != manifest.vector_row_count:
                         raise GenerationConflict("Dolphin generation already records a different complete manifest")
-                    _mark_content_revision_validated(connection, manifest.generation_id)
+                    _mark_generation_bindings_validated(connection, manifest.generation_id)
                     connection.commit()
                     return generation
                 if generation.vector_commit_token is None or generation.vector_digest is None:
                     raise GenerationCoordinatorError("Dolphin generation vectors are not durably verified")
                 if generation.vector_row_count != manifest.vector_row_count:
                     raise GenerationConflict("Dolphin manifest vector count does not match verified vectors")
-                _mark_content_revision_validated(connection, manifest.generation_id)
+                _mark_generation_bindings_validated(connection, manifest.generation_id)
                 connection.execute(
                     """
                     UPDATE generations
@@ -259,7 +264,7 @@ class SQLiteGenerationCoordinator:
                     _require_generation_content_binding(connection, generation)
                     if generation.previous_generation_id != expected_previous_generation_id:
                         raise GenerationConflict("Dolphin publication replay has a different predecessor")
-                    _mark_content_revision_validated(connection, generation_id)
+                    _mark_generation_bindings_validated(connection, generation_id)
                     snapshot = _snapshot_by_generation(connection, generation_id)
                     if snapshot is None:
                         raise GenerationCoordinatorError("Dolphin published generation pointer is invalid")
@@ -270,7 +275,7 @@ class SQLiteGenerationCoordinator:
                 if generation.state != "ready":
                     raise GenerationCoordinatorError("Dolphin generation is not ready for publication")
                 _require_generation_content_binding(connection, generation)
-                _mark_content_revision_validated(connection, generation_id)
+                _mark_generation_bindings_validated(connection, generation_id)
                 head_row = connection.execute(
                     "SELECT head_commit FROM workspace_registrations WHERE workspace_id = ?",
                     (generation.workspace_id,),
@@ -590,6 +595,7 @@ def _require_persisted_content_manifest(
     if persisted != manifest:
         raise GenerationCoordinatorError("Dolphin generation content manifest is unavailable or incompatible")
     _require_content_counts(connection, manifest)
+    _require_generation_keyword_binding(connection, manifest)
 
 
 def _content_manifest_for_generation(
@@ -646,9 +652,10 @@ def _require_generation_content_binding(
     if manifest is None:
         raise GenerationCoordinatorError("Dolphin generation content binding is unavailable or incompatible")
     _require_content_counts(connection, manifest)
+    _require_generation_keyword_binding(connection, manifest)
 
 
-def _mark_content_revision_validated(connection: sqlite3.Connection, generation_id: str) -> None:
+def _mark_generation_bindings_validated(connection: sqlite3.Connection, generation_id: str) -> None:
     cursor = connection.execute(
         """
         UPDATE generation_content_manifests
@@ -659,6 +666,85 @@ def _mark_content_revision_validated(connection: sqlite3.Connection, generation_
     )
     if cursor.rowcount != 1:
         raise GenerationCoordinatorError("Dolphin generation content revision is unavailable")
+    cursor = connection.execute(
+        """
+        UPDATE generation_keyword_commits
+        SET validated_keyword_revision = keyword_revision
+        WHERE generation_id = ?
+        """,
+        (generation_id,),
+    )
+    if cursor.rowcount != 1:
+        raise GenerationCoordinatorError("Dolphin generation keyword revision is unavailable")
+
+
+def _require_generation_keyword_binding(
+    connection: sqlite3.Connection,
+    manifest: VerifiedGenerationManifest,
+) -> None:
+    row = connection.execute(
+        """
+        SELECT generation_id, manifest_id, manifest_digest, commit_digest, item_count
+        FROM generation_keyword_commits
+        WHERE generation_id = ?
+        """,
+        (manifest.generation_id,),
+    ).fetchone()
+    if row is None:
+        raise GenerationCoordinatorError("Dolphin generation keyword commit is unavailable")
+    try:
+        commit = VerifiedGenerationKeywordCommit(
+            generation_id=row[0],
+            manifest_id=row[1],
+            manifest_digest=row[2],
+            commit_digest=row[3],
+            item_count=row[4],
+        )
+    except ValidationError as exc:
+        raise GenerationCoordinatorError("Dolphin generation keyword commit is invalid") from exc
+    if (
+        commit.manifest_id != manifest.manifest_id
+        or commit.manifest_digest != manifest.manifest_digest
+        or commit.item_count != manifest.keyword_item_count
+    ):
+        raise GenerationCoordinatorError("Dolphin generation keyword commit is incompatible")
+    rows = connection.execute(
+        """
+        SELECT d.chunk_instance_id, d.artifact_id, d.relative_path, d.language, d.text,
+               m.artifact_id, m.relative_path, m.language
+        FROM generation_keyword_documents AS d
+        JOIN generation_chunk_memberships AS m
+          ON m.generation_id = d.generation_id
+         AND m.chunk_instance_id = d.chunk_instance_id
+        WHERE d.generation_id = ?
+        ORDER BY d.chunk_instance_id
+        """,
+        (manifest.generation_id,),
+    ).fetchall()
+    documents = []
+    for document_row in rows:
+        if tuple(document_row[1:4]) != tuple(document_row[5:8]):
+            raise GenerationCoordinatorError("Dolphin generation keyword document is incompatible")
+        try:
+            documents.append(
+                GenerationKeywordDocument(
+                    chunk_instance_id=document_row[0],
+                    artifact_id=document_row[1],
+                    relative_path=document_row[2],
+                    language=document_row[3],
+                    text=document_row[4],
+                )
+            )
+        except ValidationError as exc:
+            raise GenerationCoordinatorError("Dolphin generation keyword document is invalid") from exc
+    observed = identify_generation_keyword_commit(
+        manifest.generation_id,
+        manifest.manifest_id,
+        manifest.manifest_digest,
+        documents,
+    )
+    if observed != commit:
+        raise GenerationCoordinatorError("Dolphin generation keyword binding is invalid")
 
 
 def _require_content_counts(
