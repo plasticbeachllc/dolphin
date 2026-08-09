@@ -6,7 +6,6 @@ import hashlib
 import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from pathlib import Path
 from shutil import rmtree
 
@@ -63,10 +62,10 @@ async def test_initial_index_submission_is_durable_and_idempotent_for_one_head(t
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
+    worktree = await discover_git_worktree(worktree_root)
 
-    first = registry.submit_initial_index(registration)
-    second = registry.submit_initial_index(registration)
+    registration, first = registry.register_and_submit_initial_index(worktree)
+    _, second = registry.register_and_submit_initial_index(worktree)
     loaded = registry.get_operation(first.operation_id)
 
     assert first.created is True
@@ -85,14 +84,14 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
+    worktree = await discover_git_worktree(worktree_root)
 
-    first = registry.submit_initial_index(registration)
+    registration, first = registry.register_and_submit_initial_index(worktree)
     registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
     terminal = registry.set_operation_state(
         first.operation_id, OperationState.SUCCEEDED, expected_state=OperationState.RUNNING
     )
-    repeated = registry.submit_initial_index(registration)
+    _, repeated = registry.register_and_submit_initial_index(worktree)
 
     assert terminal is not None
     assert terminal.state is OperationState.SUCCEEDED
@@ -107,8 +106,7 @@ async def test_terminal_operation_cannot_be_restarted(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
-    operation = registry.submit_initial_index(registration)
+    _, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
 
     running = registry.set_operation_state(
         operation.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED
@@ -133,8 +131,7 @@ async def test_competing_state_transitions_allow_only_one_observed_state(tmp_pat
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
-    operation = registry.submit_initial_index(registration)
+    _, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
 
     def transition(state: OperationState) -> WorkspaceOperation | None:
         return registry.set_operation_state(operation.operation_id, state, expected_state=OperationState.QUEUED)
@@ -154,35 +151,23 @@ async def test_competing_state_transitions_allow_only_one_observed_state(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_initial_index_submission_rejects_a_stale_head_or_forged_identity(tmp_path: Path) -> None:
+async def test_atomic_submission_replaces_an_unsubmitted_stale_registration(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
+    stale_registration = registry.register(await discover_git_worktree(worktree_root))
+    _commit_change(worktree_root)
 
-    with pytest.raises(WorkspaceRegistryError, match="head does not match"):
-        registry.submit_initial_index(replace(registration, head_commit="forged-head"))
-    with pytest.raises(WorkspaceRegistryError, match="identity does not match"):
-        registry.submit_initial_index(replace(registration, root="/forged/root"))
+    current_registration, operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root)
+    )
+
+    assert current_registration.head_commit != stale_registration.head_commit
+    assert operation.target_head_commit == current_registration.head_commit
 
 
 @pytest.mark.asyncio
-async def test_initial_index_submission_rejects_a_snapshot_replaced_by_another_registration(tmp_path: Path) -> None:
-    worktree_root = _commit_repository(tmp_path / "repository")
-    home = tmp_path / "home"
-    home.mkdir()
-    registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    initial_worktree = await discover_git_worktree(worktree_root)
-    initial_registration = registry.register(initial_worktree)
-
-    _commit_change(worktree_root)
-    registry.register(await discover_git_worktree(worktree_root))
-
-    with pytest.raises(WorkspaceRegistryError, match="head does not match"):
-        registry.submit_initial_index(initial_registration)
-
-
 @pytest.mark.asyncio
 async def test_atomic_registration_and_submission_uses_one_discovered_head(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
@@ -205,10 +190,12 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
 
-    first_registration = registry.register(await discover_git_worktree(first_root))
-    second_registration = registry.register(await discover_git_worktree(second_root))
-    first_operation = registry.submit_initial_index(first_registration)
-    second_operation = registry.submit_initial_index(second_registration)
+    first_registration, first_operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(first_root)
+    )
+    second_registration, second_operation = registry.register_and_submit_initial_index(
+        await discover_git_worktree(second_root)
+    )
 
     assert first_registration.workspace_id != second_registration.workspace_id
     assert first_registration.repository_id != second_registration.repository_id
@@ -221,8 +208,7 @@ async def test_register_rejects_a_replacement_repository_at_the_same_root(tmp_pa
     home = tmp_path / "home"
     home.mkdir()
     registry = WorkspaceRegistry(macos_storage_layout(home=home))
-    registration = registry.register(await discover_git_worktree(worktree_root))
-    operation = registry.submit_initial_index(registration)
+    registration, operation = registry.register_and_submit_initial_index(await discover_git_worktree(worktree_root))
     rmtree(worktree_root / ".git")
     _initialize_repository(worktree_root)
     _git(worktree_root, "add", "example.py")

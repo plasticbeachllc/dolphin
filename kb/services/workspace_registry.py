@@ -91,10 +91,10 @@ class WorkspaceRegistry:
 
     def register(self, worktree: GitWorktree) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
+        self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                self._validate_worktree_snapshot(worktree)
                 registration = self._register(connection, worktree)
                 self._validate_worktree_snapshot(worktree)
             except Exception:
@@ -108,10 +108,10 @@ class WorkspaceRegistry:
         worktree: GitWorktree,
     ) -> tuple[WorkspaceRegistration, WorkspaceOperation]:
         """Persist one discovered snapshot and its initial-index operation atomically."""
+        self._validate_worktree_snapshot(worktree)
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                self._validate_worktree_snapshot(worktree)
                 registration = self._register(connection, worktree)
                 operation = self._submit_initial_index(connection, registration)
                 self._validate_worktree_snapshot(worktree)
@@ -120,18 +120,6 @@ class WorkspaceRegistry:
                 raise
             connection.commit()
             return registration, operation
-
-    def submit_initial_index(self, registration: WorkspaceRegistration) -> WorkspaceOperation:
-        """Create or reuse an operation only when the registration snapshot remains current."""
-        with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                operation = self._submit_initial_index(connection, registration)
-            except Exception:
-                connection.rollback()
-                raise
-            connection.commit()
-            return operation
 
     def get_operation(self, operation_id: str) -> WorkspaceOperation | None:
         """Read one exact source-free operation snapshot without mutating retention or state."""

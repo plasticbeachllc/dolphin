@@ -34,7 +34,7 @@ async def discover_git_worktree(path: Path) -> GitWorktree:
 
 def validate_git_worktree_snapshot(worktree: GitWorktree) -> None:
     """Reject a worktree whose on-disk Git identity changed after discovery."""
-    if _discover_git_worktree(worktree.root) != worktree:
+    if _read_git_worktree_snapshot(worktree.root) != worktree:
         raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED")
 
 
@@ -44,20 +44,22 @@ def _discover_git_worktree(path: Path) -> GitWorktree:
     if not path.is_dir():
         raise WorktreeDiscoveryError("WORKTREE_PATH_INVALID")
 
-    snapshot = _git_snapshot(path)
-    root, common_git_dir, _head_commit, _branch = snapshot
-    root_path = Path(root)
-    common_git_dir_path = Path(common_git_dir)
-    common_git_dir_identity = _directory_identity(common_git_dir_path)
-    if _git_snapshot(root_path) != snapshot or _directory_identity(common_git_dir_path) != common_git_dir_identity:
+    worktree = _read_git_worktree_snapshot(path)
+    if _read_git_worktree_snapshot(worktree.root) != worktree:
         raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED")
+    return worktree
 
+
+def _read_git_worktree_snapshot(path: Path) -> GitWorktree:
+    """Read one coherent Git identity snapshot rooted at an already-validated path."""
+    root, common_git_dir, head_commit, branch = _git_snapshot(path)
+    common_git_dir_path = Path(common_git_dir)
     return GitWorktree(
-        root=root_path,
+        root=Path(root),
         common_git_dir=common_git_dir_path,
-        common_git_dir_identity=common_git_dir_identity,
-        head_commit=_head_commit,
-        branch=_branch,
+        common_git_dir_identity=_directory_identity(common_git_dir_path),
+        head_commit=head_commit,
+        branch=branch,
     )
 
 
