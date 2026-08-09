@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from kb.runtime.storage import StorageLayoutError, macos_storage_layout
+from kb.runtime import storage as implementation
+from kb.runtime.storage import StorageLayoutError, macos_storage_layout, sync_directory
 
 
 def test_layout_uses_only_the_fixed_application_support_root(tmp_path: Path) -> None:
@@ -100,3 +103,67 @@ def test_metadata_inspection_rejects_without_repairing_unsafe_modes(tmp_path: Pa
         layout.metadata_database_exists()
 
     assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o644
+
+
+def test_artifact_descriptor_rejects_a_noncanonical_layout_without_creating_it(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    redirected = replace(layout, artifacts=tmp_path / "redirected-artifacts")
+
+    with pytest.raises(StorageLayoutError, match="invalid layout"):
+        with redirected.open_artifacts_directory():
+            pytest.fail("invalid artifact layout was opened")
+
+    assert not (tmp_path / "Library").exists()
+    assert not redirected.artifacts.exists()
+
+
+def test_artifact_descriptor_syncs_each_new_parent_entry_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    real_fsync = os.fsync
+    synced_descriptors: list[int] = []
+
+    def record_fsync(descriptor: int) -> None:
+        synced_descriptors.append(descriptor)
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", record_fsync)
+
+    with layout.open_artifacts_directory():
+        pass
+
+    first_open_syncs = len(synced_descriptors)
+    assert first_open_syncs == 4
+
+    with layout.open_artifacts_directory():
+        pass
+
+    assert len(synced_descriptors) == first_open_syncs
+
+
+def test_directory_sync_fails_closed_when_filesystem_durability_is_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_directory_sync(_descriptor: int) -> None:
+        raise OSError(errno.EINVAL, "directory sync unsupported")
+
+    monkeypatch.setattr(os, "fsync", reject_directory_sync)
+
+    with pytest.raises(OSError) as error:
+        sync_directory(123)
+
+    assert error.value.errno == errno.EINVAL
+
+
+def test_directory_sync_preserves_real_io_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_directory_sync(_descriptor: int) -> None:
+        raise OSError(errno.EIO, "injected I/O failure")
+
+    monkeypatch.setattr(os, "fsync", fail_directory_sync)
+
+    with pytest.raises(OSError) as error:
+        implementation.sync_directory(123)
+
+    assert error.value.errno == errno.EIO
