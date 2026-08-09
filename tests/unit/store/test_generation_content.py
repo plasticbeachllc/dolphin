@@ -12,8 +12,14 @@ import pytest
 from pydantic import ValidationError
 
 import kb.store.generation_content as generation_content_implementation
-from kb.artifacts import ArtifactCorrupt, ChunkTextArtifact, identify_embedding_input
-from kb.generation import GenerationCoordinatorError, PublishedSnapshot, StagingGeneration, VerifiedVectorCommit
+from kb.artifacts import ArtifactCorrupt, ChunkTextArtifact, VerifiedChunkArtifactSet, identify_embedding_input
+from kb.generation import (
+    GenerationCoordinatorError,
+    PublishedSnapshot,
+    StagingGeneration,
+    VerifiedGenerationManifest,
+    VerifiedVectorCommit,
+)
 from kb.generation_content import (
     GenerationContentConflict,
     GenerationContentError,
@@ -304,27 +310,57 @@ def test_complete_manifest_binding_is_cached_once_per_exact_snapshot(
         context.generation.generation_id,
         expected_previous_generation_id=None,
     )
-    original_binding = generation_content_implementation._require_complete_manifest_binding
+    original_binding = generation_content_implementation.identify_generation_content_manifest
     complete_validations = 0
     original_read = context.artifacts.read_verified_artifact
     artifact_reads = 0
 
-    def count_binding(connection: sqlite3.Connection, exact_snapshot: PublishedSnapshot) -> None:
+    def count_binding(
+        generation_id: str,
+        memberships: tuple[StagedChunkMembership, ...],
+        artifact_set: VerifiedChunkArtifactSet,
+    ) -> VerifiedGenerationManifest:
         nonlocal complete_validations
         complete_validations += 1
-        original_binding(connection, exact_snapshot)
+        return original_binding(generation_id, memberships, artifact_set)
 
     def count_artifact_read(artifact_id: str) -> tuple[str, ChunkTextArtifact]:
         nonlocal artifact_reads
         artifact_reads += 1
         return original_read(artifact_id)
 
-    monkeypatch.setattr(generation_content_implementation, "_require_complete_manifest_binding", count_binding)
+    monkeypatch.setattr(generation_content_implementation, "identify_generation_content_manifest", count_binding)
     monkeypatch.setattr(context.artifacts, "read_verified_artifact", count_artifact_read)
 
     assert context.content.materialize_published_chunk(snapshot, first.chunk_instance_id) == "first cached chunk"
     assert context.content.materialize_published_chunk(snapshot, second.chunk_instance_id) == "second cached chunk"
     assert complete_validations == 1
+    assert artifact_reads == 2
+
+    changed = second.model_copy(update={"relative_path": "src/cache-corrupt.py"})
+    changed_digest = identify_chunk_membership(snapshot.generation_id, changed)
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        before = connection.execute(
+            "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+            (snapshot.generation_id,),
+        ).fetchone()
+        connection.execute(
+            """
+            UPDATE generation_chunk_memberships
+            SET relative_path = ?, membership_digest = ?
+            WHERE generation_id = ? AND chunk_instance_id = ?
+            """,
+            (changed.relative_path, changed_digest, snapshot.generation_id, second.chunk_instance_id),
+        )
+        after = connection.execute(
+            "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+            (snapshot.generation_id,),
+        ).fetchone()
+    assert before is not None
+    assert after == (before[0] + 1,)
+    with pytest.raises(GenerationContentError, match="manifest binding is corrupt"):
+        context.content.materialize_published_chunk(snapshot, first.chunk_instance_id)
+    assert complete_validations == 2
     assert artifact_reads == 2
 
 

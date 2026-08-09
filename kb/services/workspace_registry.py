@@ -1567,6 +1567,7 @@ class WorkspaceRegistry:
                             metadata_item_count INTEGER NOT NULL CHECK (metadata_item_count >= 0),
                             keyword_item_count INTEGER NOT NULL CHECK (keyword_item_count >= 0),
                             vector_row_count INTEGER NOT NULL CHECK (vector_row_count >= 0),
+                            content_revision INTEGER NOT NULL DEFAULT 1 CHECK (content_revision >= 1),
                             created_at TEXT NOT NULL
                         ) STRICT
                         """
@@ -1601,6 +1602,43 @@ class WorkspaceRegistry:
                         """
                         CREATE INDEX generation_chunk_memberships_generation_artifact
                         ON generation_chunk_memberships (generation_id, artifact_id, chunk_instance_id)
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_chunk_memberships_revision_insert
+                        AFTER INSERT ON generation_chunk_memberships
+                        BEGIN
+                            UPDATE generation_content_manifests
+                            SET content_revision = content_revision + 1
+                            WHERE generation_id = NEW.generation_id;
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_chunk_memberships_revision_update
+                        AFTER UPDATE ON generation_chunk_memberships
+                        BEGIN
+                            UPDATE generation_content_manifests
+                            SET content_revision = content_revision + 1
+                            WHERE generation_id = OLD.generation_id;
+                            UPDATE generation_content_manifests
+                            SET content_revision = content_revision + 1
+                            WHERE generation_id = NEW.generation_id
+                              AND NEW.generation_id <> OLD.generation_id;
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE TRIGGER generation_chunk_memberships_revision_delete
+                        AFTER DELETE ON generation_chunk_memberships
+                        BEGIN
+                            UPDATE generation_content_manifests
+                            SET content_revision = content_revision + 1
+                            WHERE generation_id = OLD.generation_id;
+                        END
                         """
                     )
                     connection.execute(

@@ -7,6 +7,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,6 +36,12 @@ _WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
 _VERIFIED_SNAPSHOT_CACHE_LIMIT = 256
 
 
+@dataclass(frozen=True, slots=True)
+class _VerifiedManifestCacheEntry:
+    manifest: VerifiedGenerationManifest
+    content_revision: int
+
+
 class SQLiteGenerationContentStore:
     """Bind verified immutable artifacts to staging and published generations."""
 
@@ -48,7 +55,7 @@ class SQLiteGenerationContentStore:
         self._layout = layout
         self._artifacts = artifacts or ChunkArtifactStore(layout)
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._verified_snapshots: OrderedDict[tuple[object, ...], None] = OrderedDict()
+        self._verified_snapshots: OrderedDict[tuple[object, ...], _VerifiedManifestCacheEntry] = OrderedDict()
 
     def stage_manifest(
         self,
@@ -155,15 +162,17 @@ class SQLiteGenerationContentStore:
             if canonical is None or canonical != snapshot:
                 raise PublishedChunkUnavailable("Dolphin exact published snapshot is unavailable")
             cache_key = _snapshot_cache_key(canonical)
-            needs_complete_validation = cache_key not in self._verified_snapshots
+            current_manifest = _manifest_cache_entry(connection, canonical.generation_id)
+            cached_manifest = self._verified_snapshots.get(cache_key)
+            needs_complete_validation = cached_manifest != current_manifest
             if needs_complete_validation:
-                _require_complete_manifest_binding(connection, canonical)
+                _require_complete_manifest_binding(connection, canonical, current_manifest)
             else:
                 self._verified_snapshots.move_to_end(cache_key)
             membership = _require_published_membership(connection, canonical, chunk_instance_id)
             connection.commit()
         if needs_complete_validation:
-            self._verified_snapshots[cache_key] = None
+            self._verified_snapshots[cache_key] = current_manifest
             if len(self._verified_snapshots) > _VERIFIED_SNAPSHOT_CACHE_LIMIT:
                 self._verified_snapshots.popitem(last=False)
         text, artifact = self._artifacts.read_verified_artifact(membership.artifact.artifact_id)
@@ -385,13 +394,10 @@ def _require_published_membership(
 def _require_complete_manifest_binding(
     connection: sqlite3.Connection,
     snapshot: PublishedSnapshot,
+    current: _VerifiedManifestCacheEntry,
 ) -> None:
-    manifest = _manifest_for_generation(connection, snapshot.generation_id)
-    if (
-        manifest is None
-        or manifest.manifest_id != snapshot.manifest_id
-        or manifest.manifest_digest != snapshot.manifest_digest
-    ):
+    manifest = current.manifest
+    if manifest.manifest_id != snapshot.manifest_id or manifest.manifest_digest != snapshot.manifest_digest:
         raise GenerationContentError("Dolphin published chunk manifest is corrupt")
     rows = connection.execute(
         """
@@ -421,6 +427,23 @@ def _require_complete_manifest_binding(
     observed = identify_generation_content_manifest(snapshot.generation_id, tuple(memberships), artifact_set)
     if observed != manifest:
         raise GenerationContentError("Dolphin published chunk manifest binding is corrupt")
+
+
+def _manifest_cache_entry(
+    connection: sqlite3.Connection,
+    generation_id: str,
+) -> _VerifiedManifestCacheEntry:
+    manifest = _manifest_for_generation(connection, generation_id)
+    row = connection.execute(
+        "SELECT content_revision FROM generation_content_manifests WHERE generation_id = ?",
+        (generation_id,),
+    ).fetchone()
+    if manifest is None or row is None:
+        raise GenerationContentError("Dolphin published chunk manifest is corrupt")
+    revision = row[0]
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+        raise GenerationContentError("Dolphin published chunk manifest revision is corrupt")
+    return _VerifiedManifestCacheEntry(manifest=manifest, content_revision=revision)
 
 
 _CANONICAL_SNAPSHOT_BY_GENERATION = """
