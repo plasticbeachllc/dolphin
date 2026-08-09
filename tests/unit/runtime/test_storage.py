@@ -82,3 +82,21 @@ def test_layout_creates_metadata_database_with_private_permissions(tmp_path: Pat
 
     assert layout.metadata_db.is_file()
     assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o600
+
+
+def test_metadata_inspection_is_observational_when_runtime_state_is_absent(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+
+    assert layout.metadata_database_exists() is False
+    assert not (tmp_path / "Library").exists()
+
+
+def test_metadata_inspection_rejects_without_repairing_unsafe_modes(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    layout.ensure_private_metadata_database()
+    layout.metadata_db.chmod(0o644)
+
+    with pytest.raises(StorageLayoutError, match="unsafe permissions"):
+        layout.metadata_database_exists()
+
+    assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o644

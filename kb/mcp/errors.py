@@ -38,3 +38,37 @@ def runtime_not_ready(tool_name: str) -> ToolError:
         message=f"Dolphin's {tool_name} service is not initialized yet.",
         retryable=False,
     )
+
+
+def cursor_invalid() -> ToolError:
+    return ToolError(
+        code="CURSOR_INVALID",
+        message="The repository-list cursor is invalid; restart repo_list with cursor set to null.",
+        retryable=False,
+        details={"next_action": {"tool": "repo_list", "arguments": {"cursor": None}}},
+    )
+
+
+def cursor_expired() -> ToolError:
+    return ToolError(
+        code="CURSOR_EXPIRED",
+        message="The repository list changed; restart repo_list with cursor set to null.",
+        retryable=False,
+        details={"next_action": {"tool": "repo_list", "arguments": {"cursor": None}}},
+    )
+
+
+def operation_missing() -> ToolError:
+    return ToolError(
+        code="OPERATION_MISSING",
+        message="The Dolphin operation is unavailable or its status has expired.",
+        retryable=False,
+    )
+
+
+def storage_unavailable() -> ToolError:
+    return ToolError(
+        code="STORAGE_UNAVAILABLE",
+        message="Dolphin's private metadata storage is unavailable.",
+        retryable=True,
+    )

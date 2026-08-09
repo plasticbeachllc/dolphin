@@ -29,6 +29,7 @@ class RepoListInput(StrictInput):
     """Page through actionable workspace registrations."""
 
     cursor: str | None = Field(
+        max_length=1_024,
         description="Opaque cursor from repo_list; null starts the first page.",
     )
 
@@ -73,7 +74,7 @@ class RepoSyncInput(StrictInput):
 class OperationStatusInput(StrictInput):
     """Inspect one exact durable operation."""
 
-    operation_id: str = Field(min_length=1)
+    operation_id: str = Field(min_length=1, max_length=128)
 
 
 class SearchQueryRequest(StrictInput):

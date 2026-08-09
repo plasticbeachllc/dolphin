@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from kb.cleanup_authority import CLEANUP_RECEIPT_PREFIX
 from kb.mcp.contracts import StatusInput
+from kb.services.lifecycle_models import NextAction, WorkspaceSummary
+from kb.services.lifecycle_read import workspace_summary
+from kb.services.workspace_registry import WorkspaceReadSnapshot, WorkspaceRegistry, WorkspaceRegistryError
 from kb.services.worktree import sanitized_git_environment
 from kb.version import get_version
 
@@ -38,11 +41,15 @@ class ForgottenStateAggregates(_ResultModel):
     awaiting_physical_reclamation: int = Field(ge=0)
 
 
-class NextAction(_ResultModel):
-    action: str
-    reason: str
-    tool: str | None = None
-    arguments: dict[str, str] | None = None
+class ToolAvailability(_ResultModel):
+    status: Literal["available", "unavailable"]
+    repo_list: Literal["available", "unavailable"]
+    repo_add: Literal["available", "unavailable"]
+    repo_forget: Literal["available", "unavailable"]
+    repo_sync: Literal["available", "unavailable"]
+    operation_status: Literal["available", "unavailable"]
+    search: Literal["available", "unavailable"]
+    open_ref: Literal["available", "unavailable"]
 
 
 class StatusResult(_ResultModel):
@@ -50,10 +57,11 @@ class StatusResult(_ResultModel):
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
+    tool_availability: ToolAvailability
     workspace_counts: EffectiveWorkspaceCounts
     forgotten: ForgottenStateAggregates
     current_workspace_resolution: Literal["resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"]
-    current_workspace: None = None
+    current_workspace: WorkspaceSummary | None = None
     current_repository_boundaries: list[dict[str, str]]
     next_actions: list[NextAction]
 
@@ -68,14 +76,46 @@ class _WorktreeProbe:
 class StatusService:
     """Report cheap local readiness without enrolling or reconciling anything."""
 
-    def __init__(self, *, cwd: Path | None = None, environment: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        cwd: Path | None = None,
+        environment: Mapping[str, str] | None = None,
+        registry: WorkspaceRegistry | None = None,
+    ) -> None:
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = environment if environment is not None else os.environ
+        self._registry = registry
 
     async def __call__(self, _input: StatusInput) -> StatusResult:
         credential_present = bool(self._environment.get("DOLPHIN_OPENAI_API_KEY"))
         probe = await asyncio.to_thread(_probe_worktree, self._cwd)
-        next_actions = _next_actions_for_probe(probe)
+        registry_snapshot = WorkspaceReadSnapshot(registered=0, indexing=0, ready=0, failed=0, current_workspace=None)
+        storage_available = True
+        if self._registry is not None:
+            try:
+                database_exists = await asyncio.to_thread(self._registry.database_exists)
+                if database_exists:
+                    if not await asyncio.to_thread(self._registry.schema_is_current):
+                        raise WorkspaceRegistryError("Dolphin metadata storage requires initialization")
+                    registry_snapshot = await asyncio.to_thread(self._registry.read_workspace_snapshot, probe.root)
+            except WorkspaceRegistryError:
+                storage_available = False
+
+        current_workspace = (
+            workspace_summary(registry_snapshot.current_workspace)
+            if registry_snapshot.current_workspace is not None
+            else None
+        )
+        if current_workspace is not None:
+            resolution: Literal["resolved", "unregistered", "ambiguous", "outside_worktree", "unavailable"] = "resolved"
+            next_actions: list[NextAction] = []
+        elif not storage_available:
+            resolution = "unavailable"
+            next_actions = [NextAction(action="inspect_storage", reason="Dolphin metadata storage is unavailable.")]
+        else:
+            resolution = probe.resolution
+            next_actions = _next_actions_for_probe(probe)
 
         return StatusResult(
             version=get_version(),
@@ -83,24 +123,25 @@ class StatusService:
             # readiness errors while their application services are built.
             # Do not advertise overall readiness merely because a credential is
             # present: agents use this field to decide whether to proceed.
-            readiness="degraded",
+            readiness="degraded" if storage_available else "blocked",
             credential_present=credential_present,
             credential_variable="DOLPHIN_OPENAI_API_KEY",
+            tool_availability=_tool_availability(storage_available),
             workspace_counts=EffectiveWorkspaceCounts(
-                registered=0,
-                indexing=0,
-                ready=0,
+                registered=registry_snapshot.registered,
+                indexing=registry_snapshot.indexing,
+                ready=registry_snapshot.ready,
                 missing=0,
                 cleanup_pending=0,
-                failed=0,
+                failed=registry_snapshot.failed,
             ),
             forgotten=ForgottenStateAggregates(
                 replay_tombstones=0,
                 tombstone_metadata_bytes=0,
                 awaiting_physical_reclamation=0,
             ),
-            current_workspace_resolution=probe.resolution,
-            current_workspace=None,
+            current_workspace_resolution=resolution,
+            current_workspace=current_workspace,
             current_repository_boundaries=[],
             next_actions=next_actions,
         )
@@ -151,4 +192,18 @@ def _repo_add_action(worktree_root: Path) -> NextAction:
         reason="Dolphin has not registered this Git worktree; retain these exact arguments for safe retry/cleanup.",
         tool="repo_add",
         arguments={"path": str(worktree_root), "cleanup_receipt": cleanup_receipt},
+    )
+
+
+def _tool_availability(storage_available: bool) -> ToolAvailability:
+    read_state: Literal["available", "unavailable"] = "available" if storage_available else "unavailable"
+    return ToolAvailability(
+        status="available",
+        repo_list=read_state,
+        repo_add="unavailable",
+        repo_forget="unavailable",
+        repo_sync="unavailable",
+        operation_status=read_state,
+        search="unavailable",
+        open_ref="unavailable",
     )

@@ -3010,11 +3010,23 @@ class ForgottenStateAggregates(BaseModel):
     awaiting_physical_reclamation: int = Field(ge=0)
 
 
+class ToolAvailability(BaseModel):
+    status: Literal["available", "unavailable"]
+    repo_list: Literal["available", "unavailable"]
+    repo_add: Literal["available", "unavailable"]
+    repo_forget: Literal["available", "unavailable"]
+    repo_sync: Literal["available", "unavailable"]
+    operation_status: Literal["available", "unavailable"]
+    search: Literal["available", "unavailable"]
+    open_ref: Literal["available", "unavailable"]
+
+
 class StatusResult(BaseModel):
     version: str
     readiness: Literal["ready", "degraded", "blocked"]
     credential_present: bool
     credential_variable: Literal["DOLPHIN_OPENAI_API_KEY"]
+    tool_availability: ToolAvailability
     workspace_counts: EffectiveWorkspaceCounts
     forgotten: ForgottenStateAggregates
     current_workspace_resolution: Literal[
@@ -3064,6 +3076,8 @@ class OperationStatusResult(BaseModel):
     operation_id: str
     kind: Literal["initial_index", "sync", "recovery"]
     state: OperationState
+    attempt: int = Field(ge=1)
+    target_head_commit: str
     workspace_available: bool
     workspace_id: str | None
     phase: Literal["preflight", "scan", "chunk", "embed", "store", "publish"] | None
@@ -3085,7 +3099,7 @@ class OperationStatusResult(BaseModel):
     next_actions: list[NextAction]
 ```
 
-`terminal_at` and `status_expires_at` are both present exactly for `succeeded`, `failed`, or `cancelled`, and the latter is always 30 days after the former. `recommended_poll_after_ms` is present only for nonterminal states; it is response guidance, not a server-side wait. `failure` is present only for `failed`, while approval and resource pauses use typed state/pause details and remediations rather than masquerading as terminal errors.
+`terminal_at` and `status_expires_at` are both present exactly for `succeeded`, `failed`, or `cancelled`, and the latter is always 30 days after the former. `attempt` starts at one and increases only when a failed/cancelled target is explicitly requeued as a new operation; successful and active exact-target work remains deduplicated. `recommended_poll_after_ms` is present only for nonterminal states; it is response guidance, not a server-side wait. `failure` is present only for `failed`, while approval and resource pauses use typed state/pause details and remediations rather than masquerading as terminal errors.
 
 While its registration remains actionable, `workspace_available` is true and `workspace_id` names that exact workspace. After forget, the retained operation summary sets `workspace_available = false` and `workspace_id = None`; exact inspection never reintroduces the forgotten workspace to resolution or listings. Logical expiry is checked before serialization. Physical compaction deletes only bounded operation/checkpoint/audit detail proven unnecessary to nonterminal recovery and never follows operation fields into derived data.
 
@@ -4410,6 +4424,8 @@ CI teardown deletes only its exact run workspace. Local evaluation admission fir
 - [ ] Add clean native Apple Silicon macOS 14+ install-and-start smoke tests on every supported major that assert wheel-only dependency resolution, compatible Mach-O deployment targets, and no compiler invocation.
 
 ### Phase 3 — safe autonomous repository lifecycle
+
+Implementation status (2026-08-09): the lifecycle read foundation now provides descriptor-validated observational storage inspection, real mutually exclusive registry counts and exact-root resolution in `status`, explicit availability for all eight tools, fixed 25-item HMAC-protected revision-bound `repo_list` cursors, and exact-ID `operation_status` with durable attempts and non-extending terminal expiry. The broad items below remain unchecked until their boundary/policy/freshness detail, forgotten/cleanup overlays, full operation checkpoints, and complete matrix tests are implemented.
 
 - [ ] Implement observational empty-input `status`: bounded runtime/credential/storage diagnostics, mutually exclusive effective-state counts, aggregate-only forgotten accounting, and at most one deterministically resolved current workspace with no provider, scan, reconciliation, operation, GC, or enrollment side effect.
 - [ ] Implement cursor-only `repo_list` with fixed 25-item pages, deterministic family/workspace ordering, one actionable-list revision, bounded integrity-protected cursor decoding, all-or-nothing invalidation, and no forgotten entries or expansion/filter/sort/page-size controls.
