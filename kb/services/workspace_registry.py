@@ -28,7 +28,7 @@ class WorkspaceRegistryError(RuntimeError):
     """The local workspace registry cannot complete a safe transaction."""
 
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _REGISTRATION_LOCK_DEADLINE_SECONDS = 15.0
 _REGISTRATION_LOCK_INITIAL_BACKOFF_SECONDS = 0.05
 _REGISTRATION_LOCK_MAX_BACKOFF_SECONDS = 0.5
@@ -87,6 +87,7 @@ class WorkspaceOperation:
     kind: str
     state: OperationState
     target_head_commit: str
+    attempt: int
     created: bool
 
 
@@ -135,7 +136,7 @@ class WorkspaceRegistry:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT operation_id, workspace_id, kind, state, target_head_commit
+                SELECT operation_id, workspace_id, kind, state, target_head_commit, attempt
                 FROM workspace_operations
                 WHERE operation_id = ?
                 """,
@@ -143,13 +144,14 @@ class WorkspaceRegistry:
             ).fetchone()
         if row is None:
             return None
-        operation_id, workspace_id, kind, state, target_head_commit = row
+        operation_id, workspace_id, kind, state, target_head_commit, attempt = row
         return WorkspaceOperation(
             operation_id=operation_id,
             workspace_id=workspace_id,
             kind=kind,
             state=OperationState(state),
             target_head_commit=target_head_commit,
+            attempt=attempt,
             created=False,
         )
 
@@ -166,7 +168,7 @@ class WorkspaceRegistry:
             try:
                 row = connection.execute(
                     """
-                    SELECT workspace_id, kind, state, target_head_commit
+                    SELECT workspace_id, kind, state, target_head_commit, attempt
                     FROM workspace_operations
                     WHERE operation_id = ?
                     """,
@@ -175,7 +177,7 @@ class WorkspaceRegistry:
                 if row is None:
                     connection.commit()
                     return None
-                workspace_id, kind, stored_state, target_head_commit = row
+                workspace_id, kind, stored_state, target_head_commit, attempt = row
                 current_state = OperationState(stored_state)
                 if expected_state is not None and current_state is not expected_state:
                     raise WorkspaceRegistryError("Dolphin operation state no longer matches the worker snapshot")
@@ -187,6 +189,7 @@ class WorkspaceRegistry:
                         kind=kind,
                         state=current_state,
                         target_head_commit=target_head_commit,
+                        attempt=attempt,
                         created=False,
                     )
                 if state not in _ALLOWED_OPERATION_TRANSITIONS[current_state]:
@@ -213,6 +216,7 @@ class WorkspaceRegistry:
             kind=kind,
             state=state,
             target_head_commit=target_head_commit,
+            attempt=attempt,
             created=False,
         )
 
@@ -289,16 +293,17 @@ class WorkspaceRegistry:
                                 'queued', 'running', 'awaiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'
                             )),
                             target_head_commit TEXT NOT NULL,
+                            attempt INTEGER NOT NULL CHECK (attempt >= 1),
                             created_at TEXT NOT NULL,
                             updated_at TEXT NOT NULL
                         ) STRICT
                         """
                     )
-                    connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
                     connection.execute(
                         """
-                        CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_exact_target
+                        CREATE UNIQUE INDEX IF NOT EXISTS workspace_operations_reusable_target
                         ON workspace_operations (workspace_id, kind, target_head_commit)
+                        WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused', 'succeeded')
                         """
                     )
                 elif version == 1:
@@ -332,18 +337,34 @@ class WorkspaceRegistry:
                         )
                         """
                     )
-                    connection.execute(
-                        """
-                        CREATE UNIQUE INDEX workspace_operations_exact_target
-                        ON workspace_operations (workspace_id, kind, target_head_commit)
-                        """
-                    )
+                    self._migrate_operations_to_retryable_attempts(connection)
+                elif version == 2:
+                    self._migrate_operations_to_retryable_attempts(connection)
                 connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except Exception:
                 connection.rollback()
                 raise
             connection.commit()
             self._initialized = True
+
+    @staticmethod
+    def _migrate_operations_to_retryable_attempts(connection: sqlite3.Connection) -> None:
+        """Retain terminal history while allowing a new attempt after failure or cancellation."""
+        connection.execute(
+            """
+            ALTER TABLE workspace_operations
+            ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1 CHECK (attempt >= 1)
+            """
+        )
+        connection.execute("DROP INDEX IF EXISTS workspace_operations_active_target")
+        connection.execute("DROP INDEX IF EXISTS workspace_operations_exact_target")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX workspace_operations_reusable_target
+            ON workspace_operations (workspace_id, kind, target_head_commit)
+            WHERE state IN ('queued', 'running', 'awaiting_approval', 'paused', 'succeeded')
+            """
+        )
 
     @staticmethod
     def _validate_worktree_snapshot(worktree: GitWorktree) -> None:
@@ -481,36 +502,49 @@ class WorkspaceRegistry:
 
         existing = connection.execute(
             """
-            SELECT operation_id, state
+            SELECT operation_id, state, attempt
             FROM workspace_operations
             WHERE workspace_id = ?
               AND kind = 'initial_index'
               AND target_head_commit = ?
-            ORDER BY created_at
+              AND state IN ('queued', 'running', 'awaiting_approval', 'paused', 'succeeded')
+            ORDER BY CASE WHEN state = 'succeeded' THEN 0 ELSE 1 END, attempt DESC
             LIMIT 1
             """,
             (registration.workspace_id, target_head_commit),
         ).fetchone()
         if existing is not None:
-            operation_id, state = existing
+            operation_id, state, attempt = existing
             return WorkspaceOperation(
                 operation_id=operation_id,
                 workspace_id=registration.workspace_id,
                 kind="initial_index",
                 state=OperationState(state),
                 target_head_commit=target_head_commit,
+                attempt=attempt,
                 created=False,
             )
 
+        attempt_row = connection.execute(
+            """
+            SELECT COALESCE(MAX(attempt), 0) + 1
+            FROM workspace_operations
+            WHERE workspace_id = ?
+              AND kind = 'initial_index'
+              AND target_head_commit = ?
+            """,
+            (registration.workspace_id, target_head_commit),
+        ).fetchone()
+        attempt = int(attempt_row[0]) if attempt_row is not None else 1
         operation_id = f"op_{uuid.uuid4().hex}"
         now = datetime.now(UTC).isoformat()
         connection.execute(
             """
             INSERT INTO workspace_operations (
-                operation_id, workspace_id, kind, state, target_head_commit, created_at, updated_at
-            ) VALUES (?, ?, 'initial_index', 'queued', ?, ?, ?)
+                operation_id, workspace_id, kind, state, target_head_commit, attempt, created_at, updated_at
+            ) VALUES (?, ?, 'initial_index', 'queued', ?, ?, ?, ?)
             """,
-            (operation_id, registration.workspace_id, target_head_commit, now, now),
+            (operation_id, registration.workspace_id, target_head_commit, attempt, now, now),
         )
         return WorkspaceOperation(
             operation_id=operation_id,
@@ -518,6 +552,7 @@ class WorkspaceRegistry:
             kind="initial_index",
             state=OperationState.QUEUED,
             target_head_commit=target_head_commit,
+            attempt=attempt,
             created=True,
         )
 

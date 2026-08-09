@@ -72,11 +72,13 @@ async def test_initial_index_submission_is_durable_and_idempotent_for_one_head(t
     assert first.created is True
     assert first.kind == "initial_index"
     assert first.state is OperationState.QUEUED
+    assert first.attempt == 1
     assert second.created is False
     assert second.operation_id == first.operation_id
     assert loaded is not None
     assert loaded.operation_id == first.operation_id
     assert loaded.workspace_id == registration.workspace_id
+    assert loaded.attempt == 1
 
 
 @pytest.mark.asyncio
@@ -99,6 +101,42 @@ async def test_initial_index_submission_reuses_a_terminal_operation_for_the_same
     assert repeated.created is False
     assert repeated.operation_id == first.operation_id
     assert repeated.state is OperationState.SUCCEEDED
+    assert repeated.attempt == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_state", [OperationState.FAILED, OperationState.CANCELLED])
+async def test_failed_or_cancelled_initial_index_is_retried_as_a_new_attempt(
+    terminal_state: OperationState,
+    tmp_path: Path,
+) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    worktree = await discover_git_worktree(worktree_root)
+
+    _, first = registry.register_and_submit_initial_index(worktree)
+    if terminal_state is OperationState.FAILED:
+        registry.set_operation_state(first.operation_id, OperationState.RUNNING, expected_state=OperationState.QUEUED)
+        registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.RUNNING)
+    else:
+        registry.set_operation_state(first.operation_id, terminal_state, expected_state=OperationState.QUEUED)
+
+    _, retry = registry.register_and_submit_initial_index(worktree)
+    _, repeated = registry.register_and_submit_initial_index(worktree)
+    original = registry.get_operation(first.operation_id)
+
+    assert original is not None
+    assert original.state is terminal_state
+    assert original.attempt == 1
+    assert retry.created is True
+    assert retry.operation_id != first.operation_id
+    assert retry.state is OperationState.QUEUED
+    assert retry.attempt == 2
+    assert repeated.created is False
+    assert repeated.operation_id == retry.operation_id
+    assert repeated.attempt == 2
 
 
 @pytest.mark.asyncio
@@ -168,7 +206,6 @@ async def test_atomic_submission_replaces_an_unsubmitted_stale_registration(tmp_
     assert operation.target_head_commit == current_registration.head_commit
 
 
-@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_atomic_registration_and_submission_uses_one_discovered_head(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
@@ -258,7 +295,7 @@ async def test_registration_rolls_back_if_the_worktree_changes_before_commit(
 
 
 @pytest.mark.asyncio
-async def test_v1_migration_backfills_git_identity_and_installs_exact_target_deduplication(tmp_path: Path) -> None:
+async def test_v1_migration_backfills_git_identity_and_installs_retryable_attempts(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
@@ -279,12 +316,14 @@ async def test_v1_migration_backfills_git_identity_and_installs_exact_target_ded
         operation_count = connection.execute("SELECT COUNT(*) FROM workspace_operations").fetchone()[0]
         indexes = {row[1] for row in connection.execute("PRAGMA index_list('workspace_operations')")}
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        retained_operation = connection.execute("SELECT operation_id, state FROM workspace_operations").fetchone()
+        retained_operation = connection.execute(
+            "SELECT operation_id, state, attempt FROM workspace_operations"
+        ).fetchone()
     assert identity == worktree.common_git_dir_identity
     assert operation_count == 1
-    assert retained_operation == ("op_v1_terminal", "succeeded")
-    assert "workspace_operations_exact_target" in indexes
-    assert version == 2
+    assert retained_operation == ("op_v1_terminal", "succeeded", 1)
+    assert "workspace_operations_reusable_target" in indexes
+    assert version == 3
 
 
 @pytest.mark.asyncio
