@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from kb.cleanup_authority import CLEANUP_RECEIPT_LENGTH, CLEANUP_RECEIPT_PATTERN
-from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH
+from kb.lifecycle_limits import OPERATION_ID_MAX_LENGTH, REPO_LIST_CURSOR_MAX_LENGTH
 
 
 class StrictInput(BaseModel):
@@ -75,7 +75,7 @@ class RepoSyncInput(StrictInput):
 class OperationStatusInput(StrictInput):
     """Inspect one exact durable operation."""
 
-    operation_id: str = Field(min_length=1, max_length=128)
+    operation_id: str = Field(min_length=1, max_length=OPERATION_ID_MAX_LENGTH)
 
 
 class SearchQueryRequest(StrictInput):

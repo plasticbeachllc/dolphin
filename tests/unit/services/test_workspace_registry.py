@@ -601,6 +601,34 @@ def test_operation_snapshot_expires_terminal_status_without_extending_it(
     assert snapshot.created_at <= datetime.now(UTC)
 
 
+@pytest.mark.parametrize(
+    ("field_index", "value"),
+    [
+        (0, "o" * 129),
+        (4, "a" * 65),
+        (6, "2" * 65),
+        (7, "2" * 65),
+        (8, "2" * 65),
+    ],
+)
+def test_operation_snapshot_boundary_rejects_oversized_metadata(field_index: int, value: str) -> None:
+    row: list[object] = [
+        "op_valid",
+        "ws_valid",
+        "initial_index",
+        "succeeded",
+        "a" * 40,
+        1,
+        "2026-08-09T12:00:00+00:00",
+        "2026-08-09T12:01:00+00:00",
+        "2026-08-09T12:01:00+00:00",
+    ]
+    row[field_index] = value
+
+    with pytest.raises(WorkspaceRegistryError, match="invalid"):
+        workspace_registry_module._operation_snapshot_from_row(tuple(row))
+
+
 def _commit_repository(path: Path) -> Path:
     path.mkdir(parents=True)
     _initialize_repository(path)

@@ -21,7 +21,14 @@ from pathlib import Path
 from typing import Literal, cast
 
 from kb.cleanup_authority import is_valid_cleanup_receipt
-from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH, REPO_LIST_PAGE_SIZE
+from kb.lifecycle_limits import (
+    ENTITY_ID_MAX_LENGTH,
+    HEAD_COMMIT_MAX_LENGTH,
+    ISO_TIMESTAMP_MAX_LENGTH,
+    OPERATION_ID_MAX_LENGTH,
+    REPO_LIST_CURSOR_MAX_LENGTH,
+    REPO_LIST_PAGE_SIZE,
+)
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.worktree import (
     GitWorktree,
@@ -272,21 +279,12 @@ class WorkspaceRegistry:
             ).fetchone()
         if row is None:
             return None
-        terminal_at = _parse_timestamp(row[8]) if row[8] is not None else None
+        snapshot = _operation_snapshot_from_row(row)
+        terminal_at = snapshot.terminal_at
         observed_at = now or datetime.now(UTC)
         if terminal_at is not None and observed_at >= terminal_at + _OPERATION_STATUS_RETENTION:
             return None
-        return OperationSnapshot(
-            operation_id=row[0],
-            workspace_id=row[1],
-            kind=cast(OperationKind, row[2]),
-            state=OperationState(row[3]),
-            target_head_commit=row[4],
-            attempt=row[5],
-            created_at=_parse_timestamp(row[6]),
-            updated_at=_parse_timestamp(row[7]),
-            terminal_at=terminal_at,
-        )
+        return snapshot
 
     def register(self, worktree: GitWorktree, *, cleanup_receipt: str) -> WorkspaceRegistration:
         """Atomically create or refresh exactly one concrete worktree registration."""
@@ -1039,6 +1037,55 @@ def _decode_repo_list_cursor(
     return key[0], key[1], key[2], key[3]
 
 
-def _parse_timestamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value)
+def _operation_snapshot_from_row(row: tuple[object, ...]) -> OperationSnapshot:
+    operation_id = _bounded_registry_text(row[0], label="operation ID", max_length=OPERATION_ID_MAX_LENGTH)
+    workspace_id = (
+        None
+        if row[1] is None
+        else _bounded_registry_text(row[1], label="workspace ID", max_length=ENTITY_ID_MAX_LENGTH)
+    )
+    kind_text = _bounded_registry_text(row[2], label="operation kind", max_length=32)
+    if kind_text not in {"initial_index", "sync", "recovery"}:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid kind")
+    state_text = _bounded_registry_text(row[3], label="operation state", max_length=32)
+    try:
+        state = OperationState(state_text)
+    except ValueError as exc:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid state") from exc
+    target_head_commit = _bounded_registry_text(
+        row[4],
+        label="operation target commit",
+        max_length=HEAD_COMMIT_MAX_LENGTH,
+    )
+    attempt = row[5]
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise WorkspaceRegistryError("Dolphin operation metadata contains an invalid attempt")
+    created_at = _parse_registry_timestamp(row[6], label="operation creation timestamp")
+    updated_at = _parse_registry_timestamp(row[7], label="operation progress timestamp")
+    terminal_at = None if row[8] is None else _parse_registry_timestamp(row[8], label="operation terminal timestamp")
+    return OperationSnapshot(
+        operation_id=operation_id,
+        workspace_id=workspace_id,
+        kind=cast(OperationKind, kind_text),
+        state=state,
+        target_head_commit=target_head_commit,
+        attempt=attempt,
+        created_at=created_at,
+        updated_at=updated_at,
+        terminal_at=terminal_at,
+    )
+
+
+def _bounded_registry_text(value: object, *, label: str, max_length: int) -> str:
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        raise WorkspaceRegistryError(f"Dolphin metadata contains an invalid {label}")
+    return value
+
+
+def _parse_registry_timestamp(value: object, *, label: str) -> datetime:
+    encoded = _bounded_registry_text(value, label=label, max_length=ISO_TIMESTAMP_MAX_LENGTH)
+    try:
+        parsed = datetime.fromisoformat(encoded)
+    except ValueError as exc:
+        raise WorkspaceRegistryError(f"Dolphin metadata contains an invalid {label}") from exc
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)

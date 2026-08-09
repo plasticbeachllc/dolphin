@@ -17,6 +17,7 @@ from kb.mcp.errors import ToolFailure
 from kb.runtime.storage import macos_storage_layout
 from kb.services.lifecycle_models import RepositoryFamilySummary, WorkspaceSummary
 from kb.services.lifecycle_read import (
+    OperationStatusResult,
     OperationStatusService,
     RepoListItem,
     RepoListResult,
@@ -162,6 +163,58 @@ def test_operation_status_marks_a_redacted_workspace_unavailable() -> None:
 
     assert result.workspace_available is False
     assert result.workspace_id is None
+
+
+def test_operation_status_enforces_bounded_identifiers_commits_and_timestamps() -> None:
+    observed_at = datetime(2026, 8, 9, tzinfo=UTC)
+    valid = _operation_status_result(
+        OperationSnapshot(
+            operation_id="op_valid",
+            workspace_id="ws_valid",
+            kind="initial_index",
+            state=OperationState.RUNNING,
+            target_head_commit="a" * 40,
+            attempt=1,
+            created_at=observed_at,
+            updated_at=observed_at,
+            terminal_at=None,
+        )
+    ).model_dump()
+
+    for field, oversized in (
+        ("operation_id", "o" * 129),
+        ("target_head_commit", "a" * 65),
+        ("created_at", "2" * 65),
+        ("last_progress_at", "2" * 65),
+        ("terminal_at", "2" * 65),
+        ("status_expires_at", "2" * 65),
+    ):
+        with pytest.raises(ValidationError):
+            OperationStatusResult.model_validate({**valid, field: oversized})
+
+
+def test_failed_operation_returns_status_guidance_without_unavailable_repo_add() -> None:
+    observed_at = datetime(2026, 8, 9, tzinfo=UTC)
+    result = _operation_status_result(
+        OperationSnapshot(
+            operation_id="op_failed",
+            workspace_id="ws_failed",
+            kind="initial_index",
+            state=OperationState.FAILED,
+            target_head_commit="a" * 40,
+            attempt=1,
+            created_at=observed_at,
+            updated_at=observed_at,
+            terminal_at=observed_at,
+        )
+    )
+
+    assert result.failure is not None
+    assert "repo_add" not in result.failure.message
+    assert len(result.next_actions) == 1
+    assert result.next_actions[0].action == "inspect_status"
+    assert result.next_actions[0].tool == "status"
+    assert result.next_actions[0].arguments == {}
 
 
 def test_repo_list_result_models_enforce_string_collection_and_cursor_bounds() -> None:

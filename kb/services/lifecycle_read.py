@@ -8,7 +8,14 @@ from typing import Literal
 
 from pydantic import Field
 
-from kb.lifecycle_limits import REPO_LIST_CURSOR_MAX_LENGTH, REPO_LIST_PAGE_SIZE
+from kb.lifecycle_limits import (
+    ENTITY_ID_MAX_LENGTH,
+    HEAD_COMMIT_MAX_LENGTH,
+    ISO_TIMESTAMP_MAX_LENGTH,
+    OPERATION_ID_MAX_LENGTH,
+    REPO_LIST_CURSOR_MAX_LENGTH,
+    REPO_LIST_PAGE_SIZE,
+)
 from kb.mcp.contracts import OperationStatusInput, RepoListInput
 from kb.mcp.errors import ToolError, ToolFailure, cursor_expired, cursor_invalid, operation_missing, storage_unavailable
 from kb.services.lifecycle_models import (
@@ -60,24 +67,24 @@ class OperationCounters(LifecycleResultModel):
 
 
 class OperationStatusResult(LifecycleResultModel):
-    operation_id: str
+    operation_id: str = Field(min_length=1, max_length=OPERATION_ID_MAX_LENGTH)
     kind: Literal["initial_index", "sync", "recovery"]
     state: OperationState
     attempt: int = Field(ge=1)
-    target_head_commit: str
+    target_head_commit: str = Field(min_length=1, max_length=HEAD_COMMIT_MAX_LENGTH)
     workspace_available: bool
-    workspace_id: str | None
+    workspace_id: str | None = Field(default=None, min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     phase: Literal["preflight", "scan", "chunk", "embed", "store", "publish"] | None
     counters: OperationCounters
     reuse: None = None
     pause_reason: PauseReason | None
     failure: ToolError | None
-    created_at: str
-    last_progress_at: str | None
-    terminal_at: str | None
-    status_expires_at: str | None
+    created_at: str = Field(min_length=1, max_length=ISO_TIMESTAMP_MAX_LENGTH)
+    last_progress_at: str | None = Field(default=None, max_length=ISO_TIMESTAMP_MAX_LENGTH)
+    terminal_at: str | None = Field(default=None, max_length=ISO_TIMESTAMP_MAX_LENGTH)
+    status_expires_at: str | None = Field(default=None, max_length=ISO_TIMESTAMP_MAX_LENGTH)
     recommended_poll_after_ms: int | None = Field(default=None, ge=250, le=5_000)
-    next_actions: list[NextAction]
+    next_actions: list[NextAction] = Field(max_length=8)
 
 
 class RepoListService:
@@ -156,7 +163,7 @@ def _operation_status_result(operation: OperationSnapshot) -> OperationStatusRes
     if operation.state is OperationState.FAILED:
         failure = ToolError(
             code="OPERATION_FAILED",
-            message="Dolphin could not complete this operation; repo_add may create a new attempt.",
+            message="Dolphin could not complete this operation.",
             retryable=False,
         )
     terminal_at = operation.terminal_at.isoformat() if operation.terminal_at is not None else None
@@ -180,7 +187,18 @@ def _operation_status_result(operation: OperationSnapshot) -> OperationStatusRes
         terminal_at=terminal_at,
         status_expires_at=status_expires_at,
         recommended_poll_after_ms=None if terminal else 1_000,
-        next_actions=[],
+        next_actions=(
+            [
+                NextAction(
+                    action="inspect_status",
+                    reason="Check Dolphin's current runtime and workspace guidance.",
+                    tool="status",
+                    arguments={},
+                )
+            ]
+            if operation.state is OperationState.FAILED
+            else []
+        ),
     )
 
 

@@ -3040,7 +3040,7 @@ class StatusResult(BaseModel):
 class RepoListInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    cursor: str | None = None
+    cursor: str | None
 
 
 class RepoListItem(BaseModel):
@@ -3056,7 +3056,7 @@ class RepoListResult(BaseModel):
 
 `current_workspace` is non-null if and only if `current_workspace_resolution == "resolved"`; `status` never substitutes a candidate when resolution is ambiguous. Counts use effective mutually exclusive states, so a live cleanup intent contributes to `cleanup_pending` rather than its underlying state. The forgotten aggregate is separate and contains no entry-level identity. Production models may group detailed runtime/storage diagnostics into bounded typed submodels, but may not add workspace enumeration or credential values to this result.
 
-The initial `repo_list` request omits `cursor`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts from an empty input rather than merging inconsistent pages.
+The initial `repo_list` request sends `{"cursor": null}`. Every non-final page contains exactly 25 items and a `next_cursor`; the final page contains 0–25 items and `next_cursor = None`. Cursor decoding is bounded before allocation, and validation occurs before any list items serialize. A concurrent actionable-membership/order change invalidates the whole continuation with `CURSOR_EXPIRED`; the agent restarts with `{"cursor": null}` rather than merging inconsistent pages.
 
 Production projections also bound every string and nested collection rather than relying on the 25-item page cap alone. Repository/workspace IDs are at most 64 characters, display labels at most 512, roots at most 4,096, branches at most 1,024, and head identifiers at most 64. Each workspace carries at most eight boundary summaries, each boundary has at most six bounded string fields, and cursors are capped at 8,192 characters on both input and output; cursor generation fails closed before exceeding that limit.
 
@@ -3071,17 +3071,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class OperationStatusInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation_id: str
+    operation_id: str = Field(min_length=1, max_length=128)
 
 
 class OperationStatusResult(BaseModel):
-    operation_id: str
+    operation_id: str = Field(min_length=1, max_length=128)
     kind: Literal["initial_index", "sync", "recovery"]
     state: OperationState
     attempt: int = Field(ge=1)
-    target_head_commit: str
+    target_head_commit: str = Field(min_length=1, max_length=64)
     workspace_available: bool
-    workspace_id: str | None
+    workspace_id: str | None = Field(default=None, min_length=1, max_length=64)
     phase: Literal["preflight", "scan", "chunk", "embed", "store", "publish"] | None
     counters: OperationCounters
     reuse: ReuseSummary | None
@@ -3093,12 +3093,12 @@ class OperationStatusResult(BaseModel):
         "shutdown",
     ] | None
     failure: DolphinToolError | None
-    created_at: str
-    last_progress_at: str | None
-    terminal_at: str | None
-    status_expires_at: str | None
+    created_at: str = Field(min_length=1, max_length=64)
+    last_progress_at: str | None = Field(default=None, max_length=64)
+    terminal_at: str | None = Field(default=None, max_length=64)
+    status_expires_at: str | None = Field(default=None, max_length=64)
     recommended_poll_after_ms: int | None = Field(default=None, ge=250, le=5_000)
-    next_actions: list[NextAction]
+    next_actions: list[NextAction] = Field(max_length=8)
 ```
 
 `terminal_at` and `status_expires_at` are both present exactly for `succeeded`, `failed`, or `cancelled`, and the latter is always 30 days after the former. `attempt` starts at one and increases only when a failed/cancelled target is explicitly requeued as a new operation; successful and active exact-target work remains deduplicated. `recommended_poll_after_ms` is present only for nonterminal states; it is response guidance, not a server-side wait. `failure` is present only for `failed`, while approval and resource pauses use typed state/pause details and remediations rather than masquerading as terminal errors.
