@@ -36,7 +36,7 @@ PUBLIC_MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
 # This hash covers the complete discovery-visible contract: order, names,
 # descriptions, annotations, and strict input schemas. Deliberate protocol
 # changes must update this pinned value in the same reviewed change.
-FROZEN_PUBLIC_REGISTRY_DIGEST: Final = "96c04e891b2eca1376ee2dd963eaecd7dbd63a116416e9501677bb163b76e75e"
+FROZEN_PUBLIC_REGISTRY_DIGEST: Final = "1710d805a7c65b76a93bbae4a389576a78c6ff5f0f6d5bc2a8f2ed38ce8eb21f"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +83,8 @@ TOOL_REGISTRY: Final[tuple[ToolSpec, ...]] = (
         title="Add a Git worktree to Dolphin",
         description=(
             "Explicitly register one local Git worktree. Eligible source content is embedded through OpenAI "
-            "when indexing is required."
+            "when indexing is required. Generate and retain the required cleanup receipt before calling; retry "
+            "with the same receipt after a lost response."
         ),
         input_model=RepoAddInput,
         read_only=False,

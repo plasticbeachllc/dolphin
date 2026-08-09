@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -102,7 +103,24 @@ def test_search_rejects_mixed_query_and_continuation_fields() -> None:
 
 def test_repo_add_rejects_relative_paths() -> None:
     with pytest.raises(ValidationError, match="path must be absolute"):
-        RepoAddInput.model_validate({"path": "."})
+        RepoAddInput.model_validate({"path": ".", "cleanup_receipt": _valid_cleanup_receipt()})
+
+
+def test_repo_add_requires_a_well_formed_caller_cleanup_receipt(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        RepoAddInput.model_validate({"path": str(tmp_path)})
+    with pytest.raises(ValidationError):
+        RepoAddInput.model_validate({"path": str(tmp_path), "cleanup_receipt": "predictable"})
+
+    parsed = RepoAddInput.model_validate(
+        {"path": str(tmp_path), "cleanup_receipt": _valid_cleanup_receipt()},
+    )
+
+    assert parsed.cleanup_receipt == _valid_cleanup_receipt()
+
+
+def _valid_cleanup_receipt() -> str:
+    return f"dolphin-cleanup-v1_{'a' * 43}"
 
 
 def _assert_closed_objects(node: object) -> None:
