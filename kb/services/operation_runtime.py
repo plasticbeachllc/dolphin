@@ -26,6 +26,7 @@ RUNTIME_LEASE_SECONDS = 15
 RUNTIME_HEARTBEAT_SECONDS = 5
 GRACEFUL_SHUTDOWN_SECONDS = 5
 PROCESS_PROBE_TIMEOUT_SECONDS = 1
+PROCESS_PROBE_CONCURRENCY = 4
 
 
 class OperationRuntimeError(RuntimeError):
@@ -59,7 +60,7 @@ def probe_process_start_identity(pid: int) -> ProcessStartProbe:
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return ProcessStartProbe(available=False, identity=None)
-    if result.returncode == 1 and not result.stdout:
+    if result.returncode == 1 and not result.stdout and not result.stderr:
         return ProcessStartProbe(available=True, identity=None)
     identity = result.stdout.strip()
     if result.returncode != 0 or not identity or "\x00" in identity or len(identity) > 256:
@@ -122,9 +123,12 @@ class OperationRuntime:
                 if await asyncio.to_thread(self._registry.database_exists)
                 else ()
             )
-            owner_probes = await asyncio.gather(
-                *(asyncio.to_thread(self._process_probe, owner.pid) for owner in owners)
-            )
+            owner_probes: list[ProcessStartProbe] = []
+            for offset in range(0, len(owners), PROCESS_PROBE_CONCURRENCY):
+                batch = owners[offset : offset + PROCESS_PROBE_CONCURRENCY]
+                owner_probes.extend(
+                    await asyncio.gather(*(asyncio.to_thread(self._process_probe, owner.pid) for owner in batch))
+                )
             for owner, probe in zip(owners, owner_probes, strict=True):
                 stale_identity_proven = probe.available and probe.identity != owner.process_start_identity
                 await asyncio.to_thread(

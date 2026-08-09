@@ -6,6 +6,8 @@ import asyncio
 import hashlib
 import sqlite3
 import subprocess
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -642,8 +644,73 @@ def test_process_start_probe_distinguishes_absence_from_probe_failure(
     monkeypatch.setattr(operation_runtime_module.subprocess, "run", timeout)
     unavailable = operation_runtime_module.probe_process_start_identity(123)
 
+    monkeypatch.setattr(
+        operation_runtime_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 1, stdout="", stderr="permission denied"),
+    )
+    ambiguous_failure = operation_runtime_module.probe_process_start_identity(123)
+
     assert absent == ProcessStartProbe(available=True, identity=None)
     assert unavailable == ProcessStartProbe(available=False, identity=None)
+    assert ambiguous_failure == ProcessStartProbe(available=False, identity=None)
+
+
+@pytest.mark.asyncio
+async def test_runtime_start_bounds_concurrent_owner_process_probes(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    now = datetime(2026, 8, 9, 12, tzinfo=UTC)
+    identities: dict[int, str] = {}
+    for index in range(9):
+        pid = 100 + index
+        identity = f"start-{index}"
+        identities[pid] = identity
+        registry.register_runtime(
+            runtime_id=f"runtime_existing_{index}",
+            pid=pid,
+            process_start_identity=identity,
+            mode="mcp",
+            operation_capable=False,
+            pipeline_key=None,
+            now=now,
+            expires_at=now + timedelta(seconds=15),
+        )
+    identities[999] = "start-current"
+    lock = threading.Lock()
+    active = 0
+    maximum_active = 0
+    calls = 0
+
+    def probe(pid: int) -> ProcessStartProbe:
+        nonlocal active, calls, maximum_active
+        with lock:
+            active += 1
+            calls += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            time.sleep(0.02)
+            return ProcessStartProbe(available=True, identity=identities[pid])
+        finally:
+            with lock:
+                active -= 1
+
+    runtime = OperationRuntime(
+        registry,
+        mode="mcp",
+        operation_capable=False,
+        pid=999,
+        clock=lambda: now,
+        process_probe=probe,
+        start_heartbeat=False,
+    )
+
+    await runtime.start()
+
+    assert calls == 10
+    assert maximum_active <= operation_runtime_module.PROCESS_PROBE_CONCURRENCY
+    await runtime.close()
 
 
 def _registry_with_operation(
