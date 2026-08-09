@@ -6,6 +6,7 @@ import hashlib
 import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from shutil import rmtree
 
@@ -203,7 +204,10 @@ async def test_distinct_repositories_receive_distinct_workspace_and_operation_id
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_a_replacement_repository_at_the_same_root(tmp_path: Path) -> None:
+async def test_register_rejects_a_replacement_repository_at_the_same_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
     home.mkdir()
@@ -213,7 +217,11 @@ async def test_register_rejects_a_replacement_repository_at_the_same_root(tmp_pa
     _initialize_repository(worktree_root)
     _git(worktree_root, "add", "example.py")
     _git(worktree_root, "commit", "-qm", "Replacement repository commit")
-    replacement = await discover_git_worktree(worktree_root)
+    replacement = replace(
+        await discover_git_worktree(worktree_root),
+        common_git_dir_identity="replacement-repository-generation",
+    )
+    monkeypatch.setattr(workspace_registry_module, "validate_git_worktree_snapshot", lambda _worktree: None)
 
     with pytest.raises(WorkspaceRegistryError, match="different Git repository"):
         registry.register(replacement)

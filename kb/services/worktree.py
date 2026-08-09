@@ -99,8 +99,9 @@ def git_directory_identity(path: Path) -> str:
     except OSError as exc:
         raise WorktreeDiscoveryError("WORKTREE_SNAPSHOT_CHANGED") from exc
     birth_time = getattr(status, "st_birthtime", None)
-    generation = int(birth_time * 1_000_000_000) if birth_time is not None else status.st_ctime_ns
-    return f"{status.st_dev}:{status.st_ino}:{generation}"
+    if birth_time is None:
+        return f"{status.st_dev}:{status.st_ino}"
+    return f"{status.st_dev}:{status.st_ino}:{int(birth_time * 1_000_000_000)}"
 
 
 def _run_git(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
