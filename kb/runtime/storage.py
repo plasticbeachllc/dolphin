@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 from collections.abc import Iterator
@@ -12,6 +13,26 @@ from pathlib import Path
 
 class StorageLayoutError(RuntimeError):
     """The runtime state root cannot be used safely."""
+
+
+_UNSUPPORTED_DIRECTORY_SYNC_ERRNOS = frozenset(
+    {
+        errno.EINVAL,
+        errno.ENOTSUP,
+        errno.EOPNOTSUPP,
+    }
+)
+
+
+def sync_directory(descriptor: int) -> bool:
+    """Sync a directory when its macOS filesystem supports that operation."""
+    try:
+        os.fsync(descriptor)
+    except OSError as exc:
+        if exc.errno in _UNSUPPORTED_DIRECTORY_SYNC_ERRNOS:
+            return False
+        raise
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +170,7 @@ def _open_or_create_directory(parent_fd: int, name: str, *, private: bool) -> in
     descriptor = _open_directory(name, parent_fd=parent_fd, label=f"runtime directory {name}", private=private)
     if created:
         try:
-            os.fsync(parent_fd)
+            sync_directory(parent_fd)
         except OSError as exc:
             os.close(descriptor)
             raise StorageLayoutError(f"Dolphin runtime directory is unavailable: {name}") from exc

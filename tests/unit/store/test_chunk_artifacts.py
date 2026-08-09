@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import os
 import stat
@@ -87,6 +88,43 @@ def test_artifact_store_round_trips_privately_without_replacing_existing_bytes(t
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert not list(_install_directory(layout.artifacts, artifact.artifact_id).glob("install-*"))
+
+
+def test_repeated_put_verifies_existing_artifact_without_a_temporary_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = ChunkArtifactStore(macos_storage_layout(home=tmp_path))
+    text = "deduplicate this exact artifact without write amplification\n"
+    artifact = store.put_exact_text(text)
+
+    def reject_temporary_write(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("a repeated put attempted to write a temporary artifact")
+
+    monkeypatch.setattr(implementation, "_encode_envelope", reject_temporary_write)
+    monkeypatch.setattr(implementation, "_write_all", reject_temporary_write)
+    monkeypatch.setattr(os, "link", reject_temporary_write)
+
+    assert store.put_exact_text(text) == artifact
+
+
+def test_artifact_store_tolerates_unsupported_directory_sync(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = ChunkArtifactStore(macos_storage_layout(home=tmp_path))
+    real_fsync = os.fsync
+
+    def reject_only_directory_sync(descriptor: int) -> None:
+        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise OSError(errno.EINVAL, "directory sync unsupported")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", reject_only_directory_sync)
+
+    artifact = store.put_exact_text("filesystem without directory fsync\n")
+
+    assert store.read_verified(artifact.artifact_id) == "filesystem without directory fsync\n"
 
 
 def test_artifact_store_round_trips_empty_text_with_zero_lines(tmp_path: Path) -> None:

@@ -27,7 +27,7 @@ from kb.artifacts import (
     identify_chunk_text,
     require_artifact_id,
 )
-from kb.runtime.storage import StorageLayout, StorageLayoutError
+from kb.runtime.storage import StorageLayout, StorageLayoutError, sync_directory
 
 _FORMAT_DIRECTORY = CHUNK_TEXT_FORMAT
 _ENVELOPE_MAGIC = CHUNK_TEXT_FORMAT.encode("ascii") + b"\x00"
@@ -49,7 +49,6 @@ class ChunkArtifactStore:
 
     def put_exact_text(self, text: str) -> ChunkTextArtifact:
         descriptor, payload = encode_chunk_text(text)
-        envelope = _encode_envelope(descriptor, payload)
         try:
             with self._layout.open_artifacts_directory() as artifacts_fd:
                 format_fd = _open_or_create_private_directory(artifacts_fd, _FORMAT_DIRECTORY)
@@ -62,8 +61,8 @@ class ChunkArtifactStore:
                             _install_no_replace(
                                 install_fd,
                                 shard_fd,
-                                artifact_id=descriptor.artifact_id,
-                                envelope=envelope,
+                                artifact=descriptor,
+                                payload=payload,
                                 expected_text=text,
                             )
                         finally:
@@ -128,10 +127,11 @@ def _install_no_replace(
     install_fd: int,
     shard_fd: int,
     *,
-    artifact_id: str,
-    envelope: bytes,
+    artifact: ChunkTextArtifact,
+    payload: bytes,
     expected_text: str,
 ) -> None:
+    artifact_id = artifact.artifact_id
     final_name = artifact_id[2:]
     temporary_name = f"{_INSTALL_FILE_PREFIX}{uuid.uuid4().hex}"
     temporary_fd: int | None = None
@@ -139,6 +139,15 @@ def _install_no_replace(
     try:
         _acquire_install_lock(install_fd)
         locked = True
+        try:
+            winner_text, _descriptor = _read_verified_file(shard_fd, final_name, artifact_id)
+        except ArtifactUnavailable:
+            pass
+        else:
+            if winner_text != expected_text:
+                raise ArtifactCorrupt("Dolphin chunk artifact is corrupt")
+            return
+        envelope = _encode_envelope(artifact, payload)
         temporary_fd = os.open(
             temporary_name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | _no_follow_flag() | _close_on_exec_flag(),
@@ -164,8 +173,8 @@ def _install_no_replace(
         except FileExistsError:
             pass
         os.unlink(temporary_name, dir_fd=install_fd)
-        os.fsync(shard_fd)
-        os.fsync(install_fd)
+        sync_directory(shard_fd)
+        sync_directory(install_fd)
         winner_text, _descriptor = _read_verified_file(shard_fd, final_name, artifact_id)
         if winner_text != expected_text:
             raise ArtifactCorrupt("Dolphin chunk artifact is corrupt")
@@ -246,7 +255,7 @@ def _prune_stale_install_files_locked(install_fd: int) -> None:
         raise ArtifactStoreUnavailable("Dolphin chunk artifact cleanup is unavailable") from None
     if removed:
         try:
-            os.fsync(install_fd)
+            sync_directory(install_fd)
         except OSError:
             raise ArtifactStoreUnavailable("Dolphin chunk artifact cleanup is unavailable") from None
 
@@ -428,7 +437,7 @@ def _open_or_create_private_directory(parent_fd: int, name: str) -> int:
         raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable")
     if created:
         try:
-            os.fsync(parent_fd)
+            sync_directory(parent_fd)
         except OSError:
             os.close(descriptor)
             raise ArtifactStoreUnavailable("Dolphin chunk artifact storage is unavailable") from None

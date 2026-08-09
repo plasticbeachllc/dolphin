@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 from dataclasses import replace
@@ -9,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from kb.runtime.storage import StorageLayoutError, macos_storage_layout
+from kb.runtime import storage as implementation
+from kb.runtime.storage import StorageLayoutError, macos_storage_layout, sync_directory
 
 
 def test_layout_uses_only_the_fixed_application_support_root(tmp_path: Path) -> None:
@@ -139,3 +141,31 @@ def test_artifact_descriptor_syncs_each_new_parent_entry_once(
         pass
 
     assert len(synced_descriptors) == first_open_syncs
+
+
+@pytest.mark.parametrize(
+    "unsupported_errno",
+    sorted({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}),
+)
+def test_directory_sync_accepts_unsupported_filesystem_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+    unsupported_errno: int,
+) -> None:
+    def reject_directory_sync(_descriptor: int) -> None:
+        raise OSError(unsupported_errno, "directory sync unsupported")
+
+    monkeypatch.setattr(os, "fsync", reject_directory_sync)
+
+    assert sync_directory(123) is False
+
+
+def test_directory_sync_preserves_real_io_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_directory_sync(_descriptor: int) -> None:
+        raise OSError(errno.EIO, "injected I/O failure")
+
+    monkeypatch.setattr(os, "fsync", fail_directory_sync)
+
+    with pytest.raises(OSError) as error:
+        implementation.sync_directory(123)
+
+    assert error.value.errno == errno.EIO
