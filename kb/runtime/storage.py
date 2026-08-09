@@ -138,13 +138,22 @@ def _ensure_runtime_members(layout: StorageLayout, root_fd: int) -> None:
 
 
 def _open_or_create_directory(parent_fd: int, name: str, *, private: bool) -> int:
+    created = False
     try:
         os.mkdir(name, 0o700, dir_fd=parent_fd)
+        created = True
     except FileExistsError:
         pass
     except OSError as exc:
         raise StorageLayoutError(f"Dolphin runtime directory is unavailable: {name}") from exc
-    return _open_directory(name, parent_fd=parent_fd, label=f"runtime directory {name}", private=private)
+    descriptor = _open_directory(name, parent_fd=parent_fd, label=f"runtime directory {name}", private=private)
+    if created:
+        try:
+            os.fsync(parent_fd)
+        except OSError as exc:
+            os.close(descriptor)
+            raise StorageLayoutError(f"Dolphin runtime directory is unavailable: {name}") from exc
+    return descriptor
 
 
 def _open_directory(path: Path | str, *, label: str, private: bool, parent_fd: int | None = None) -> int:

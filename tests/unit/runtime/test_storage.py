@@ -113,3 +113,29 @@ def test_artifact_descriptor_rejects_a_noncanonical_layout_without_creating_it(t
 
     assert not (tmp_path / "Library").exists()
     assert not redirected.artifacts.exists()
+
+
+def test_artifact_descriptor_syncs_each_new_parent_entry_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    real_fsync = os.fsync
+    synced_descriptors: list[int] = []
+
+    def record_fsync(descriptor: int) -> None:
+        synced_descriptors.append(descriptor)
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", record_fsync)
+
+    with layout.open_artifacts_directory():
+        pass
+
+    first_open_syncs = len(synced_descriptors)
+    assert first_open_syncs == 4
+
+    with layout.open_artifacts_directory():
+        pass
+
+    assert len(synced_descriptors) == first_open_syncs

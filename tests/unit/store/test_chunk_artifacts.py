@@ -22,6 +22,7 @@ from kb.artifacts import (
     identify_embedding_input,
 )
 from kb.runtime.storage import macos_storage_layout
+from kb.store import chunk_artifacts as implementation
 from kb.store.chunk_artifacts import ChunkArtifactStore
 
 
@@ -36,6 +37,10 @@ def test_chunk_identity_preserves_exact_unicode_and_newlines() -> None:
     assert artifact.characters == len(text)
     assert artifact.lines == 4
     assert identify_chunk_text("alpha\nλ\n\n").artifact_id != artifact.artifact_id
+
+
+def test_chunk_envelope_uses_explicit_network_byte_order() -> None:
+    assert implementation._ENVELOPE_HEADER.format.startswith(">")
 
 
 def test_embedding_input_identity_binds_exact_text_and_model_contract() -> None:
@@ -75,7 +80,7 @@ def test_artifact_store_round_trips_privately_without_replacing_existing_bytes(t
     assert first_status.st_mtime_ns == second_status.st_mtime_ns
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
-    assert not list(path.parent.glob(".install-*"))
+    assert not list(_install_directory(layout.artifacts, artifact.artifact_id).glob("install-*"))
 
 
 def test_artifact_store_round_trips_empty_text_with_zero_lines(tmp_path: Path) -> None:
@@ -102,7 +107,7 @@ def test_concurrent_identical_writers_converge_on_one_verified_artifact(tmp_path
     path = _artifact_path(layout.artifacts, artifact.artifact_id)
     assert path.stat().st_nlink == 1
     assert store.read_verified(artifact.artifact_id) == text
-    assert [entry for entry in path.parent.iterdir() if entry.name.startswith(".install-")] == []
+    assert list(_install_directory(layout.artifacts, artifact.artifact_id).glob("install-*")) == []
 
 
 def test_failed_install_removes_only_its_private_temporary_file(
@@ -123,7 +128,7 @@ def test_failed_install_removes_only_its_private_temporary_file(
 
     path = _artifact_path(layout.artifacts, artifact.artifact_id)
     assert not path.exists()
-    assert not list(path.parent.glob(".install-*"))
+    assert not list(_install_directory(layout.artifacts, artifact.artifact_id).glob("install-*"))
 
 
 @pytest.mark.parametrize("mutation", ["magic", "count", "digest", "truncate", "payload"])
@@ -151,8 +156,6 @@ def test_artifact_store_rejects_corrupt_envelopes(tmp_path: Path, mutation: str)
 
 
 def test_artifact_store_rejects_invalid_utf8_even_with_matching_envelope_digest(tmp_path: Path) -> None:
-    from kb.store import chunk_artifacts as implementation
-
     layout = macos_storage_layout(home=tmp_path)
     layout.ensure_private_directories()
     payload = b"invalid-utf8:\xff"
@@ -236,6 +239,54 @@ def test_artifact_store_rejects_special_files_without_blocking(tmp_path: Path) -
         store.read_verified(artifact.artifact_id)
 
 
+def test_artifact_store_prunes_only_a_bounded_batch_of_stale_install_files(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    artifact = store.put_exact_text("shard seed")
+    install_directory = _install_directory(layout.artifacts, artifact.artifact_id)
+    for index in range(40):
+        orphan = install_directory / f"install-{index:032x}"
+        orphan.write_bytes(b"abandoned private installer")
+        orphan.chmod(0o600)
+        os.utime(orphan, ns=(1, 1))
+
+    store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="shard seed"))
+
+    assert len(list(install_directory.glob("install-*"))) == 8
+
+
+def test_artifact_store_preserves_fresh_install_files(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    artifact = store.put_exact_text("fresh shard seed")
+    install_directory = _install_directory(layout.artifacts, artifact.artifact_id)
+    active = install_directory / f"install-{'a' * 32}"
+    active.write_bytes(b"active private installer")
+    active.chmod(0o600)
+
+    store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="fresh shard seed"))
+
+    assert active.is_file()
+
+
+def test_artifact_store_refuses_unsafe_stale_installer_entries(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    store = ChunkArtifactStore(layout)
+    artifact = store.put_exact_text("unsafe shard seed")
+    install_directory = _install_directory(layout.artifacts, artifact.artifact_id)
+    outside = tmp_path / "outside-installer"
+    outside.write_text("must remain untouched")
+    unsafe = install_directory / f"install-{'b' * 32}"
+    unsafe.symlink_to(outside)
+    os.utime(unsafe, ns=(1, 1), follow_symlinks=False)
+
+    with pytest.raises(ArtifactCorrupt, match="installer storage is corrupt"):
+        store.put_exact_text(_different_text_in_shard(artifact.artifact_id[:2], excluded="unsafe shard seed"))
+
+    assert outside.read_text() == "must remain untouched"
+    assert unsafe.is_symlink()
+
+
 def test_artifact_set_is_order_independent_deduplicated_and_fully_verified(tmp_path: Path) -> None:
     store = ChunkArtifactStore(macos_storage_layout(home=tmp_path))
     first = store.put_exact_text("first")
@@ -279,3 +330,15 @@ def test_artifact_inputs_are_strict_and_bounded_without_creating_storage(tmp_pat
 
 def _artifact_path(artifacts_root: Path, artifact_id: str) -> Path:
     return artifacts_root / "dolphin-chunk-text-v1" / artifact_id[:2] / artifact_id[2:]
+
+
+def _install_directory(artifacts_root: Path, artifact_id: str) -> Path:
+    return _artifact_path(artifacts_root, artifact_id).parent / ".install"
+
+
+def _different_text_in_shard(shard: str, *, excluded: str) -> str:
+    for index in range(10_000):
+        candidate = f"same shard candidate {index}"
+        if candidate != excluded and identify_chunk_text(candidate).artifact_id.startswith(shard):
+            return candidate
+    raise AssertionError("failed to find deterministic same-shard fixture")
