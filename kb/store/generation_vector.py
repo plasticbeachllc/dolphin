@@ -200,6 +200,11 @@ class LanceGenerationVectorStore:
                 if _query_timed_out(exc, started_at=started_at, monotonic=self._monotonic):
                     raise GenerationVectorTimeout("Dolphin vector retrieval timed out") from exc
                 raise GenerationVectorUnavailable("Dolphin vector search is unavailable") from exc
+            _require_query_within_deadline(
+                started_at=started_at,
+                monotonic=self._monotonic,
+                message="Dolphin vector retrieval timed out",
+            )
             hits, identities = _hits_from_rows(rows, scope.generation_id, limit)
             self._require_hits_authorized(read_lease_id, scope, identities)
             self.require_unchanged(scope.commit)
@@ -543,6 +548,11 @@ def _vectors_from_table(
         if _query_timed_out(exc, started_at=started_at, monotonic=monotonic):
             raise GenerationVectorTimeout("Dolphin generation vector verification timed out") from exc
         raise GenerationVectorUnavailable("Dolphin generation vectors could not be read") from exc
+    _require_query_within_deadline(
+        started_at=started_at,
+        monotonic=monotonic,
+        message="Dolphin generation vector verification timed out",
+    )
     if len(rows) != count:
         raise GenerationVectorCorrupt("Dolphin generation vector row count is unstable")
     vectors: list[StagedGenerationVector] = []
@@ -573,6 +583,16 @@ def _query_timed_out(
     monotonic: Callable[[], float],
 ) -> bool:
     return isinstance(error, TimeoutError) or monotonic() - started_at >= _QUERY_TIMEOUT.total_seconds()
+
+
+def _require_query_within_deadline(
+    *,
+    started_at: float,
+    monotonic: Callable[[], float],
+    message: str,
+) -> None:
+    if monotonic() - started_at >= _QUERY_TIMEOUT.total_seconds():
+        raise GenerationVectorTimeout(message)
 
 
 def _schema_matches(table: Any) -> bool:

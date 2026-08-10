@@ -90,6 +90,29 @@ def test_published_vector_search_surfaces_its_backend_deadline(
         context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
 
 
+def test_published_vector_search_rejects_a_successful_backend_overrun(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "overrun", "successful vector overrun")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    observations = iter((0.0, 11.0))
+    monkeypatch.setattr(context.vectors, "_monotonic", lambda: next(observations))
+
+    with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+        context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+
+
 def test_staging_is_idempotent_but_rejects_different_vectors_for_the_same_generation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
