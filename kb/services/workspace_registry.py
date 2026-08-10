@@ -1748,6 +1748,19 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE TRIGGER generation_keyword_commit_binding_update
+                        AFTER UPDATE OF manifest_id, manifest_digest, commit_digest, item_count
+                        ON generation_keyword_commits
+                        BEGIN
+                            UPDATE generation_keyword_commits
+                            SET keyword_revision = keyword_revision + 1,
+                                validated_keyword_revision = NULL
+                            WHERE generation_id = NEW.generation_id;
+                        END
+                        """
+                    )
+                    connection.execute(
+                        """
                         CREATE TABLE workspace_publications (
                             workspace_id TEXT PRIMARY KEY REFERENCES workspace_registrations(workspace_id),
                             generation_id TEXT NOT NULL UNIQUE REFERENCES generations(generation_id),

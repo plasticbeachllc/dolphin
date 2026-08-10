@@ -682,6 +682,7 @@ def _require_generation_keyword_binding(
     connection: sqlite3.Connection,
     manifest: VerifiedGenerationManifest,
 ) -> None:
+    _require_fts_integrity(connection)
     row = connection.execute(
         """
         SELECT generation_id, manifest_id, manifest_digest, commit_digest, item_count
@@ -745,6 +746,19 @@ def _require_generation_keyword_binding(
     )
     if observed != commit:
         raise GenerationCoordinatorError("Dolphin generation keyword binding is invalid")
+
+
+def _require_fts_integrity(connection: sqlite3.Connection) -> None:
+    """Verify the complete external-content FTS index before readiness."""
+    try:
+        connection.execute(
+            """
+            INSERT INTO generation_keyword_fts(generation_keyword_fts, rank)
+            VALUES('integrity-check', 1)
+            """
+        )
+    except sqlite3.DatabaseError as exc:
+        raise GenerationCoordinatorError("Dolphin generation keyword index is invalid") from exc
 
 
 def _require_content_counts(

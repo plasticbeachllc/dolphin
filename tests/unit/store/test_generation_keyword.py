@@ -121,15 +121,13 @@ def test_keyword_revision_invalidates_published_search_after_any_document_change
         context.keyword.search(read_lease.lease_id, "original", limit=10)
 
 
-def test_keyword_search_rejects_direct_fts_index_mutation(
+def test_readiness_rejects_direct_fts_index_mutation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     context = _context(monkeypatch, tmp_path)
     membership = _membership(context.artifacts, suffix="fts-corrupt", text="indexed integrity evidence")
-    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
-    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
-    assert context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
 
     with sqlite3.connect(context.layout.metadata_db) as connection:
         row = connection.execute(
@@ -138,7 +136,7 @@ def test_keyword_search_rejects_direct_fts_index_mutation(
             FROM generation_keyword_documents
             WHERE generation_id = ? AND chunk_instance_id = ?
             """,
-            (snapshot.generation_id, membership.chunk_instance_id),
+            (context.generation.generation_id, membership.chunk_instance_id),
         ).fetchone()
         assert row is not None
         connection.execute(
@@ -150,7 +148,34 @@ def test_keyword_search_rejects_direct_fts_index_mutation(
             row,
         )
 
-    with pytest.raises(GenerationKeywordError, match="storage is busy, unavailable, or corrupt"):
+    context.coordinator.record_vector_ready(
+        context.lease,
+        _vector_commit(context.generation.generation_id, manifest.vector_row_count),
+    )
+    with pytest.raises(GenerationCoordinatorError, match="keyword index is invalid"):
+        context.coordinator.mark_ready(context.lease, manifest)
+
+
+def test_keyword_search_rejects_tampered_commit_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="commit-corrupt", text="commit integrity evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            """
+            UPDATE generation_keyword_commits
+            SET commit_digest = ?
+            WHERE generation_id = ?
+            """,
+            ("f" * 64, snapshot.generation_id),
+        )
+
+    with pytest.raises(GenerationKeywordError, match="keyword binding is corrupt"):
         context.keyword.search(read_lease.lease_id, "integrity", limit=10)
 
 

@@ -49,9 +49,8 @@ class SQLiteGenerationKeywordStore:
             connection.execute("BEGIN")
             scope = _require_live_published_scope(connection, read_lease_id, observed_at)
             _require_validated_keyword_binding(connection, scope)
-            _require_fts_integrity(connection)
             if not fts_query:
-                connection.rollback()
+                connection.commit()
                 return ()
             rows = connection.execute(
                 """
@@ -66,7 +65,7 @@ class SQLiteGenerationKeywordStore:
                 """,
                 (fts_query, scope.generation_id, limit),
             ).fetchall()
-            connection.rollback()
+            connection.commit()
         try:
             return tuple(
                 KeywordSearchHit(
@@ -83,16 +82,14 @@ class SQLiteGenerationKeywordStore:
         try:
             if not self._layout.metadata_database_exists():
                 raise GenerationKeywordUnavailable("Dolphin metadata storage is unavailable")
-            # FTS5 exposes its non-mutating integrity check through INSERT syntax,
-            # so this connection must permit that command without creating a
-            # missing database after the existence check above.
-            target: Path | str = self._layout.metadata_db.as_uri() + "?mode=rw"
+            target: Path | str = self._layout.metadata_db.as_uri() + "?mode=ro"
             connection = sqlite3.connect(target, uri=True, timeout=1, isolation_level=None)
         except (sqlite3.Error, StorageLayoutError) as exc:
             raise GenerationKeywordUnavailable("Dolphin metadata storage is unavailable") from exc
         try:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(f"PRAGMA busy_timeout = {_SQLITE_BUSY_TIMEOUT_MILLISECONDS}")
+            connection.execute("PRAGMA query_only = ON")
             version = connection.execute("PRAGMA user_version").fetchone()
             if version is None or int(version[0]) != METADATA_SCHEMA_VERSION:
                 raise GenerationKeywordUnavailable("Dolphin metadata schema is unavailable or incompatible")
@@ -186,16 +183,6 @@ def _require_validated_keyword_binding(
         or revision != validated_revision
     ):
         raise GenerationKeywordError("Dolphin published keyword binding is corrupt")
-
-
-def _require_fts_integrity(connection: sqlite3.Connection) -> None:
-    """Fail closed unless FTS5 exactly matches its external content table."""
-    connection.execute(
-        """
-        INSERT INTO generation_keyword_fts(generation_keyword_fts, rank)
-        VALUES('integrity-check', 1)
-        """
-    )
 
 
 def _prepare_query(query: str) -> str:
