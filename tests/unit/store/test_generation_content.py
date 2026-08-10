@@ -27,6 +27,7 @@ from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
+from tests.vector_fakes import AcceptingVectorCommitVerifier
 
 
 def test_staged_content_is_invisible_until_publication_then_materializes_exact_text(
@@ -123,7 +124,11 @@ def test_same_chunk_instance_id_can_be_staged_in_later_generation(
     )
     assert retry_lease is not None
     assert retry_lease.operation.operation_id == retry.operation_id
-    retry_coordinator = SQLiteGenerationCoordinator(context.layout, clock=lambda: retry_now)
+    retry_coordinator = SQLiteGenerationCoordinator(
+        context.layout,
+        vectors=AcceptingVectorCommitVerifier(),
+        clock=lambda: retry_now,
+    )
     retry_generation = retry_coordinator.create_staging(retry_lease)
     retry_content = SQLiteGenerationContentStore(context.layout, context.artifacts, clock=lambda: retry_now)
 
@@ -609,7 +614,11 @@ def _generation_context(
         expires_at=now + timedelta(seconds=15),
     )
     assert lease is not None
-    coordinator = SQLiteGenerationCoordinator(layout, clock=lambda: now)
+    coordinator = SQLiteGenerationCoordinator(
+        layout,
+        vectors=AcceptingVectorCommitVerifier(),
+        clock=lambda: now,
+    )
     artifacts = ChunkArtifactStore(layout)
     return _GenerationContext(
         layout=layout,
@@ -682,7 +691,7 @@ def _vector_commit(generation_id: str, *, row_count: int) -> VerifiedVectorCommi
     return VerifiedVectorCommit(
         generation_id=generation_id,
         backend_token="vector-commit-generation-content",
-        manifest_digest="vector-digest-generation-content",
+        manifest_digest=hashlib.sha256(b"vector-digest-generation-content").hexdigest(),
         row_count=row_count,
     )
 

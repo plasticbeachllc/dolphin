@@ -35,6 +35,7 @@ from kb.generation_keyword import (
     identify_generation_keyword_commit,
     identify_generation_keyword_index,
 )
+from kb.generation_vector import GenerationVectorCommitVerifier, GenerationVectorError
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
@@ -59,8 +60,19 @@ class _VerifiedGenerationArtifacts:
 class SQLiteGenerationCoordinator:
     """Publish complete generations through one SQLite compare-and-swap pointer."""
 
-    def __init__(self, layout: StorageLayout, *, clock: Callable[[], datetime] | None = None) -> None:
+    def __init__(
+        self,
+        layout: StorageLayout,
+        *,
+        vectors: GenerationVectorCommitVerifier | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._layout = layout
+        if vectors is None:
+            from kb.store.generation_vector import LanceGenerationVectorStore
+
+            vectors = LanceGenerationVectorStore(layout, clock=clock)
+        self._vectors = vectors
         self._clock = clock or _system_utc_now
 
     def create_staging(self, lease: OperationLease) -> StagingGeneration:
@@ -109,8 +121,10 @@ class SQLiteGenerationCoordinator:
         lease: OperationLease,
         commit: VerifiedVectorCommit,
     ) -> StagingGeneration:
+        self._preflight_generation_authority(lease, commit.generation_id)
+        self._verify_vector_commit(commit)
         observed_at = _timestamp(self._clock())
-        with self._connection() as connection:
+        with self._vector_guarded_connection(commit) as connection:
             _begin_write(connection)
             try:
                 _require_operation_authority(connection, lease, observed_at)
@@ -166,9 +180,11 @@ class SQLiteGenerationCoordinator:
         preflight = self._preflight_generation_authority(lease, manifest.generation_id)
         if preflight.vector_commit_token is None or preflight.vector_digest is None:
             raise GenerationCoordinatorError("Dolphin generation vectors are not durably verified")
+        vector_commit = _vector_commit_from_generation(preflight)
+        self._verify_vector_commit(vector_commit)
         verified_artifacts = self._verify_generation_artifacts(manifest.generation_id)
         observed_at = _timestamp(self._clock())
-        with self._connection() as connection:
+        with self._vector_guarded_connection(vector_commit) as connection:
             _begin_write(connection)
             try:
                 _require_operation_authority(connection, lease, observed_at)
@@ -253,9 +269,11 @@ class SQLiteGenerationCoordinator:
         preflight = self._preflight_generation_authority(lease, generation_id)
         if preflight.state not in {"ready", "published"}:
             raise GenerationCoordinatorError("Dolphin generation is not ready for publication")
+        vector_commit = _vector_commit_from_generation(preflight)
+        self._verify_vector_commit(vector_commit)
         verified_artifacts = self._verify_generation_artifacts(generation_id)
         observed_at = _timestamp(self._clock())
-        with self._connection() as connection:
+        with self._vector_guarded_connection(vector_commit) as connection:
             _begin_write(connection)
             try:
                 authority = _require_operation_authority(connection, lease, observed_at)
@@ -338,6 +356,21 @@ class SQLiteGenerationCoordinator:
                 raise
             connection.commit()
         return snapshot
+
+    def _verify_vector_commit(self, commit: VerifiedVectorCommit) -> None:
+        try:
+            self._vectors.verify_commit(commit)
+        except GenerationVectorError as exc:
+            raise GenerationCoordinatorError("Dolphin generation vectors are unavailable or corrupt") from exc
+
+    @contextmanager
+    def _vector_guarded_connection(self, commit: VerifiedVectorCommit) -> Iterator[sqlite3.Connection]:
+        try:
+            with self._vectors.hold_commit(commit):
+                with self._connection() as connection:
+                    yield connection
+        except GenerationVectorError as exc:
+            raise GenerationCoordinatorError("Dolphin generation vectors changed during visibility transition") from exc
 
     def _preflight_generation_authority(
         self,
@@ -600,6 +633,24 @@ def _require_generation_identity(
         or generation.pipeline_key != pipeline_key
     ):
         raise GenerationConflict("Dolphin operation already links to an incompatible generation")
+
+
+def _vector_commit_from_generation(generation: StagingGeneration) -> VerifiedVectorCommit:
+    try:
+        return VerifiedVectorCommit.model_validate(
+            {
+                "generation_id": generation.generation_id,
+                "backend_token": generation.vector_commit_token,
+                "manifest_digest": generation.vector_digest,
+                "row_count": generation.vector_row_count,
+                "provider": generation.vector_provider,
+                "model": generation.vector_model,
+                "dimensions": generation.vector_dimensions,
+                "contract_version": generation.embedding_contract_version,
+            }
+        )
+    except ValidationError as exc:
+        raise GenerationCoordinatorError("Dolphin generation vector readiness is invalid") from exc
 
 
 def _require_persisted_content_manifest(
