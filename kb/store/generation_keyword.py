@@ -178,7 +178,7 @@ def _require_validated_keyword_binding(
     row = connection.execute(
         """
         SELECT manifest_id, manifest_digest, item_count, commit_digest,
-               keyword_revision, validated_keyword_revision, validated_fts_digest
+               keyword_revision, validated_keyword_revision, validated_commit_digest, validated_fts_digest
         FROM generation_keyword_commits
         WHERE generation_id = ?
         """,
@@ -193,7 +193,8 @@ def _require_validated_keyword_binding(
     commit_digest = row[3]
     revision = row[4]
     validated_revision = row[5]
-    validated_fts_digest = row[6]
+    validated_commit_digest = row[6]
+    validated_fts_digest = row[7]
     if (
         not isinstance(commit_digest, str)
         or re.fullmatch(r"[0-9a-f]{64}", commit_digest) is None
@@ -204,6 +205,7 @@ def _require_validated_keyword_binding(
         or isinstance(validated_revision, bool)
         or validated_revision < 1
         or revision != validated_revision
+        or validated_commit_digest != commit_digest
         or not isinstance(validated_fts_digest, str)
         or re.fullmatch(r"[0-9a-f]{64}", validated_fts_digest) is None
     ):
@@ -261,8 +263,10 @@ def _prepare_query(query: str) -> tuple[str, ...]:
             continue
         seen.add(folded)
         terms.append(term)
-        if len(terms) == MAX_KEYWORD_QUERY_TERMS:
-            break
+        if len(terms) > MAX_KEYWORD_QUERY_TERMS:
+            raise GenerationKeywordQueryTooBroad(
+                "Dolphin keyword query has too many unique terms; use fewer or more specific terms"
+            )
     if not terms:
         return ()
     try:
@@ -277,7 +281,14 @@ def _prepare_query(query: str) -> tuple[str, ...]:
             )
             tokenizer.execute("CREATE VIRTUAL TABLE query_vocabulary USING fts5vocab(query_terms, 'row')")
             tokenizer.execute("INSERT INTO query_terms(text) VALUES (?)", ("\n".join(terms),))
-            return tuple(str(row[0]) for row in tokenizer.execute("SELECT term FROM query_vocabulary ORDER BY term"))
+            prepared = tuple(
+                str(row[0]) for row in tokenizer.execute("SELECT term FROM query_vocabulary ORDER BY term")
+            )
+            if len(prepared) > MAX_KEYWORD_QUERY_TERMS:
+                raise GenerationKeywordQueryTooBroad(
+                    "Dolphin keyword query has too many unique terms; use fewer or more specific terms"
+                )
+            return prepared
     except sqlite3.Error as exc:
         raise GenerationKeywordError("Dolphin keyword query tokenizer is unavailable") from exc
 

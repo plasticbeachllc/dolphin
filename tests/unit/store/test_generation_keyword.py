@@ -188,6 +188,39 @@ def test_keyword_search_rejects_tampered_commit_digest(
         context.keyword.search(read_lease.lease_id, "integrity", limit=10)
 
 
+def test_keyword_search_requires_the_publication_validated_commit_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="validated-commit", text="validated commit evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        before = connection.execute(
+            """
+            SELECT commit_digest, validated_commit_digest
+            FROM generation_keyword_commits
+            WHERE generation_id = ?
+            """,
+            (snapshot.generation_id,),
+        ).fetchone()
+        assert before is not None
+        assert before[0] == before[1]
+        connection.execute(
+            """
+            UPDATE generation_keyword_commits
+            SET validated_commit_digest = ?
+            WHERE generation_id = ?
+            """,
+            ("e" * 64, snapshot.generation_id),
+        )
+
+    with pytest.raises(GenerationKeywordError, match="keyword binding is corrupt"):
+        context.keyword.search(read_lease.lease_id, "validated", limit=10)
+
+
 def test_keyword_search_rejects_tampered_term_commit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -243,6 +276,20 @@ def test_keyword_query_is_bounded_and_treats_fts_operators_as_plain_terms(
 
     assert context.keyword.search(read_lease.lease_id, 'operator AND "search"', limit=10)
     assert context.keyword.search(read_lease.lease_id, ":: -- !!", limit=10) == ()
+    assert (
+        context.keyword.search(
+            read_lease.lease_id,
+            " ".join(f"term{index}" for index in range(128)),
+            limit=10,
+        )
+        == ()
+    )
+    with pytest.raises(GenerationKeywordQueryTooBroad, match="too many unique terms"):
+        context.keyword.search(
+            read_lease.lease_id,
+            " ".join(f"term{index}" for index in range(129)),
+            limit=10,
+        )
     with pytest.raises(GenerationKeywordError, match="query is invalid"):
         context.keyword.search(read_lease.lease_id, "x" * 4_097, limit=10)
     with pytest.raises(GenerationKeywordError, match="result limit is invalid"):
