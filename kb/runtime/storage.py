@@ -62,6 +62,18 @@ class StorageLayout:
             finally:
                 os.close(artifacts_fd)
 
+    @contextmanager
+    def open_locks_directory(self) -> Iterator[int]:
+        """Hold a private no-follow descriptor chain through the lock root."""
+        if self.locks != self.root / "locks":
+            raise StorageLayoutError("Dolphin lock storage has an invalid layout")
+        with _open_runtime_root(self.root) as root_fd:
+            locks_fd = _open_or_create_directory(root_fd, self.locks.name, private=True)
+            try:
+                yield locks_fd
+            finally:
+                os.close(locks_fd)
+
 
 def macos_storage_layout(*, home: Path | None = None) -> StorageLayout:
     """Resolve Dolphin's fixed macOS state layout without consulting legacy paths."""

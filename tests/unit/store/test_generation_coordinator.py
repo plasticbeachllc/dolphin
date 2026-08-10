@@ -29,6 +29,7 @@ from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
+from tests.vector_fakes import AcceptingVectorCommitVerifier
 
 
 def test_staging_and_component_readiness_remain_invisible_until_atomic_publication(
@@ -471,7 +472,14 @@ def _coordinator_with_lease(
     )
     assert lease is not None
     clock = _TestClock(now)
-    return SQLiteGenerationCoordinator(layout, clock=clock), registry, layout, worktree, lease, clock
+    return (
+        SQLiteGenerationCoordinator(layout, vectors=AcceptingVectorCommitVerifier(), clock=clock),
+        registry,
+        layout,
+        worktree,
+        lease,
+        clock,
+    )
 
 
 def _ready_generation(
@@ -514,7 +522,7 @@ def _vector_commit(generation_id: str, *, suffix: str, row_count: int) -> Verifi
     return VerifiedVectorCommit(
         generation_id=generation_id,
         backend_token=f"vector-commit-{suffix}",
-        manifest_digest=f"vector-digest-{suffix}",
+        manifest_digest=hashlib.sha256(f"vector-digest-{suffix}".encode()).hexdigest(),
         row_count=row_count,
     )
 

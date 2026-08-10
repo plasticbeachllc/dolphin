@@ -36,7 +36,7 @@ class _GenerationModel(BaseModel):
 class VerifiedVectorCommit(_GenerationModel):
     generation_id: str = Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     backend_token: str = Field(min_length=1, max_length=256)
-    manifest_digest: str = Field(min_length=1, max_length=256)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     row_count: int = Field(ge=0)
     provider: Literal["openai"] = EMBEDDING_PROVIDER
     model: Literal["text-embedding-3-small"] = EMBEDDING_MODEL

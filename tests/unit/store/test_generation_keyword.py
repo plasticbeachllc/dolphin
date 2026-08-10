@@ -27,6 +27,7 @@ from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
 from kb.store.generation_keyword import SQLiteGenerationKeywordStore
+from tests.vector_fakes import AcceptingVectorCommitVerifier
 
 
 def test_keyword_rows_are_invisible_until_publication_and_search_is_snapshot_scoped(
@@ -309,7 +310,11 @@ def _context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Context:
         expires_at=now + timedelta(seconds=15),
     )
     assert lease is not None
-    coordinator = SQLiteGenerationCoordinator(layout, clock=lambda: now)
+    coordinator = SQLiteGenerationCoordinator(
+        layout,
+        vectors=AcceptingVectorCommitVerifier(),
+        clock=lambda: now,
+    )
     artifacts = ChunkArtifactStore(layout)
     return _Context(
         layout=layout,
@@ -379,7 +384,7 @@ def _vector_commit(generation_id: str, row_count: int) -> VerifiedVectorCommit:
     return VerifiedVectorCommit(
         generation_id=generation_id,
         backend_token="vector-commit-generation-keyword",
-        manifest_digest="vector-digest-generation-keyword",
+        manifest_digest=hashlib.sha256(b"vector-digest-generation-keyword").hexdigest(),
         row_count=row_count,
     )
 
