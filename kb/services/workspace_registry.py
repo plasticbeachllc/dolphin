@@ -1657,6 +1657,9 @@ class WorkspaceRegistry:
                             validated_keyword_revision INTEGER CHECK (
                                 validated_keyword_revision IS NULL OR validated_keyword_revision >= 1
                             ),
+                            validated_fts_digest TEXT CHECK (
+                                validated_fts_digest IS NULL OR length(validated_fts_digest) = 64
+                            ),
                             created_at TEXT NOT NULL,
                             FOREIGN KEY (generation_id, manifest_id)
                                 REFERENCES generation_content_manifests(generation_id, manifest_id)
@@ -1692,6 +1695,14 @@ class WorkspaceRegistry:
                             content = 'generation_keyword_documents',
                             content_rowid = 'document_rowid',
                             tokenize = 'unicode61 remove_diacritics 2'
+                        )
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE VIRTUAL TABLE generation_keyword_vocabulary USING fts5vocab(
+                            generation_keyword_fts,
+                            'instance'
                         )
                         """
                     )
@@ -1754,7 +1765,8 @@ class WorkspaceRegistry:
                         BEGIN
                             UPDATE generation_keyword_commits
                             SET keyword_revision = keyword_revision + 1,
-                                validated_keyword_revision = NULL
+                                validated_keyword_revision = NULL,
+                                validated_fts_digest = NULL
                             WHERE generation_id = NEW.generation_id;
                         END
                         """

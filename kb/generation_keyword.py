@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -19,6 +19,7 @@ MAX_KEYWORD_QUERY_TERMS = 128
 MAX_KEYWORD_RESULTS = 500
 
 _COMMIT_DOMAIN = b"dolphin:generation-keyword:v1\x00"
+_INDEX_DOMAIN = b"dolphin:generation-keyword-index:v1\x00"
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
@@ -118,6 +119,33 @@ def identify_generation_keyword_commit(
         commit_digest=digest.hexdigest(),
         item_count=len(ordered),
     )
+
+
+def identify_generation_keyword_index(
+    generation_id: str,
+    postings: Iterable[tuple[str, str, str, int]],
+) -> str:
+    """Digest one generation's canonically ordered FTS5 token postings."""
+    digest = hashlib.sha256()
+    digest.update(_INDEX_DOMAIN)
+    _update_frame(digest, generation_id.encode("utf-8"))
+    previous: tuple[str, str, str, int] | None = None
+    for posting in postings:
+        if (
+            not isinstance(posting, tuple)
+            or len(posting) != 4
+            or not all(isinstance(value, str) and "\x00" not in value for value in posting[:3])
+            or not isinstance(posting[3], int)
+            or isinstance(posting[3], bool)
+            or posting[3] < 0
+            or (previous is not None and posting < previous)
+        ):
+            raise GenerationKeywordError("Dolphin generation keyword index posting is invalid")
+        for value in posting[:3]:
+            _update_frame(digest, value.encode("utf-8"))
+        digest.update(posting[3].to_bytes(8, "big"))
+        previous = posting
+    return digest.hexdigest()
 
 
 def _update_frame(digest: _Digest, value: bytes) -> None:

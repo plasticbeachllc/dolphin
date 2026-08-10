@@ -18,6 +18,7 @@ from kb.generation_keyword import (
     GenerationKeywordError,
     GenerationKeywordUnavailable,
     KeywordSearchHit,
+    identify_generation_keyword_index,
 )
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
@@ -48,7 +49,8 @@ class SQLiteGenerationKeywordStore:
         with self._connection() as connection:
             connection.execute("BEGIN")
             scope = _require_live_published_scope(connection, read_lease_id, observed_at)
-            _require_validated_keyword_binding(connection, scope)
+            validated_fts_digest = _require_validated_keyword_binding(connection, scope)
+            _require_generation_fts_digest(connection, scope.generation_id, validated_fts_digest)
             if not fts_query:
                 connection.commit()
                 return ()
@@ -155,11 +157,11 @@ def _require_live_published_scope(
 def _require_validated_keyword_binding(
     connection: sqlite3.Connection,
     scope: _PublishedKeywordScope,
-) -> None:
+) -> str:
     row = connection.execute(
         """
-        SELECT manifest_id, manifest_digest, item_count,
-               keyword_revision, validated_keyword_revision
+        SELECT manifest_id, manifest_digest, item_count, commit_digest,
+               keyword_revision, validated_keyword_revision, validated_fts_digest
         FROM generation_keyword_commits
         WHERE generation_id = ?
         """,
@@ -171,18 +173,45 @@ def _require_validated_keyword_binding(
         scope.keyword_item_count,
     ):
         raise GenerationKeywordError("Dolphin published keyword binding is corrupt")
-    revision = row[3]
-    validated_revision = row[4]
+    commit_digest = row[3]
+    revision = row[4]
+    validated_revision = row[5]
+    validated_fts_digest = row[6]
     if (
-        not isinstance(revision, int)
+        not isinstance(commit_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", commit_digest) is None
+        or not isinstance(revision, int)
         or isinstance(revision, bool)
         or revision < 1
         or not isinstance(validated_revision, int)
         or isinstance(validated_revision, bool)
         or validated_revision < 1
         or revision != validated_revision
+        or not isinstance(validated_fts_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", validated_fts_digest) is None
     ):
         raise GenerationKeywordError("Dolphin published keyword binding is corrupt")
+    return validated_fts_digest
+
+
+def _require_generation_fts_digest(
+    connection: sqlite3.Connection,
+    generation_id: str,
+    expected_digest: str,
+) -> None:
+    rows = connection.execute(
+        """
+        SELECT d.chunk_instance_id, v.term, v.col, v.offset
+        FROM generation_keyword_vocabulary AS v
+        JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
+        WHERE d.generation_id = ?
+        ORDER BY d.chunk_instance_id, v.term, v.col, v.offset
+        """,
+        (generation_id,),
+    )
+    observed_digest = identify_generation_keyword_index(generation_id, (tuple(row) for row in rows))
+    if observed_digest != expected_digest:
+        raise GenerationKeywordError("Dolphin published keyword index is corrupt")
 
 
 def _prepare_query(query: str) -> str:

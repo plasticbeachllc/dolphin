@@ -128,25 +128,7 @@ def test_readiness_rejects_direct_fts_index_mutation(
     context = _context(monkeypatch, tmp_path)
     membership = _membership(context.artifacts, suffix="fts-corrupt", text="indexed integrity evidence")
     manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
-
-    with sqlite3.connect(context.layout.metadata_db) as connection:
-        row = connection.execute(
-            """
-            SELECT document_rowid, text, relative_path, language
-            FROM generation_keyword_documents
-            WHERE generation_id = ? AND chunk_instance_id = ?
-            """,
-            (context.generation.generation_id, membership.chunk_instance_id),
-        ).fetchone()
-        assert row is not None
-        connection.execute(
-            """
-            INSERT INTO generation_keyword_fts(
-                generation_keyword_fts, rowid, text, relative_path, language
-            ) VALUES('delete', ?, ?, ?, ?)
-            """,
-            row,
-        )
+    _delete_fts_membership(context, context.generation.generation_id, membership)
 
     context.coordinator.record_vector_ready(
         context.lease,
@@ -154,6 +136,22 @@ def test_readiness_rejects_direct_fts_index_mutation(
     )
     with pytest.raises(GenerationCoordinatorError, match="keyword index is invalid"):
         context.coordinator.mark_ready(context.lease, manifest)
+
+
+def test_keyword_search_rejects_post_publication_fts_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="published-corrupt", text="published integrity evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    assert context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+
+    _delete_fts_membership(context, snapshot.generation_id, membership)
+
+    with pytest.raises(GenerationKeywordError, match="published keyword index is corrupt"):
+        context.keyword.search(read_lease.lease_id, "integrity", limit=10)
 
 
 def test_keyword_search_rejects_tampered_commit_digest(
@@ -294,6 +292,31 @@ def _membership(artifacts: ChunkArtifactStore, *, suffix: str, text: str) -> Sta
         chunker_key="python-tree-sitter-v1",
         embedding_cache_key=identify_embedding_input(text).cache_key,
     )
+
+
+def _delete_fts_membership(
+    context: _Context,
+    generation_id: str,
+    membership: StagedChunkMembership,
+) -> None:
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        row = connection.execute(
+            """
+            SELECT document_rowid, text, relative_path, language
+            FROM generation_keyword_documents
+            WHERE generation_id = ? AND chunk_instance_id = ?
+            """,
+            (generation_id, membership.chunk_instance_id),
+        ).fetchone()
+        assert row is not None
+        connection.execute(
+            """
+            INSERT INTO generation_keyword_fts(
+                generation_keyword_fts, rowid, text, relative_path, language
+            ) VALUES('delete', ?, ?, ?, ?)
+            """,
+            row,
+        )
 
 
 def _publish(context: _Context, manifest: VerifiedGenerationManifest) -> PublishedSnapshot:
