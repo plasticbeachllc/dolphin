@@ -9,16 +9,23 @@ import pytest
 from pydantic import ValidationError
 
 from kb.generation import GenerationCoordinatorError, GenerationReadLease, PublishedSnapshot
-from kb.generation_keyword import GenerationKeywordError, KeywordSearchHit
+from kb.generation_keyword import (
+    GenerationKeywordError,
+    GenerationKeywordQueryTooBroad,
+    GenerationKeywordTimeout,
+    KeywordSearchHit,
+)
 from kb.generation_retrieval import (
     GENERATION_BRANCH_CANDIDATE_LIMIT,
     GENERATION_RANKED_TARGET_HORIZON,
     GenerationRetrievalError,
+    GenerationRetrievalQueryTooBroad,
     GenerationRetrievalResult,
+    GenerationRetrievalTimeout,
     GenerationRetrievalUnavailable,
     rank_generation_candidates,
 )
-from kb.generation_vector import VectorSearchHit
+from kb.generation_vector import GenerationVectorTimeout, VectorSearchHit
 from kb.services.generation_retrieval import GenerationRetrievalService
 
 
@@ -145,6 +152,49 @@ def test_service_normalizes_branch_failure_and_releases_the_reader() -> None:
     assert coordinator.events == ["acquire", "release"]
 
 
+def test_service_preserves_actionable_broad_query_guidance() -> None:
+    coordinator = _Coordinator()
+    keyword = _KeywordStore(error=GenerationKeywordQueryTooBroad("backend detail"))
+
+    with pytest.raises(GenerationRetrievalQueryTooBroad, match="use rarer or more specific terms") as failure:
+        GenerationRetrievalService(coordinator, keyword, _VectorStore(())).retrieve(
+            "workspace_1",
+            "common",
+            query_vector=(0.25,),
+        )
+
+    assert failure.value.retryable is False
+    assert isinstance(failure.value.__cause__, GenerationKeywordQueryTooBroad)
+    assert coordinator.events == ["acquire", "release"]
+
+
+@pytest.mark.parametrize(
+    ("keyword_error", "vector_error"),
+    [
+        (GenerationKeywordTimeout("keyword deadline"), None),
+        (None, GenerationVectorTimeout("vector deadline")),
+    ],
+)
+def test_service_surfaces_branch_deadlines_as_retryable_timeouts(
+    keyword_error: Exception | None,
+    vector_error: Exception | None,
+) -> None:
+    coordinator = _Coordinator()
+    keyword = _KeywordStore(error=keyword_error)
+    vector = _VectorStore((), error=vector_error)
+
+    with pytest.raises(GenerationRetrievalTimeout, match="retry the request") as failure:
+        GenerationRetrievalService(coordinator, keyword, vector).retrieve(
+            "workspace_1",
+            "alpha",
+            query_vector=(0.25,),
+        )
+
+    assert failure.value.retryable is True
+    assert failure.value.__cause__ in (keyword_error, vector_error)
+    assert coordinator.events == ["acquire", "release"]
+
+
 def test_service_preserves_the_primary_failure_when_reader_release_also_fails() -> None:
     branch_error = GenerationKeywordError("raw backend detail")
     coordinator = _Coordinator(release_error=GenerationCoordinatorError("release failed"))
@@ -232,13 +282,21 @@ class _KeywordStore:
 
 
 class _VectorStore:
-    def __init__(self, hits: tuple[VectorSearchHit, ...]) -> None:
+    def __init__(
+        self,
+        hits: tuple[VectorSearchHit, ...],
+        *,
+        error: Exception | None = None,
+    ) -> None:
         self.hits = hits
+        self.error = error
         self.calls: list[tuple[str, tuple[float, ...], int]] = []
 
     def search(self, read_lease_id: str, query_vector: Any, *, limit: int) -> tuple[VectorSearchHit, ...]:
         vector = tuple(query_vector)
         self.calls.append((read_lease_id, vector, limit))
+        if self.error is not None:
+            raise self.error
         return self.hits
 
 

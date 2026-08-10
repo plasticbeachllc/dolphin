@@ -8,15 +8,22 @@ from datetime import timedelta
 from typing import Protocol
 
 from kb.generation import GenerationCoordinatorError, GenerationReadLease, PublishedSnapshot
-from kb.generation_keyword import GenerationKeywordError, KeywordSearchHit
+from kb.generation_keyword import (
+    GenerationKeywordError,
+    GenerationKeywordQueryTooBroad,
+    GenerationKeywordTimeout,
+    KeywordSearchHit,
+)
 from kb.generation_retrieval import (
     GENERATION_BRANCH_CANDIDATE_LIMIT,
     GenerationRetrievalError,
+    GenerationRetrievalQueryTooBroad,
     GenerationRetrievalResult,
+    GenerationRetrievalTimeout,
     GenerationRetrievalUnavailable,
     rank_generation_candidates,
 )
-from kb.generation_vector import GenerationVectorError, VectorSearchHit
+from kb.generation_vector import GenerationVectorError, GenerationVectorTimeout, VectorSearchHit
 
 _RETRIEVAL_READ_LEASE_DURATION = timedelta(seconds=30)
 
@@ -97,6 +104,12 @@ class GenerationRetrievalService:
                 ranked_targets=ranked_targets,
                 ranked_horizon_reached=horizon_reached,
             )
+        except GenerationKeywordQueryTooBroad as exc:
+            raise GenerationRetrievalQueryTooBroad(
+                "Dolphin keyword query is too broad; use rarer or more specific terms"
+            ) from exc
+        except (GenerationKeywordTimeout, GenerationVectorTimeout) as exc:
+            raise GenerationRetrievalTimeout("Dolphin generation retrieval timed out; retry the request") from exc
         except GenerationRetrievalError:
             raise
         except (GenerationCoordinatorError, GenerationKeywordError, GenerationVectorError) as exc:

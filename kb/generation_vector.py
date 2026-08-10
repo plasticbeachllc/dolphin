@@ -52,6 +52,10 @@ class GenerationVectorUnavailable(GenerationVectorError):
     """Published vector state or its reader authority is unavailable."""
 
 
+class GenerationVectorTimeout(GenerationVectorUnavailable):
+    """A vector read exceeded its fixed backend execution deadline."""
+
+
 class _VectorModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 

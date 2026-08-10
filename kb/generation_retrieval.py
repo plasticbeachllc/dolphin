@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from fractions import Fraction
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,6 +28,18 @@ class GenerationRetrievalError(RuntimeError):
 
 class GenerationRetrievalUnavailable(GenerationRetrievalError):
     """A required published snapshot, reader lease, or retrieval branch is unavailable."""
+
+
+class GenerationRetrievalQueryTooBroad(GenerationRetrievalError):
+    """A safe lexical work bound requires the caller to narrow the query."""
+
+    retryable: ClassVar[Literal[False]] = False
+
+
+class GenerationRetrievalTimeout(GenerationRetrievalUnavailable):
+    """A retrieval branch exceeded its deadline and a later retry may succeed."""
+
+    retryable: ClassVar[Literal[True]] = True
 
 
 class _RetrievalModel(BaseModel):

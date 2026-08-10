@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from kb.generation_keyword import (
     MAX_KEYWORD_RESULTS,
     GenerationKeywordError,
     GenerationKeywordQueryTooBroad,
+    GenerationKeywordTimeout,
     GenerationKeywordUnavailable,
     KeywordSearchHit,
     identify_generation_keyword_index,
@@ -27,6 +29,8 @@ from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
+_KEYWORD_QUERY_TIMEOUT_SECONDS = 8.0
+_SQLITE_PROGRESS_STEPS = 1_000
 _PRIVATE_ID_MAX_LENGTH = 128
 _WORD_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
 
@@ -39,9 +43,11 @@ class SQLiteGenerationKeywordStore:
         layout: StorageLayout,
         *,
         clock: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         self._layout = layout
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._monotonic = monotonic or time.monotonic
 
     def search(self, read_lease_id: str, query: str, *, limit: int) -> tuple[KeywordSearchHit, ...]:
         _bounded_id(read_lease_id, "generation read lease ID")
@@ -49,15 +55,33 @@ class SQLiteGenerationKeywordStore:
             raise GenerationKeywordError("Dolphin keyword result limit is invalid")
         query_terms = _prepare_query(query)
         observed_at = _timestamp(self._clock())
+        deadline = self._monotonic() + _KEYWORD_QUERY_TIMEOUT_SECONDS
+        timed_out = False
+
+        def interrupt_after_deadline() -> int:
+            nonlocal timed_out
+            if self._monotonic() >= deadline:
+                timed_out = True
+                return 1
+            return 0
+
         with self._connection() as connection:
-            connection.execute("BEGIN")
-            scope = _require_live_published_scope(connection, read_lease_id, observed_at)
-            _require_validated_keyword_binding(connection, scope)
-            if not query_terms:
+            connection.set_progress_handler(interrupt_after_deadline, _SQLITE_PROGRESS_STEPS)
+            try:
+                connection.execute("BEGIN")
+                scope = _require_live_published_scope(connection, read_lease_id, observed_at)
+                _require_validated_keyword_binding(connection, scope)
+                if not query_terms:
+                    connection.commit()
+                    return ()
+                postings = _verified_query_postings(connection, scope.generation_id, query_terms)
                 connection.commit()
-                return ()
-            postings = _verified_query_postings(connection, scope.generation_id, query_terms)
-            connection.commit()
+            except sqlite3.OperationalError as exc:
+                if timed_out:
+                    raise GenerationKeywordTimeout("Dolphin keyword retrieval timed out") from exc
+                raise
+            finally:
+                connection.set_progress_handler(None, 0)
         try:
             scores: dict[str, int] = {}
             for _term, chunk_instance_id, _column, _offset in postings:

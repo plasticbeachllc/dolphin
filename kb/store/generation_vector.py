@@ -27,6 +27,7 @@ from kb.generation_vector import (
     GenerationVectorConflict,
     GenerationVectorCorrupt,
     GenerationVectorError,
+    GenerationVectorTimeout,
     GenerationVectorUnavailable,
     StagedGenerationVector,
     VectorSearchHit,
@@ -76,9 +77,11 @@ class LanceGenerationVectorStore:
         layout: StorageLayout,
         *,
         clock: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         self._layout = layout
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._monotonic = monotonic or time.monotonic
         self._connection_lock = threading.Lock()
         self._database: Any | None = None
         self._verified_lock = threading.Lock()
@@ -100,7 +103,11 @@ class LanceGenerationVectorStore:
             table = _open_table(database, table_name)
             if table is not None:
                 try:
-                    observed_vectors = _vectors_from_table(table, generation.generation_id)
+                    observed_vectors = _vectors_from_table(
+                        table,
+                        generation.generation_id,
+                        monotonic=self._monotonic,
+                    )
                     token = _backend_token(table_name, _table_version(table))
                     observed = identify_generation_vector_commit(generation.generation_id, token, observed_vectors)
                 except GenerationVectorUnavailable:
@@ -134,7 +141,7 @@ class LanceGenerationVectorStore:
         table = _require_table(self._connect(), table_name)
         if _table_version(table) != version:
             raise GenerationVectorCorrupt("Dolphin vector commit version is unavailable")
-        vectors = _vectors_from_table(table, commit.generation_id)
+        vectors = _vectors_from_table(table, commit.generation_id, monotonic=self._monotonic)
         observed = identify_generation_vector_commit(commit.generation_id, commit.backend_token, vectors)
         if observed != commit:
             raise GenerationVectorCorrupt("Dolphin vector commit digest or row count is corrupt")
@@ -180,6 +187,7 @@ class LanceGenerationVectorStore:
             table = _require_table(self._connect(), table_name)
             if _table_version(table) != version:
                 raise GenerationVectorCorrupt("Dolphin vector commit changed before search")
+            started_at = self._monotonic()
             try:
                 rows = (
                     table.search(list(query), vector_column_name="vector")
@@ -189,6 +197,8 @@ class LanceGenerationVectorStore:
                     .to_list(timeout=_QUERY_TIMEOUT)
                 )
             except Exception as exc:
+                if _query_timed_out(exc, started_at=started_at, monotonic=self._monotonic):
+                    raise GenerationVectorTimeout("Dolphin vector retrieval timed out") from exc
                 raise GenerationVectorUnavailable("Dolphin vector search is unavailable") from exc
             hits, identities = _hits_from_rows(rows, scope.generation_id, limit)
             self._require_hits_authorized(read_lease_id, scope, identities)
@@ -510,15 +520,28 @@ def _create_table(
         raise GenerationVectorUnavailable("Dolphin generation vectors could not be committed") from exc
 
 
-def _vectors_from_table(table: Any, generation_id: str) -> tuple[StagedGenerationVector, ...]:
+def _vectors_from_table(
+    table: Any,
+    generation_id: str,
+    *,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> tuple[StagedGenerationVector, ...]:
     if not _schema_matches(table):
         raise GenerationVectorCorrupt("Dolphin generation vector schema is incompatible")
     count = _count_rows(table)
     if count > MAX_GENERATION_ARTIFACTS:
         raise GenerationVectorCorrupt("Dolphin generation vector table is too large")
+    started_at = monotonic()
     try:
-        rows = table.to_arrow().to_pylist()
+        rows = (
+            table.search()
+            .select(["generation_id", "chunk_instance_id", "embedding_cache_key", "vector_digest", "vector"])
+            .limit(count + 1)
+            .to_list(timeout=_QUERY_TIMEOUT)
+        )
     except Exception as exc:
+        if _query_timed_out(exc, started_at=started_at, monotonic=monotonic):
+            raise GenerationVectorTimeout("Dolphin generation vector verification timed out") from exc
         raise GenerationVectorUnavailable("Dolphin generation vectors could not be read") from exc
     if len(rows) != count:
         raise GenerationVectorCorrupt("Dolphin generation vector row count is unstable")
@@ -541,6 +564,15 @@ def _vectors_from_table(table: Any, generation_id: str) -> tuple[StagedGeneratio
     if len({vector.chunk_instance_id for vector in ordered}) != len(ordered):
         raise GenerationVectorCorrupt("Dolphin generation vector identities are duplicated")
     return ordered
+
+
+def _query_timed_out(
+    error: Exception,
+    *,
+    started_at: float,
+    monotonic: Callable[[], float],
+) -> bool:
+    return isinstance(error, TimeoutError) or monotonic() - started_at >= _QUERY_TIMEOUT.total_seconds()
 
 
 def _schema_matches(table: Any) -> bool:

@@ -44,6 +44,10 @@ class GenerationKeywordQueryTooBroad(GenerationKeywordError):
     """A keyword query exceeds the fixed internal candidate-work budget."""
 
 
+class GenerationKeywordTimeout(GenerationKeywordError):
+    """A keyword query exceeded its fixed cooperative execution deadline."""
+
+
 class _KeywordModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 

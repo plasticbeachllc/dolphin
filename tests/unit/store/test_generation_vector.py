@@ -17,6 +17,7 @@ from kb.generation_content import StagedChunkMembership
 from kb.generation_vector import (
     GenerationVectorConflict,
     GenerationVectorError,
+    GenerationVectorTimeout,
     GenerationVectorUnavailable,
     StagedGenerationVector,
 )
@@ -60,6 +61,33 @@ def test_vectors_are_invisible_until_atomic_publication_and_search_uses_the_read
     assert [hit.chunk_instance_id for hit in hits] == [first.chunk_instance_id, second.chunk_instance_id]
     assert hits[0].score == 1
     assert hits[0].distance == 0
+
+
+def test_published_vector_search_surfaces_its_backend_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "timeout", "bounded vector deadline")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+
+    def time_out(_table: object, *_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("backend deadline")
+
+    monkeypatch.setattr(type(table), "search", time_out)
+
+    with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+        context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
 
 
 def test_staging_is_idempotent_but_rejects_different_vectors_for_the_same_generation(
