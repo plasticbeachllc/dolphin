@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import groupby
 from pathlib import Path
 from typing import Literal, cast
 
@@ -775,13 +776,24 @@ def _require_generation_keyword_binding(
     )
     if observed != commit:
         raise GenerationCoordinatorError("Dolphin generation keyword binding is invalid")
-    actual_index_digest = _generation_fts_digest(connection, manifest.generation_id)
     if verify_expected_index:
-        expected_index_digest = _expected_fts_digest(manifest.generation_id, document_rowids)
-        if actual_index_digest != expected_index_digest:
+        actual_index_digest = _generation_fts_digest(connection, manifest.generation_id)
+        actual_terms = _generation_fts_term_commits(connection, manifest.generation_id)
+        expected_index_digest, expected_terms = _expected_fts_state(manifest.generation_id, document_rowids)
+        if actual_index_digest != expected_index_digest or actual_terms != expected_terms:
             raise GenerationCoordinatorError("Dolphin generation keyword index is invalid")
-    elif row[5] != row[6] or not isinstance(row[7], str) or len(row[7]) != 64 or actual_index_digest != row[7]:
+        connection.executemany(
+            """
+            INSERT INTO generation_keyword_term_commits (
+                generation_id, term, posting_digest, posting_count
+            ) VALUES (?, ?, ?, ?)
+            """,
+            ((manifest.generation_id, term, digest, count) for term, (digest, count) in sorted(expected_terms.items())),
+        )
+    elif row[5] != row[6] or not isinstance(row[7], str) or len(row[7]) != 64:
         raise GenerationCoordinatorError("Dolphin generation keyword index is invalid")
+    else:
+        actual_index_digest = row[7]
     return actual_index_digest
 
 
@@ -802,10 +814,30 @@ def _generation_fts_digest(connection: sqlite3.Connection, generation_id: str) -
         raise GenerationCoordinatorError("Dolphin generation keyword index is invalid") from exc
 
 
-def _expected_fts_digest(
+def _generation_fts_term_commits(
+    connection: sqlite3.Connection,
+    generation_id: str,
+) -> dict[str, tuple[str, int]]:
+    rows = connection.execute(
+        """
+        SELECT v.term, d.chunk_instance_id, v.col, v.offset
+        FROM generation_keyword_vocabulary AS v
+        JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
+        WHERE d.generation_id = ?
+        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
+        """,
+        (generation_id,),
+    )
+    try:
+        return _term_commits_from_rows(generation_id, rows)
+    except GenerationKeywordError as exc:
+        raise GenerationCoordinatorError("Dolphin generation keyword index is invalid") from exc
+
+
+def _expected_fts_state(
     generation_id: str,
     documents: list[tuple[int, GenerationKeywordDocument]],
-) -> str:
+) -> tuple[str, dict[str, tuple[str, int]]]:
     try:
         with sqlite3.connect(":memory:") as expected:
             expected.execute(
@@ -848,9 +880,37 @@ def _expected_fts_digest(
                 ORDER BY d.chunk_instance_id, v.term, v.col, v.offset
                 """
             )
-            return identify_generation_keyword_index(generation_id, (tuple(row) for row in rows))
+            index_digest = identify_generation_keyword_index(generation_id, (tuple(row) for row in rows))
+            term_rows = expected.execute(
+                """
+                SELECT v.term, d.chunk_instance_id, v.col, v.offset
+                FROM expected_keyword_vocabulary AS v
+                JOIN expected_keyword_documents AS d ON d.document_rowid = v.doc
+                ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
+                """
+            )
+            return index_digest, _term_commits_from_rows(generation_id, term_rows)
     except (KeyError, TypeError, ValueError, sqlite3.Error, GenerationKeywordError) as exc:
         raise GenerationCoordinatorError("Dolphin generation keyword index is invalid") from exc
+
+
+def _term_commits_from_rows(
+    generation_id: str,
+    rows: Iterator[sqlite3.Row] | sqlite3.Cursor,
+) -> dict[str, tuple[str, int]]:
+    commits: dict[str, tuple[str, int]] = {}
+    for term, grouped in groupby(rows, key=lambda row: row[0]):
+        count = 0
+
+        def postings() -> Iterator[tuple[str, str, str, int]]:
+            nonlocal count
+            for row in grouped:
+                count += 1
+                yield (str(row[1]), str(row[0]), str(row[2]), int(row[3]))
+
+        digest = identify_generation_keyword_index(generation_id, postings())
+        commits[str(term)] = (digest, count)
+    return commits
 
 
 def _require_content_counts(

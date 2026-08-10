@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from itertools import groupby
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -44,35 +45,37 @@ class SQLiteGenerationKeywordStore:
         _bounded_id(read_lease_id, "generation read lease ID")
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_KEYWORD_RESULTS:
             raise GenerationKeywordError("Dolphin keyword result limit is invalid")
-        fts_query = _prepare_query(query)
+        query_terms = _prepare_query(query)
         observed_at = _timestamp(self._clock())
         with self._connection() as connection:
             connection.execute("BEGIN")
             scope = _require_live_published_scope(connection, read_lease_id, observed_at)
-            validated_fts_digest = _require_validated_keyword_binding(connection, scope)
-            _require_generation_fts_digest(connection, scope.generation_id, validated_fts_digest)
-            if not fts_query:
+            _require_validated_keyword_binding(connection, scope)
+            if not query_terms:
                 connection.commit()
                 return ()
+            _require_query_term_commits(connection, scope.generation_id, query_terms)
+            placeholders = ", ".join("?" for _term in query_terms)
             rows = connection.execute(
-                """
-                SELECT d.chunk_instance_id, bm25(generation_keyword_fts) AS raw_score
-                FROM generation_keyword_fts
+                f"""
+                SELECT d.chunk_instance_id, count(*) AS occurrence_count
+                FROM generation_keyword_vocabulary AS v
                 JOIN generation_keyword_documents AS d
-                  ON d.document_rowid = generation_keyword_fts.rowid
-                WHERE generation_keyword_fts MATCH ?
-                  AND d.generation_id = ?
-                ORDER BY raw_score ASC, d.chunk_instance_id ASC
+                  ON d.document_rowid = v.doc
+                WHERE d.generation_id = ?
+                  AND v.term IN ({placeholders})
+                GROUP BY d.chunk_instance_id
+                ORDER BY occurrence_count DESC, d.chunk_instance_id ASC
                 LIMIT ?
                 """,
-                (fts_query, scope.generation_id, limit),
+                (scope.generation_id, *query_terms, limit),
             ).fetchall()
             connection.commit()
         try:
             return tuple(
                 KeywordSearchHit(
                     chunk_instance_id=row[0],
-                    score=max(0.0, -float(row[1])),
+                    score=float(row[1]),
                 )
                 for row in rows
             )
@@ -157,7 +160,7 @@ def _require_live_published_scope(
 def _require_validated_keyword_binding(
     connection: sqlite3.Connection,
     scope: _PublishedKeywordScope,
-) -> str:
+) -> None:
     row = connection.execute(
         """
         SELECT manifest_id, manifest_digest, item_count, commit_digest,
@@ -191,30 +194,39 @@ def _require_validated_keyword_binding(
         or re.fullmatch(r"[0-9a-f]{64}", validated_fts_digest) is None
     ):
         raise GenerationKeywordError("Dolphin published keyword binding is corrupt")
-    return validated_fts_digest
 
 
-def _require_generation_fts_digest(
+def _require_query_term_commits(
     connection: sqlite3.Connection,
     generation_id: str,
-    expected_digest: str,
+    query_terms: tuple[str, ...],
 ) -> None:
+    placeholders = ", ".join("?" for _term in query_terms)
     rows = connection.execute(
-        """
-        SELECT d.chunk_instance_id, v.term, v.col, v.offset
+        f"""
+        SELECT v.term, d.chunk_instance_id, v.col, v.offset
         FROM generation_keyword_vocabulary AS v
         JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
-        WHERE d.generation_id = ?
-        ORDER BY d.chunk_instance_id, v.term, v.col, v.offset
+        WHERE d.generation_id = ? AND v.term IN ({placeholders})
+        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
         """,
-        (generation_id,),
+        (generation_id, *query_terms),
     )
-    observed_digest = identify_generation_keyword_index(generation_id, (tuple(row) for row in rows))
-    if observed_digest != expected_digest:
+    observed = _term_commits_from_rows(generation_id, rows)
+    expected_rows = connection.execute(
+        f"""
+        SELECT term, posting_digest, posting_count
+        FROM generation_keyword_term_commits
+        WHERE generation_id = ? AND term IN ({placeholders})
+        """,
+        (generation_id, *query_terms),
+    ).fetchall()
+    expected = {str(row[0]): (str(row[1]), int(row[2])) for row in expected_rows}
+    if observed != expected:
         raise GenerationKeywordError("Dolphin published keyword index is corrupt")
 
 
-def _prepare_query(query: str) -> str:
+def _prepare_query(query: str) -> tuple[str, ...]:
     if (
         not isinstance(query, str)
         or "\x00" in query
@@ -233,7 +245,42 @@ def _prepare_query(query: str) -> str:
         terms.append(term)
         if len(terms) == MAX_KEYWORD_QUERY_TERMS:
             break
-    return " OR ".join(f'"{term.replace(chr(34), chr(34) * 2)}"' for term in terms)
+    if not terms:
+        return ()
+    try:
+        with sqlite3.connect(":memory:") as tokenizer:
+            tokenizer.execute(
+                """
+                CREATE VIRTUAL TABLE query_terms USING fts5(
+                    text,
+                    tokenize = 'unicode61 remove_diacritics 2'
+                )
+                """
+            )
+            tokenizer.execute("CREATE VIRTUAL TABLE query_vocabulary USING fts5vocab(query_terms, 'row')")
+            tokenizer.execute("INSERT INTO query_terms(text) VALUES (?)", ("\n".join(terms),))
+            return tuple(str(row[0]) for row in tokenizer.execute("SELECT term FROM query_vocabulary ORDER BY term"))
+    except sqlite3.Error as exc:
+        raise GenerationKeywordError("Dolphin keyword query tokenizer is unavailable") from exc
+
+
+def _term_commits_from_rows(
+    generation_id: str,
+    rows: sqlite3.Cursor,
+) -> dict[str, tuple[str, int]]:
+    commits: dict[str, tuple[str, int]] = {}
+    for term, grouped in groupby(rows, key=lambda row: row[0]):
+        count = 0
+
+        def postings() -> Iterator[tuple[str, str, str, int]]:
+            nonlocal count
+            for row in grouped:
+                count += 1
+                yield (str(row[1]), str(row[0]), str(row[2]), int(row[3]))
+
+        digest = identify_generation_keyword_index(generation_id, postings())
+        commits[str(term)] = (digest, count)
+    return commits
 
 
 def _bounded_id(value: str, label: str) -> None:

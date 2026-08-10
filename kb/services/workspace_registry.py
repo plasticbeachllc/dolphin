@@ -1708,6 +1708,40 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE TABLE generation_keyword_term_commits (
+                            generation_id TEXT NOT NULL,
+                            term TEXT NOT NULL,
+                            posting_digest TEXT NOT NULL CHECK (length(posting_digest) = 64),
+                            posting_count INTEGER NOT NULL CHECK (posting_count > 0),
+                            PRIMARY KEY (generation_id, term),
+                            FOREIGN KEY (generation_id)
+                                REFERENCES generation_keyword_commits(generation_id)
+                                ON DELETE CASCADE
+                        ) STRICT
+                        """
+                    )
+                    for event in ("INSERT", "UPDATE", "DELETE"):
+                        row = "NEW" if event != "DELETE" else "OLD"
+                        connection.execute(
+                            f"""
+                            CREATE TRIGGER generation_keyword_term_commits_{event.lower()}
+                            AFTER {event} ON generation_keyword_term_commits
+                            BEGIN
+                                UPDATE generation_keyword_commits
+                                SET keyword_revision = keyword_revision + 1,
+                                    validated_keyword_revision = NULL,
+                                    validated_fts_digest = NULL
+                                WHERE generation_id = {row}.generation_id
+                                  AND EXISTS (
+                                      SELECT 1 FROM generations
+                                      WHERE generation_id = {row}.generation_id
+                                        AND state <> 'staging'
+                                  );
+                            END
+                            """
+                        )
+                    connection.execute(
+                        """
                         CREATE TRIGGER generation_keyword_documents_insert
                         AFTER INSERT ON generation_keyword_documents
                         BEGIN

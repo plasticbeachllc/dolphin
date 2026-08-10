@@ -144,14 +144,19 @@ def test_keyword_search_rejects_post_publication_fts_mutation(
 ) -> None:
     context = _context(monkeypatch, tmp_path)
     membership = _membership(context.artifacts, suffix="published-corrupt", text="published integrity evidence")
-    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    unrelated = _membership(context.artifacts, suffix="unrelated-corrupt", text="isolated tamper token")
+    snapshot = _publish(
+        context,
+        context.content.stage_manifest(context.lease, context.generation, [membership, unrelated]),
+    )
     read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
     assert context.keyword.search(read_lease.lease_id, "integrity", limit=10)
 
-    _delete_fts_membership(context, snapshot.generation_id, membership)
+    _delete_fts_membership(context, snapshot.generation_id, unrelated)
 
+    assert context.keyword.search(read_lease.lease_id, "integrity", limit=10)
     with pytest.raises(GenerationKeywordError, match="published keyword index is corrupt"):
-        context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+        context.keyword.search(read_lease.lease_id, "isolated", limit=10)
 
 
 def test_keyword_search_rejects_tampered_commit_digest(
@@ -175,6 +180,29 @@ def test_keyword_search_rejects_tampered_commit_digest(
 
     with pytest.raises(GenerationKeywordError, match="keyword binding is corrupt"):
         context.keyword.search(read_lease.lease_id, "integrity", limit=10)
+
+
+def test_keyword_search_rejects_tampered_term_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, suffix="term-commit-corrupt", text="term commitment evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [membership]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+
+    with sqlite3.connect(context.layout.metadata_db) as connection:
+        connection.execute(
+            """
+            UPDATE generation_keyword_term_commits
+            SET posting_digest = ?
+            WHERE generation_id = ? AND term = 'commitment'
+            """,
+            ("f" * 64, snapshot.generation_id),
+        )
+
+    with pytest.raises(GenerationKeywordError, match="keyword binding is corrupt"):
+        context.keyword.search(read_lease.lease_id, "commitment", limit=10)
 
 
 def test_readiness_rejects_missing_or_changed_keyword_documents(
