@@ -22,6 +22,11 @@ from kb.generation_content import (
     identify_chunk_membership,
     identify_generation_content_manifest,
 )
+from kb.generation_keyword import (
+    GenerationKeywordDocument,
+    VerifiedGenerationKeywordCommit,
+    identify_generation_keyword_commit,
+)
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 from kb.services.workspace_registry import OperationLease
@@ -69,12 +74,14 @@ class SQLiteGenerationContentStore:
             _require_generation_identity(connection, generation, lease, preflight_at)
 
         verified_artifacts = {}
+        verified_texts = {}
         for membership in ordered:
             artifact_id = membership.artifact.artifact_id
             observed = verified_artifacts.get(artifact_id)
             if observed is None:
-                _text, observed = self._artifacts.read_verified_artifact(artifact_id)
+                text, observed = self._artifacts.read_verified_artifact(artifact_id)
                 verified_artifacts[artifact_id] = observed
+                verified_texts[artifact_id] = text
             if observed != membership.artifact:
                 raise ArtifactCorrupt("Dolphin chunk artifact descriptor does not match generation membership")
         artifact_set = identify_chunk_artifact_set(
@@ -82,6 +89,15 @@ class SQLiteGenerationContentStore:
             total_utf8_bytes=sum(artifact.utf8_bytes for artifact in verified_artifacts.values()),
         )
         manifest = identify_generation_content_manifest(generation.generation_id, ordered, artifact_set)
+        keyword_documents = tuple(
+            _keyword_document(membership, verified_texts[membership.artifact.artifact_id]) for membership in ordered
+        )
+        keyword_commit = identify_generation_keyword_commit(
+            generation.generation_id,
+            manifest.manifest_id,
+            manifest.manifest_digest,
+            keyword_documents,
+        )
         commit_at = _timestamp(self._clock())
 
         with self._connection() as connection:
@@ -100,7 +116,12 @@ class SQLiteGenerationContentStore:
                         generation.generation_id,
                         ordered,
                     )
-                    if existing != manifest or not memberships_match:
+                    keyword_matches = _persisted_keyword_state_matches(
+                        connection,
+                        keyword_commit,
+                        keyword_documents,
+                    )
+                    if existing != manifest or not memberships_match or not keyword_matches:
                         raise GenerationContentConflict("Dolphin generation already records different chunk content")
                     connection.commit()
                     return existing
@@ -127,6 +148,22 @@ class SQLiteGenerationContentStore:
                         commit_at,
                     ),
                 )
+                connection.execute(
+                    """
+                    INSERT INTO generation_keyword_commits (
+                        generation_id, manifest_id, manifest_digest, commit_digest,
+                        item_count, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        keyword_commit.generation_id,
+                        keyword_commit.manifest_id,
+                        keyword_commit.manifest_digest,
+                        keyword_commit.commit_digest,
+                        keyword_commit.item_count,
+                        commit_at,
+                    ),
+                )
                 connection.executemany(
                     """
                     INSERT INTO generation_chunk_memberships (
@@ -137,6 +174,25 @@ class SQLiteGenerationContentStore:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [_membership_row(generation.generation_id, membership) for membership in ordered],
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO generation_keyword_documents (
+                        generation_id, chunk_instance_id, artifact_id,
+                        relative_path, language, text
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            keyword_commit.generation_id,
+                            document.chunk_instance_id,
+                            document.artifact_id,
+                            document.relative_path,
+                            document.language,
+                            document.text,
+                        )
+                        for document in keyword_documents
+                    ],
                 )
             except Exception:
                 connection.rollback()
@@ -207,6 +263,19 @@ def _membership_row(generation_id: str, membership: StagedChunkMembership) -> tu
         membership.embedding_cache_key,
         identify_chunk_membership(generation_id, membership),
     )
+
+
+def _keyword_document(membership: StagedChunkMembership, text: str) -> GenerationKeywordDocument:
+    try:
+        return GenerationKeywordDocument(
+            chunk_instance_id=membership.chunk_instance_id,
+            artifact_id=membership.artifact.artifact_id,
+            relative_path=membership.relative_path,
+            language=membership.language,
+            text=text,
+        )
+    except ValidationError as exc:
+        raise GenerationContentError("Dolphin generation keyword document is invalid") from exc
 
 
 def _require_generation_identity(
@@ -315,6 +384,49 @@ def _persisted_memberships_match(
             identify_chunk_membership(generation_id, membership),
         )
         for membership in memberships
+    ]
+
+
+def _persisted_keyword_state_matches(
+    connection: sqlite3.Connection,
+    commit: VerifiedGenerationKeywordCommit,
+    documents: tuple[GenerationKeywordDocument, ...],
+) -> bool:
+    row = connection.execute(
+        """
+        SELECT generation_id, manifest_id, manifest_digest, commit_digest, item_count
+        FROM generation_keyword_commits
+        WHERE generation_id = ?
+        """,
+        (commit.generation_id,),
+    ).fetchone()
+    expected_commit = (
+        commit.generation_id,
+        commit.manifest_id,
+        commit.manifest_digest,
+        commit.commit_digest,
+        commit.item_count,
+    )
+    if row != expected_commit:
+        return False
+    rows = connection.execute(
+        """
+        SELECT chunk_instance_id, artifact_id, relative_path, language, text
+        FROM generation_keyword_documents
+        WHERE generation_id = ?
+        ORDER BY chunk_instance_id
+        """,
+        (commit.generation_id,),
+    ).fetchall()
+    return rows == [
+        (
+            document.chunk_instance_id,
+            document.artifact_id,
+            document.relative_path,
+            document.language,
+            document.text,
+        )
+        for document in documents
     ]
 
 
