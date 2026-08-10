@@ -1657,6 +1657,9 @@ class WorkspaceRegistry:
                             validated_keyword_revision INTEGER CHECK (
                                 validated_keyword_revision IS NULL OR validated_keyword_revision >= 1
                             ),
+                            validated_commit_digest TEXT CHECK (
+                                validated_commit_digest IS NULL OR length(validated_commit_digest) = 64
+                            ),
                             validated_fts_digest TEXT CHECK (
                                 validated_fts_digest IS NULL OR length(validated_fts_digest) = 64
                             ),
@@ -1730,6 +1733,7 @@ class WorkspaceRegistry:
                                 UPDATE generation_keyword_commits
                                 SET keyword_revision = keyword_revision + 1,
                                     validated_keyword_revision = NULL,
+                                    validated_commit_digest = NULL,
                                     validated_fts_digest = NULL
                                 WHERE generation_id = {row}.generation_id
                                   AND EXISTS (
@@ -1746,7 +1750,8 @@ class WorkspaceRegistry:
                         AFTER INSERT ON generation_keyword_documents
                         BEGIN
                             UPDATE generation_keyword_commits
-                            SET keyword_revision = keyword_revision + 1
+                            SET keyword_revision = keyword_revision + 1,
+                                validated_commit_digest = NULL
                             WHERE generation_id = NEW.generation_id;
                             INSERT INTO generation_keyword_fts(rowid, text, relative_path, language)
                             VALUES (NEW.document_rowid, NEW.text, NEW.relative_path, NEW.language);
@@ -1759,10 +1764,12 @@ class WorkspaceRegistry:
                         AFTER UPDATE ON generation_keyword_documents
                         BEGIN
                             UPDATE generation_keyword_commits
-                            SET keyword_revision = keyword_revision + 1
+                            SET keyword_revision = keyword_revision + 1,
+                                validated_commit_digest = NULL
                             WHERE generation_id = OLD.generation_id;
                             UPDATE generation_keyword_commits
-                            SET keyword_revision = keyword_revision + 1
+                            SET keyword_revision = keyword_revision + 1,
+                                validated_commit_digest = NULL
                             WHERE generation_id = NEW.generation_id
                               AND NEW.generation_id <> OLD.generation_id;
                             INSERT INTO generation_keyword_fts(
@@ -1781,7 +1788,8 @@ class WorkspaceRegistry:
                         AFTER DELETE ON generation_keyword_documents
                         BEGIN
                             UPDATE generation_keyword_commits
-                            SET keyword_revision = keyword_revision + 1
+                            SET keyword_revision = keyword_revision + 1,
+                                validated_commit_digest = NULL
                             WHERE generation_id = OLD.generation_id;
                             INSERT INTO generation_keyword_fts(
                                 generation_keyword_fts, rowid, text, relative_path, language
@@ -1800,6 +1808,7 @@ class WorkspaceRegistry:
                             UPDATE generation_keyword_commits
                             SET keyword_revision = keyword_revision + 1,
                                 validated_keyword_revision = NULL,
+                                validated_commit_digest = NULL,
                                 validated_fts_digest = NULL
                             WHERE generation_id = NEW.generation_id;
                         END

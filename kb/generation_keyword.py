@@ -16,7 +16,7 @@ from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
 GENERATION_KEYWORD_COMMIT_FORMAT = "dolphin-generation-keyword-v1"
 MAX_KEYWORD_QUERY_LENGTH = 4_096
 MAX_KEYWORD_QUERY_TERMS = 128
-MAX_KEYWORD_RESULTS = 500
+MAX_KEYWORD_RESULTS = 1_000
 MAX_KEYWORD_POSTINGS_PER_QUERY = 100_000
 
 _COMMIT_DOMAIN = b"dolphin:generation-keyword:v1\x00"
@@ -42,6 +42,10 @@ class GenerationKeywordUnavailable(GenerationKeywordError):
 
 class GenerationKeywordQueryTooBroad(GenerationKeywordError):
     """A keyword query exceeds the fixed internal candidate-work budget."""
+
+
+class GenerationKeywordTimeout(GenerationKeywordError):
+    """A keyword query exceeded its fixed cooperative execution deadline."""
 
 
 class _KeywordModel(BaseModel):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,12 +18,14 @@ from kb.generation_content import StagedChunkMembership
 from kb.generation_vector import (
     GenerationVectorConflict,
     GenerationVectorError,
+    GenerationVectorTimeout,
     GenerationVectorUnavailable,
     StagedGenerationVector,
 )
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
+from kb.store import generation_vector as generation_vector_store
 from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
@@ -60,6 +63,145 @@ def test_vectors_are_invisible_until_atomic_publication_and_search_uses_the_read
     assert [hit.chunk_instance_id for hit in hits] == [first.chunk_instance_id, second.chunk_instance_id]
     assert hits[0].score == 1
     assert hits[0].distance == 0
+
+
+def test_published_vector_search_surfaces_its_backend_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "timeout", "bounded vector deadline")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+
+    def time_out(_table: object, *_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("backend deadline")
+
+    monkeypatch.setattr(type(table), "search", time_out)
+
+    with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+        context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+
+
+def test_published_vector_search_rejects_a_successful_backend_overrun(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "overrun", "successful vector overrun")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    observations = iter((0.0, 11.0))
+    monkeypatch.setattr(context.vectors, "_monotonic", lambda: next(observations))
+
+    with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+        context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+
+
+def test_published_vector_search_bounds_a_stalled_materialization(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "stalled-query", "stalled vector materialization")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+    query_type = type(table.search(list(_basis(0)), vector_column_name="vector"))
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def stalled_to_list(_query: object, *_args: object, **_kwargs: object) -> list[object]:
+        entered.set()
+        try:
+            release.wait(timeout=1)
+            return []
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(generation_vector_store, "_QUERY_TIMEOUT", timedelta(milliseconds=25))
+    monkeypatch.setattr(query_type, "to_list", stalled_to_list)
+
+    try:
+        with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+            context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+        assert entered.is_set()
+    finally:
+        release.set()
+        assert finished.wait(timeout=1)
+
+
+@pytest.mark.parametrize("probe", ["count_rows", "version"])
+def test_published_vector_search_bounds_stalled_verification_probes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    probe: str,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, f"stalled-{probe}", "stalled verification probe")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def stall_then_return(value: int) -> int:
+        entered.set()
+        try:
+            release.wait(timeout=1)
+            return value
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(generation_vector_store, "_QUERY_TIMEOUT", timedelta(milliseconds=25))
+    if probe == "count_rows":
+        monkeypatch.setattr(type(table), "count_rows", lambda _table: stall_then_return(commit.row_count))
+    else:
+        version = int(commit.backend_token.rsplit(":", maxsplit=1)[1])
+        monkeypatch.setattr(type(table), "version", property(lambda _table: stall_then_return(version)))
+
+    try:
+        with pytest.raises(GenerationVectorTimeout, match="verification timed out"):
+            context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+        assert entered.is_set()
+    finally:
+        release.set()
+        assert finished.wait(timeout=1)
 
 
 def test_staging_is_idempotent_but_rejects_different_vectors_for_the_same_generation(
@@ -254,6 +396,8 @@ def test_vector_input_and_search_limits_are_strict_and_bounded(
         )
     with pytest.raises(GenerationVectorError, match="result limit is invalid"):
         context.vectors.search("read_missing", _basis(0), limit=0)
+    with pytest.raises(GenerationVectorError, match="result limit is invalid"):
+        context.vectors.search("read_missing", _basis(0), limit=1_001)
 
 
 def test_adapter_rejects_any_vector_path_outside_the_fixed_storage_layout(tmp_path: Path) -> None:

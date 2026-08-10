@@ -746,6 +746,7 @@ def _mark_generation_bindings_validated(
         """
         UPDATE generation_keyword_commits
         SET validated_keyword_revision = keyword_revision,
+            validated_commit_digest = commit_digest,
             validated_fts_digest = ?
         WHERE generation_id = ?
         """,
@@ -764,7 +765,7 @@ def _require_generation_keyword_binding(
     row = connection.execute(
         """
         SELECT generation_id, manifest_id, manifest_digest, commit_digest, item_count,
-               keyword_revision, validated_keyword_revision, validated_fts_digest
+               keyword_revision, validated_keyword_revision, validated_commit_digest, validated_fts_digest
         FROM generation_keyword_commits
         WHERE generation_id = ?
         """,
@@ -841,10 +842,10 @@ def _require_generation_keyword_binding(
             """,
             ((manifest.generation_id, term, digest, count) for term, (digest, count) in sorted(expected_terms.items())),
         )
-    elif row[5] != row[6] or not isinstance(row[7], str) or len(row[7]) != 64:
+    elif row[5] != row[6] or row[7] != commit.commit_digest or not isinstance(row[8], str) or len(row[8]) != 64:
         raise GenerationCoordinatorError("Dolphin generation keyword index is invalid")
     else:
-        actual_index_digest = row[7]
+        actual_index_digest = row[8]
     return actual_index_digest
 
 
