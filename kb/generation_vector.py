@@ -24,7 +24,7 @@ from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
 from kb.services.workspace_registry import OperationLease
 
 GENERATION_VECTOR_COMMIT_FORMAT = "dolphin-generation-vector-v1"
-MAX_VECTOR_RESULTS = 500
+MAX_VECTOR_RESULTS = 1_000
 
 _COMMIT_DOMAIN = b"dolphin:generation-vector-commit:v1\x00"
 _ROW_DOMAIN = b"dolphin:generation-vector-row:v1\x00"

@@ -243,7 +243,7 @@ def test_keyword_query_is_bounded_and_treats_fts_operators_as_plain_terms(
     with pytest.raises(GenerationKeywordError, match="result limit is invalid"):
         context.keyword.search(read_lease.lease_id, "literal", limit=0)
     with pytest.raises(GenerationKeywordError, match="result limit is invalid"):
-        context.keyword.search(read_lease.lease_id, "literal", limit=501)
+        context.keyword.search(read_lease.lease_id, "literal", limit=1_001)
 
 
 def test_keyword_search_fails_explicitly_when_posting_budget_is_exceeded(

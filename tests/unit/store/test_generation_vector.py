@@ -254,6 +254,8 @@ def test_vector_input_and_search_limits_are_strict_and_bounded(
         )
     with pytest.raises(GenerationVectorError, match="result limit is invalid"):
         context.vectors.search("read_missing", _basis(0), limit=0)
+    with pytest.raises(GenerationVectorError, match="result limit is invalid"):
+        context.vectors.search("read_missing", _basis(0), limit=1_001)
 
 
 def test_adapter_rejects_any_vector_path_outside_the_fixed_storage_layout(tmp_path: Path) -> None:
