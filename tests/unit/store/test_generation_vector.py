@@ -115,6 +115,48 @@ def test_published_vector_search_rejects_a_successful_backend_overrun(
         context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
 
 
+def test_published_vector_search_bounds_a_stalled_materialization(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, "stalled-query", "stalled vector materialization")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+    query_type = type(table.search(list(_basis(0)), vector_column_name="vector"))
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def stalled_to_list(_query: object, *_args: object, **_kwargs: object) -> list[object]:
+        entered.set()
+        try:
+            release.wait(timeout=1)
+            return []
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(generation_vector_store, "_QUERY_TIMEOUT", timedelta(milliseconds=25))
+    monkeypatch.setattr(query_type, "to_list", stalled_to_list)
+
+    try:
+        with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
+            context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+        assert entered.is_set()
+    finally:
+        release.set()
+        assert finished.wait(timeout=1)
+
+
 @pytest.mark.parametrize("probe", ["count_rows", "version"])
 def test_published_vector_search_bounds_stalled_verification_probes(
     monkeypatch: pytest.MonkeyPatch,

@@ -272,13 +272,18 @@ class LanceGenerationVectorStore:
                 raise GenerationVectorCorrupt("Dolphin vector commit changed before search")
             started_at = self._monotonic()
             try:
-                rows = (
-                    table.search(list(query), vector_column_name="vector")
-                    .metric("cosine")
-                    .select(["generation_id", "chunk_instance_id", "embedding_cache_key", "_distance"])
-                    .limit(limit)
-                    .to_list(timeout=_QUERY_TIMEOUT)
+                rows = self._call_backend(
+                    lambda: (
+                        table.search(list(query), vector_column_name="vector")
+                        .metric("cosine")
+                        .select(["generation_id", "chunk_instance_id", "embedding_cache_key", "_distance"])
+                        .limit(limit)
+                        .to_list(timeout=_QUERY_TIMEOUT)
+                    ),
+                    message="Dolphin vector retrieval timed out",
                 )
+            except GenerationVectorTimeout:
+                raise
             except Exception as exc:
                 if _query_timed_out(exc, started_at=started_at, monotonic=self._monotonic):
                     raise GenerationVectorTimeout("Dolphin vector retrieval timed out") from exc
