@@ -17,6 +17,7 @@ GENERATION_KEYWORD_COMMIT_FORMAT = "dolphin-generation-keyword-v1"
 MAX_KEYWORD_QUERY_LENGTH = 4_096
 MAX_KEYWORD_QUERY_TERMS = 128
 MAX_KEYWORD_RESULTS = 500
+MAX_KEYWORD_POSTINGS_PER_QUERY = 100_000
 
 _COMMIT_DOMAIN = b"dolphin:generation-keyword:v1\x00"
 _INDEX_DOMAIN = b"dolphin:generation-keyword-index:v1\x00"
@@ -37,6 +38,10 @@ class GenerationKeywordConflict(GenerationKeywordError):
 
 class GenerationKeywordUnavailable(GenerationKeywordError):
     """Published keyword state or its reader authority is unavailable."""
+
+
+class GenerationKeywordQueryTooBroad(GenerationKeywordError):
+    """A keyword query exceeds the fixed internal candidate-work budget."""
 
 
 class _KeywordModel(BaseModel):

@@ -19,7 +19,7 @@ from kb.generation import (
     VerifiedVectorCommit,
 )
 from kb.generation_content import StagedChunkMembership
-from kb.generation_keyword import GenerationKeywordError, GenerationKeywordUnavailable
+from kb.generation_keyword import GenerationKeywordError, GenerationKeywordQueryTooBroad, GenerationKeywordUnavailable
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services.workspace_registry import OperationLease, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
@@ -243,6 +243,21 @@ def test_keyword_query_is_bounded_and_treats_fts_operators_as_plain_terms(
         context.keyword.search(read_lease.lease_id, "literal", limit=0)
     with pytest.raises(GenerationKeywordError, match="result limit is invalid"):
         context.keyword.search(read_lease.lease_id, "literal", limit=501)
+
+
+def test_keyword_search_fails_explicitly_when_posting_budget_is_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    first = _membership(context.artifacts, suffix="broad-first", text="common evidence")
+    second = _membership(context.artifacts, suffix="broad-second", text="common evidence")
+    snapshot = _publish(context, context.content.stage_manifest(context.lease, context.generation, [first, second]))
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    monkeypatch.setattr("kb.store.generation_keyword.MAX_KEYWORD_POSTINGS_PER_QUERY", 1)
+
+    with pytest.raises(GenerationKeywordQueryTooBroad, match="use rarer or more specific terms"):
+        context.keyword.search(read_lease.lease_id, "common", limit=10)
 
 
 @dataclass(frozen=True)

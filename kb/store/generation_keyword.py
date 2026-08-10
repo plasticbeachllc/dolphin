@@ -13,10 +13,12 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from kb.generation_keyword import (
+    MAX_KEYWORD_POSTINGS_PER_QUERY,
     MAX_KEYWORD_QUERY_LENGTH,
     MAX_KEYWORD_QUERY_TERMS,
     MAX_KEYWORD_RESULTS,
     GenerationKeywordError,
+    GenerationKeywordQueryTooBroad,
     GenerationKeywordUnavailable,
     KeywordSearchHit,
     identify_generation_keyword_index,
@@ -54,30 +56,18 @@ class SQLiteGenerationKeywordStore:
             if not query_terms:
                 connection.commit()
                 return ()
-            _require_query_term_commits(connection, scope.generation_id, query_terms)
-            placeholders = ", ".join("?" for _term in query_terms)
-            rows = connection.execute(
-                f"""
-                SELECT d.chunk_instance_id, count(*) AS occurrence_count
-                FROM generation_keyword_vocabulary AS v
-                JOIN generation_keyword_documents AS d
-                  ON d.document_rowid = v.doc
-                WHERE d.generation_id = ?
-                  AND v.term IN ({placeholders})
-                GROUP BY d.chunk_instance_id
-                ORDER BY occurrence_count DESC, d.chunk_instance_id ASC
-                LIMIT ?
-                """,
-                (scope.generation_id, *query_terms, limit),
-            ).fetchall()
+            postings = _verified_query_postings(connection, scope.generation_id, query_terms)
             connection.commit()
         try:
+            scores: dict[str, int] = {}
+            for _term, chunk_instance_id, _column, _offset in postings:
+                scores[chunk_instance_id] = scores.get(chunk_instance_id, 0) + 1
             return tuple(
                 KeywordSearchHit(
-                    chunk_instance_id=row[0],
-                    score=float(row[1]),
+                    chunk_instance_id=chunk_instance_id,
+                    score=float(score),
                 )
-                for row in rows
+                for chunk_instance_id, score in sorted(scores.items(), key=lambda item: (-item[1], item[0]))[:limit]
             )
         except (TypeError, ValueError, ValidationError) as exc:
             raise GenerationKeywordError("Dolphin keyword result metadata is corrupt") from exc
@@ -196,11 +186,11 @@ def _require_validated_keyword_binding(
         raise GenerationKeywordError("Dolphin published keyword binding is corrupt")
 
 
-def _require_query_term_commits(
+def _verified_query_postings(
     connection: sqlite3.Connection,
     generation_id: str,
     query_terms: tuple[str, ...],
-) -> None:
+) -> tuple[tuple[str, str, str, int], ...]:
     placeholders = ", ".join("?" for _term in query_terms)
     rows = connection.execute(
         f"""
@@ -208,11 +198,14 @@ def _require_query_term_commits(
         FROM generation_keyword_vocabulary AS v
         JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
         WHERE d.generation_id = ? AND v.term IN ({placeholders})
-        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
+        LIMIT ?
         """,
-        (generation_id, *query_terms),
-    )
-    observed = _term_commits_from_rows(generation_id, rows)
+        (generation_id, *query_terms, MAX_KEYWORD_POSTINGS_PER_QUERY + 1),
+    ).fetchall()
+    if len(rows) > MAX_KEYWORD_POSTINGS_PER_QUERY:
+        raise GenerationKeywordQueryTooBroad("Dolphin keyword query is too broad; use rarer or more specific terms")
+    postings = tuple(sorted((str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows))
+    observed = _term_commits_from_rows(generation_id, iter(postings))
     expected_rows = connection.execute(
         f"""
         SELECT term, posting_digest, posting_count
@@ -224,6 +217,7 @@ def _require_query_term_commits(
     expected = {str(row[0]): (str(row[1]), int(row[2])) for row in expected_rows}
     if observed != expected:
         raise GenerationKeywordError("Dolphin published keyword index is corrupt")
+    return postings
 
 
 def _prepare_query(query: str) -> tuple[str, ...]:
@@ -266,7 +260,7 @@ def _prepare_query(query: str) -> tuple[str, ...]:
 
 def _term_commits_from_rows(
     generation_id: str,
-    rows: sqlite3.Cursor,
+    rows: Iterator[tuple[str, str, str, int]] | sqlite3.Cursor,
 ) -> dict[str, tuple[str, int]]:
     commits: dict[str, tuple[str, int]] = {}
     for term, grouped in groupby(rows, key=lambda row: row[0]):
