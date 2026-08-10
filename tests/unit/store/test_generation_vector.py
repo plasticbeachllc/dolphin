@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,7 @@ from kb.generation_vector import (
 from kb.runtime.storage import StorageLayout, macos_storage_layout
 from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
+from kb.store import generation_vector as generation_vector_store
 from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
@@ -111,6 +113,53 @@ def test_published_vector_search_rejects_a_successful_backend_overrun(
 
     with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
         context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+
+
+@pytest.mark.parametrize("probe", ["count_rows", "version"])
+def test_published_vector_search_bounds_stalled_verification_probes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    probe: str,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    membership = _membership(context.artifacts, f"stalled-{probe}", "stalled verification probe")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [membership])
+    commit = context.vectors.stage_and_commit(context.lease, context.generation, [_vector(membership, 0)])
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    table = lancedb.connect(context.layout.vectors.as_posix()).open_table(commit.backend_token.split(":")[1])
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def stall_then_return(value: int) -> int:
+        entered.set()
+        try:
+            release.wait(timeout=1)
+            return value
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(generation_vector_store, "_QUERY_TIMEOUT", timedelta(milliseconds=25))
+    if probe == "count_rows":
+        monkeypatch.setattr(type(table), "count_rows", lambda _table: stall_then_return(commit.row_count))
+    else:
+        version = int(commit.backend_token.rsplit(":", maxsplit=1)[1])
+        monkeypatch.setattr(type(table), "version", property(lambda _table: stall_then_return(version)))
+
+    try:
+        with pytest.raises(GenerationVectorTimeout, match="verification timed out"):
+            context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+        assert entered.is_set()
+    finally:
+        release.set()
+        assert finished.wait(timeout=1)
 
 
 def test_staging_is_idempotent_but_rejects_different_vectors_for_the_same_generation(

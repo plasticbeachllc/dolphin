@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import os
+import queue
 import re
 import sqlite3
 import stat
@@ -16,7 +17,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
@@ -47,7 +48,60 @@ _WRITER_LOCK_RETRY_SECONDS = 0.025
 _QUERY_TIMEOUT = timedelta(seconds=10)
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
 _VERIFIED_COMMIT_CACHE_SIZE = 128
+_MAX_CONCURRENT_BACKEND_CALLS = 4
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_ResultT = TypeVar("_ResultT")
+
+
+@dataclass(frozen=True, slots=True)
+class _BackendCall:
+    operation: Callable[[], Any]
+    completed: queue.Queue[tuple[bool, Any]]
+
+
+class _BackendDeadlineRunner:
+    """Run blocking LanceDB metadata calls on bounded daemon workers."""
+
+    def __init__(self) -> None:
+        self._slots = threading.BoundedSemaphore(_MAX_CONCURRENT_BACKEND_CALLS)
+
+    def call(self, operation: Callable[[], _ResultT], *, timeout: float) -> _ResultT:
+        started_at = time.monotonic()
+        if not self._slots.acquire(timeout=timeout):
+            raise TimeoutError("LanceDB metadata workers are occupied")
+        completed: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+        call = _BackendCall(operation=operation, completed=completed)
+        try:
+            threading.Thread(
+                target=self._run,
+                args=(call,),
+                name="dolphin-generation-vector-backend",
+                daemon=True,
+            ).start()
+        except RuntimeError:
+            self._slots.release()
+            raise
+        remaining = timeout - (time.monotonic() - started_at)
+        if remaining <= 0:
+            raise TimeoutError("LanceDB metadata call exceeded its deadline")
+        try:
+            succeeded, value = completed.get(timeout=remaining)
+        except queue.Empty as exc:
+            raise TimeoutError("LanceDB metadata call exceeded its deadline") from exc
+        if succeeded:
+            return value
+        raise value
+
+    def _run(self, call: _BackendCall) -> None:
+        try:
+            try:
+                value = call.operation()
+            except BaseException as exc:
+                call.completed.put((False, exc))
+            else:
+                call.completed.put((True, value))
+        finally:
+            self._slots.release()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +140,7 @@ class LanceGenerationVectorStore:
         self._database: Any | None = None
         self._verified_lock = threading.Lock()
         self._verified: OrderedDict[tuple[str, str], None] = OrderedDict()
+        self._backend_deadlines = _BackendDeadlineRunner()
 
     def stage_and_commit(
         self,
@@ -103,12 +158,19 @@ class LanceGenerationVectorStore:
             table = _open_table(database, table_name)
             if table is not None:
                 try:
-                    observed_vectors = _vectors_from_table(
-                        table,
-                        generation.generation_id,
-                        monotonic=self._monotonic,
+                    observed_vectors = self._call_backend(
+                        lambda: _vectors_from_table(
+                            table,
+                            generation.generation_id,
+                            monotonic=self._monotonic,
+                        ),
+                        message="Dolphin generation vector verification timed out",
                     )
-                    token = _backend_token(table_name, _table_version(table))
+                    version = self._call_backend(
+                        lambda: _table_version(table),
+                        message="Dolphin generation vector verification timed out",
+                    )
+                    token = _backend_token(table_name, version)
                     observed = identify_generation_vector_commit(generation.generation_id, token, observed_vectors)
                 except GenerationVectorUnavailable:
                     raise
@@ -126,9 +188,13 @@ class LanceGenerationVectorStore:
                     return observed
 
             table = _create_table(database, table_name, generation.generation_id, ordered)
+            version = self._call_backend(
+                lambda: _table_version(table),
+                message="Dolphin generation vector verification timed out",
+            )
             commit = identify_generation_vector_commit(
                 generation.generation_id,
-                _backend_token(table_name, _table_version(table)),
+                _backend_token(table_name, version),
                 ordered,
             )
             self.verify_commit(commit)
@@ -139,9 +205,16 @@ class LanceGenerationVectorStore:
     def verify_commit(self, commit: VerifiedVectorCommit) -> None:
         table_name, version = _parse_backend_token(commit)
         table = _require_table(self._connect(), table_name)
-        if _table_version(table) != version:
+        observed_version = self._call_backend(
+            lambda: _table_version(table),
+            message="Dolphin generation vector verification timed out",
+        )
+        if observed_version != version:
             raise GenerationVectorCorrupt("Dolphin vector commit version is unavailable")
-        vectors = _vectors_from_table(table, commit.generation_id, monotonic=self._monotonic)
+        vectors = self._call_backend(
+            lambda: _vectors_from_table(table, commit.generation_id, monotonic=self._monotonic),
+            message="Dolphin generation vector verification timed out",
+        )
         observed = identify_generation_vector_commit(commit.generation_id, commit.backend_token, vectors)
         if observed != commit:
             raise GenerationVectorCorrupt("Dolphin vector commit digest or row count is corrupt")
@@ -150,7 +223,13 @@ class LanceGenerationVectorStore:
     def require_unchanged(self, commit: VerifiedVectorCommit) -> None:
         table_name, version = _parse_backend_token(commit)
         table = _require_table(self._connect(), table_name)
-        if _table_version(table) != version or not _schema_matches(table) or _count_rows(table) != commit.row_count:
+        unchanged = self._call_backend(
+            lambda: (
+                _table_version(table) == version and _schema_matches(table) and _count_rows(table) == commit.row_count
+            ),
+            message="Dolphin generation vector verification timed out",
+        )
+        if not unchanged:
             self._forget_verified(commit)
             raise GenerationVectorCorrupt("Dolphin vector commit changed after verification")
 
@@ -185,7 +264,11 @@ class LanceGenerationVectorStore:
 
             table_name, version = _parse_backend_token(scope.commit)
             table = _require_table(self._connect(), table_name)
-            if _table_version(table) != version:
+            observed_version = self._call_backend(
+                lambda: _table_version(table),
+                message="Dolphin vector retrieval timed out",
+            )
+            if observed_version != version:
                 raise GenerationVectorCorrupt("Dolphin vector commit changed before search")
             started_at = self._monotonic()
             try:
@@ -209,6 +292,12 @@ class LanceGenerationVectorStore:
             self._require_hits_authorized(read_lease_id, scope, identities)
             self.require_unchanged(scope.commit)
             return hits
+
+    def _call_backend(self, operation: Callable[[], _ResultT], *, message: str) -> _ResultT:
+        try:
+            return self._backend_deadlines.call(operation, timeout=_QUERY_TIMEOUT.total_seconds())
+        except TimeoutError as exc:
+            raise GenerationVectorTimeout(message) from exc
 
     def _connect(self) -> Any:
         _validate_layout(self._layout)
