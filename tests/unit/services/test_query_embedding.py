@@ -150,6 +150,9 @@ async def test_concurrent_identical_misses_share_one_cache_check_and_provider_ca
     tasks = tuple(asyncio.create_task(service.resolve("same query")) for _index in range(10))
     await asyncio.wait_for(started.wait(), timeout=1)
     await _wait_for_cache_reads(cache, 1)
+    flight = next(iter(service._single_flights.values()))
+    assert flight.get_name() == "dolphin-query-embedding"
+    assert identify_embedding_input("same query").cache_key[:12] not in flight.get_name()
     await asyncio.sleep(0)
     release.set()
     results = await asyncio.gather(*tasks)

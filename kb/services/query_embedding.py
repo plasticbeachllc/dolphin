@@ -83,7 +83,7 @@ class QueryEmbeddingService:
                 try:
                     flight = asyncio.create_task(
                         self._run_flight(query, identity, runtime),
-                        name=f"dolphin-query-embedding-{identity.cache_key[:12]}",
+                        name="dolphin-query-embedding",
                     )
                 except BaseException:
                     runtime.release()
