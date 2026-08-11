@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Coroutine, Iterator, Sequence
+from concurrent.futures import Future as ConcurrentFuture
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
-from threading import BoundedSemaphore, Event, Thread
+from threading import BoundedSemaphore, Event, Lock, Thread
 from time import monotonic
 from typing import Protocol, TypeVar
 
@@ -240,6 +242,49 @@ class SearchCoverageService:
 
         with self._admit(workspace_ids, current_resolution=current_resolution) as coverage:
             return operation(coverage)
+
+    async def execute_async(
+        self,
+        workspace_ids: Sequence[str] | None,
+        operation: Callable[[SearchCoverage], Coroutine[object, object, _ResultT]],
+        *,
+        current_resolution: WorkspaceResolution | None = None,
+    ) -> _ResultT:
+        """Run one async operation while blocking admission work stays off the event loop."""
+
+        loop = asyncio.get_running_loop()
+        cancellation_requested = Event()
+        future_guard = Lock()
+        operation_future: list[ConcurrentFuture[_ResultT]] = []
+
+        def invoke(coverage: SearchCoverage) -> _ResultT:
+            future = asyncio.run_coroutine_threadsafe(operation(coverage), loop)
+            with future_guard:
+                operation_future.append(future)
+                if cancellation_requested.is_set():
+                    future.cancel()
+            return future.result()
+
+        def execute_sync() -> _ResultT:
+            with self._admit(workspace_ids, current_resolution=current_resolution) as coverage:
+                return invoke(coverage)
+
+        worker = asyncio.create_task(
+            asyncio.to_thread(execute_sync),
+            name="dolphin-search-coverage",
+        )
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            cancellation_requested.set()
+            with future_guard:
+                if operation_future:
+                    operation_future[0].cancel()
+            try:
+                await asyncio.shield(worker)
+            except BaseException:
+                pass
+            raise
 
     @contextmanager
     def _admit(

@@ -140,6 +140,29 @@ def test_service_uses_caller_held_lease_without_releasing_it() -> None:
     assert coordinator.events == ["snapshot", "snapshot"]
 
 
+def test_service_exposes_canonical_transient_candidates_without_releasing_authority() -> None:
+    coordinator = _Coordinator()
+    keyword = _KeywordStore(
+        (
+            KeywordSearchHit(chunk_instance_id="chunk_b", score=1),
+            KeywordSearchHit(chunk_instance_id="chunk_a", score=2),
+        )
+    )
+    vector = _VectorStore((VectorSearchHit(chunk_instance_id="chunk_b", score=1, distance=0),))
+
+    candidates = GenerationRetrievalService(coordinator, keyword, vector).candidates_for_admitted_workspace(
+        _admitted(coordinator.lease),
+        "alpha",
+        query_vector=(0.25,),
+    )
+
+    assert [hit.chunk_instance_id for hit in candidates.keyword_hits] == ["chunk_a", "chunk_b"]
+    assert candidates.vector_hits is not None
+    assert [hit.chunk_instance_id for hit in candidates.vector_hits] == ["chunk_b"]
+    assert "score" not in repr(candidates)
+    assert coordinator.events == ["snapshot", "snapshot"]
+
+
 def test_caller_held_retrieval_stops_before_the_next_backend_after_deadline() -> None:
     coordinator = _Coordinator()
     keyword = _KeywordStore(())

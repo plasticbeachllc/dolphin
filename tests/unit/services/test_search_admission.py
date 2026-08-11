@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from threading import BoundedSemaphore, Event
+from threading import BoundedSemaphore, Event, get_ident
 from typing import cast
 
 import pytest
@@ -275,6 +276,59 @@ def test_execute_does_not_return_a_materialized_result_until_coverage_validates(
 
     with pytest.raises(SearchAdmissionUnavailable, match="changed"):
         service.execute([workspace.workspace_id], materialize)
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
+@pytest.mark.asyncio
+async def test_execute_async_keeps_operation_on_the_event_loop_and_cleans_coverage() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    service = SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)
+    event_loop_thread = get_ident()
+
+    async def materialize(coverage: object) -> str:
+        assert get_ident() == event_loop_thread
+        assert coverage is not None
+        await asyncio.sleep(0)
+        return "materialized"
+
+    assert await service.execute_async([workspace.workspace_id], materialize) == "materialized"
+    assert coordinator.released == ["read_ws_ready"]
+
+
+@pytest.mark.asyncio
+async def test_execute_async_cancellation_waits_for_coverage_cleanup() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    service = SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)
+    started = asyncio.Event()
+
+    async def wait_forever(_coverage: object) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    execution = asyncio.create_task(service.execute_async([workspace.workspace_id], wait_forever))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    execution.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(execution, timeout=1)
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
+@pytest.mark.asyncio
+async def test_execute_async_preserves_operation_failure_and_cleans_coverage() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    service = SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)
+
+    async def fail(_coverage: object) -> None:
+        raise ValueError("operation failed")
+
+    with pytest.raises(ValueError, match="operation failed"):
+        await service.execute_async([workspace.workspace_id], fail)
 
     assert coordinator.released == ["read_ws_ready"]
 
