@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -21,6 +23,7 @@ from kb.search_admission import (
     SearchWorkspaceMissing,
     SearchWorkspaceResolutionFailed,
 )
+from kb.services import search_admission as search_admission_module
 from kb.services.search_admission import SearchCoverageService
 from kb.services.workspace_registry import (
     OperationCountersSnapshot,
@@ -52,7 +55,7 @@ def test_published_workspace_is_admitted_while_newer_indexing_continues() -> Non
 
     assert registry.operation_calls == []
     assert coordinator.acquired == [workspace.workspace_id]
-    assert coordinator.validated == ["read_ws_ready"]
+    assert coordinator.validated == ["read_ws_ready", "read_ws_ready"]
     assert coordinator.released == ["read_ws_ready"]
 
 
@@ -220,8 +223,31 @@ def test_validation_fails_closed_when_any_retained_snapshot_changes() -> None:
         coordinator.validation_override = _published(workspace.workspace_id, revision=2)
         with pytest.raises(SearchAdmissionUnavailable, match="changed"):
             service.validate(coverage)
+        coordinator.validation_override = None
 
     assert coordinator.released == ["read_ws_ready"]
+
+
+def test_slow_multi_workspace_work_renews_the_complete_lease_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    registry = _Registry({item.workspace_id: item for item in (first, second)}, {})
+    coordinator = _Coordinator(
+        {
+            first.workspace_id: _published(first.workspace_id),
+            second.workspace_id: _published(second.workspace_id),
+        }
+    )
+
+    with SearchCoverageService(registry, coordinator).admit([first.workspace_id, second.workspace_id]):
+        time.sleep(0.035)
+
+    assert coordinator.renewed
+    assert all(renewed == ("read_ws_first", "read_ws_second") for renewed in coordinator.renewed)
+    assert coordinator.released == ["read_ws_second", "read_ws_first"]
 
 
 class _Registry:
@@ -258,6 +284,7 @@ class _Coordinator:
         self.acquired: list[str] = []
         self.released: list[str] = []
         self.validated: list[str] = []
+        self.renewed: list[tuple[str, ...]] = []
         self.validation_override: PublishedSnapshot | None = None
 
     def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None:
@@ -285,6 +312,15 @@ class _Coordinator:
         snapshot = self.snapshots[workspace_id]
         assert snapshot is not None
         return snapshot
+
+    def renew_reads(
+        self,
+        leases: Sequence[GenerationReadLease],
+        *,
+        lease_duration: timedelta,
+    ) -> None:
+        assert lease_duration == timedelta(seconds=30)
+        self.renewed.append(tuple(lease.lease_id for lease in leases))
 
     def release_read(self, lease: GenerationReadLease) -> None:
         self.released.append(lease.lease_id)

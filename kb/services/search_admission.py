@@ -6,6 +6,7 @@ import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
+from threading import Event, Thread
 from typing import Protocol
 
 from kb.generation import GenerationCoordinatorError, GenerationReadLease, PublishedSnapshot
@@ -34,6 +35,8 @@ from kb.services.workspace_registry import (
 from kb.services.workspace_resolution import WorkspaceResolution, WorkspaceResolutionOutcome
 
 _SEARCH_READ_LEASE_DURATION = timedelta(seconds=30)
+_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS = 5.0
+_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS = 5.0
 _MAX_SEARCH_SCOPE_WORKSPACES = 32
 
 
@@ -50,7 +53,52 @@ class _SearchCoverageCoordinator(Protocol):
 
     def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot: ...
 
+    def renew_reads(
+        self,
+        leases: Sequence[GenerationReadLease],
+        *,
+        lease_duration: timedelta,
+    ) -> None: ...
+
     def release_read(self, lease: GenerationReadLease) -> None: ...
+
+
+class _CoverageLeaseKeeper:
+    """Renew one admitted lease set as a unit until the search call exits."""
+
+    def __init__(
+        self,
+        coordinator: _SearchCoverageCoordinator,
+        coverage: SearchCoverage,
+    ) -> None:
+        self._coordinator = coordinator
+        self._leases = tuple(item.read_lease for item in coverage.workspaces)
+        self._stop = Event()
+        self._thread = Thread(target=self._run, name="dolphin-search-lease-keeper", daemon=True)
+        self._started = False
+
+    def start(self) -> None:
+        self._thread.start()
+        self._started = True
+
+    def stop(self) -> bool:
+        if not self._started:
+            return True
+        self._stop.set()
+        self._thread.join(timeout=_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS)
+        return not self._thread.is_alive()
+
+    def _run(self) -> None:
+        while not self._stop.wait(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS):
+            try:
+                self._coordinator.renew_reads(
+                    self._leases,
+                    lease_duration=_SEARCH_READ_LEASE_DURATION,
+                )
+            except GenerationCoordinatorError:
+                # A transient missed renewal is safe while the existing authority is
+                # live. Later renewals may recover; final validation fails closed if not.
+                continue
 
 
 class SearchCoverageService:
@@ -93,15 +141,27 @@ class SearchCoverageService:
             raise
 
         coverage = SearchCoverage(workspaces=tuple(admitted))
+        keeper = _CoverageLeaseKeeper(self._coordinator, coverage)
         try:
+            keeper.start()
             yield coverage
         finally:
             primary_failure = sys.exception()
+            completion_failure: SearchAdmissionUnavailable | None = None
+            if not keeper.stop() and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search lease keeper did not stop safely")
+            if primary_failure is None and completion_failure is None:
+                try:
+                    self.validate(coverage)
+                except SearchAdmissionUnavailable as exc:
+                    completion_failure = exc
             try:
                 self._release_all(coverage)
             except SearchAdmissionUnavailable:
-                if primary_failure is None:
+                if primary_failure is None and completion_failure is None:
                     raise
+            if primary_failure is None and completion_failure is not None:
+                raise completion_failure
 
     def validate(self, coverage: SearchCoverage) -> None:
         """Fail closed if any retained lease expired or changed before serialization."""
