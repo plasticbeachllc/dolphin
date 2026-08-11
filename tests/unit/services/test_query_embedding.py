@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from kb.artifacts import EmbeddingInputIdentity, identify_embedding_input
@@ -56,6 +58,18 @@ class _Provider:
         return self.outcome
 
 
+class _MemoryCache:
+    def __init__(self) -> None:
+        self.entries: dict[str, CachedEmbedding] = {}
+
+    def get(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
+        return self.entries.get(identity.cache_key)
+
+    def put(self, identity: EmbeddingInputIdentity, vector: tuple[float, ...]) -> CachedEmbedding:
+        cached = CachedEmbedding(identity=identity, vector=vector)
+        return self.entries.setdefault(identity.cache_key, cached)
+
+
 @pytest.mark.asyncio
 async def test_exact_cache_hit_skips_provider_and_is_normal_hybrid() -> None:
     identity = identify_embedding_input("find publication")
@@ -86,6 +100,71 @@ async def test_cache_miss_calls_provider_and_persists_exact_vector() -> None:
     assert len(cache.put_calls) == 1
     assert cache.put_calls[0][0] == identify_embedding_input("find publication")
     assert cache.put_calls[0][1] == _vector()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_identical_misses_make_one_provider_call_and_recheck_cache() -> None:
+    cache = _MemoryCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            calls.append(query)
+            started.set()
+            await release.wait()
+            return _vector()
+
+    service = QueryEmbeddingService(cache, Provider())
+    tasks = tuple(asyncio.create_task(service.resolve("same query")) for _index in range(10))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*tasks)
+
+    assert calls == ["same query"]
+    assert [result.source for result in results].count("live") == 1
+    assert [result.source for result in results].count("cache") == 9
+    assert service._single_flights == {}
+
+
+@pytest.mark.asyncio
+async def test_different_query_misses_share_a_fixed_provider_concurrency_limit() -> None:
+    cache = _MemoryCache()
+    four_started = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+    maximum_active = 0
+    calls = 0
+
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            nonlocal active, calls, maximum_active
+            assert query.startswith("query ")
+            calls += 1
+            active += 1
+            maximum_active = max(maximum_active, active)
+            if active == 4:
+                four_started.set()
+            try:
+                await release.wait()
+                return _vector()
+            finally:
+                active -= 1
+
+    service = QueryEmbeddingService(cache, Provider())
+    tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index in range(8))
+    await asyncio.wait_for(four_started.wait(), timeout=1)
+
+    assert active == 4
+    assert calls == 4
+    release.set()
+    await asyncio.gather(*tasks)
+
+    assert calls == 8
+    assert maximum_active == 4
+    assert service._single_flights == {}
 
 
 @pytest.mark.asyncio

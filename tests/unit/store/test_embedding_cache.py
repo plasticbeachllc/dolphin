@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from kb.artifacts import EmbeddingContract, identify_embedding_input
 from kb.generation import EMBEDDING_DIMENSIONS
 from kb.runtime.storage import macos_storage_layout
 from kb.services.workspace_registry import WorkspaceRegistry
+from kb.store import embedding_cache as embedding_cache_module
 from kb.store.embedding_cache import (
     EmbeddingCacheCorrupt,
     EmbeddingCacheError,
@@ -20,7 +22,11 @@ from kb.store.embedding_cache import (
 )
 
 
-def _cache(tmp_path: Path) -> tuple[SQLiteEmbeddingCache, Path]:
+def _cache(
+    tmp_path: Path,
+    *,
+    clock: Callable[[], datetime] | None = None,
+) -> tuple[SQLiteEmbeddingCache, Path]:
     home = tmp_path / "home"
     home.mkdir()
     layout = macos_storage_layout(home=home)
@@ -35,7 +41,7 @@ def _cache(tmp_path: Path) -> tuple[SQLiteEmbeddingCache, Path]:
         now=now,
         expires_at=now + timedelta(minutes=1),
     )
-    return SQLiteEmbeddingCache(layout, clock=lambda: datetime(2026, 8, 10, tzinfo=UTC)), layout.metadata_db
+    return SQLiteEmbeddingCache(layout, clock=clock or (lambda: now)), layout.metadata_db
 
 
 def _vector(component: float = 0.125) -> tuple[float, ...]:
@@ -80,6 +86,51 @@ def test_first_valid_writer_wins_an_idempotent_or_racing_put(tmp_path: Path) -> 
 
     assert repeated == first
     assert repeated.vector != _vector(0.25)
+
+
+def test_new_entries_transactionally_prune_expired_and_oldest_cache_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(embedding_cache_module, "_MAX_CACHE_ENTRIES", 2)
+    times = iter(
+        (
+            datetime(2026, 8, 1, tzinfo=UTC),
+            datetime(2026, 8, 2, tzinfo=UTC),
+            datetime(2026, 8, 3, tzinfo=UTC),
+        )
+    )
+    cache, database = _cache(tmp_path, clock=lambda: next(times))
+    identities = tuple(identify_embedding_input(f"query {index}") for index in range(3))
+
+    for identity in identities:
+        cache.put(identity, _vector())
+
+    assert cache.get(identities[0]) is None
+    assert cache.get(identities[1]) is not None
+    assert cache.get(identities[2]) is not None
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (2,)
+
+
+def test_new_entry_prunes_expired_cache_rows(tmp_path: Path) -> None:
+    times = iter(
+        (
+            datetime(2026, 6, 1, tzinfo=UTC),
+            datetime(2026, 8, 1, tzinfo=UTC),
+        )
+    )
+    cache, database = _cache(tmp_path, clock=lambda: next(times))
+    expired = identify_embedding_input("expired query")
+    current = identify_embedding_input("current query")
+
+    cache.put(expired, _vector())
+    cache.put(current, _vector())
+
+    assert cache.get(expired) is None
+    assert cache.get(current) is not None
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
 
 
 @pytest.mark.parametrize("column", ["vector_digest", "model", "input_utf8_bytes", "created_at"])

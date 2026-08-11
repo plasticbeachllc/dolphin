@@ -7,7 +7,7 @@ import sqlite3
 import struct
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -20,6 +20,8 @@ from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
 
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 250
+_MAX_CACHE_ENTRIES = 8_192
+_CACHE_ENTRY_MAX_AGE = timedelta(days=30)
 _VECTOR_BYTES = struct.Struct(f"!{EMBEDDING_DIMENSIONS}f")
 _VECTOR_DIGEST_DOMAIN = b"dolphin:embedding-cache-vector:v1\x00"
 
@@ -73,13 +75,19 @@ class SQLiteEmbeddingCache:
             raise EmbeddingCacheError("Dolphin embedding cache vector is invalid") from None
         payload = _VECTOR_BYTES.pack(*canonical)
         digest = _vector_digest(identity.cache_key, payload)
-        created_at = _timestamp(self._clock())
+        now = self._clock()
+        created_at = _timestamp(now)
         with self._connection() as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                row = _embedding_row(connection, identity.cache_key)
+                if row is not None:
+                    connection.commit()
+                    return _cached_embedding(identity, row)
+                _prune_cache_for_insert(connection, now)
                 connection.execute(
                     """
-                    INSERT OR IGNORE INTO embedding_cache_entries (
+                    INSERT INTO embedding_cache_entries (
                         cache_key, format, provider, model, dimensions, contract_version,
                         input_utf8_bytes, vector, vector_digest, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -97,15 +105,7 @@ class SQLiteEmbeddingCache:
                         created_at,
                     ),
                 )
-                row = connection.execute(
-                    """
-                    SELECT cache_key, format, provider, model, dimensions, contract_version,
-                           input_utf8_bytes, vector, vector_digest, created_at
-                    FROM embedding_cache_entries
-                    WHERE cache_key = ?
-                    """,
-                    (identity.cache_key,),
-                ).fetchone()
+                row = _embedding_row(connection, identity.cache_key)
                 connection.commit()
             except Exception:
                 connection.rollback()
@@ -162,6 +162,41 @@ def _cached_embedding(identity: EmbeddingInputIdentity, row: tuple[object, ...])
         return CachedEmbedding(identity=identity, vector=vector)
     except (TypeError, ValueError, ValidationError):
         raise EmbeddingCacheCorrupt("Dolphin embedding cache vector is corrupt") from None
+
+
+def _embedding_row(connection: sqlite3.Connection, cache_key: str) -> tuple[object, ...] | None:
+    return connection.execute(
+        """
+        SELECT cache_key, format, provider, model, dimensions, contract_version,
+               input_utf8_bytes, vector, vector_digest, created_at
+        FROM embedding_cache_entries
+        WHERE cache_key = ?
+        """,
+        (cache_key,),
+    ).fetchone()
+
+
+def _prune_cache_for_insert(connection: sqlite3.Connection, now: datetime) -> None:
+    """Bound optional query cache growth without turning reads into writes."""
+    expiry = _timestamp(now - _CACHE_ENTRY_MAX_AGE)
+    connection.execute("DELETE FROM embedding_cache_entries WHERE created_at <= ?", (expiry,))
+    row = connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone()
+    if row is None or not isinstance(row[0], int) or isinstance(row[0], bool) or row[0] < 0:
+        raise EmbeddingCacheCorrupt("Dolphin embedding cache accounting is corrupt")
+    excess = max(0, row[0] - (_MAX_CACHE_ENTRIES - 1))
+    if excess:
+        connection.execute(
+            """
+            DELETE FROM embedding_cache_entries
+            WHERE cache_key IN (
+                SELECT cache_key
+                FROM embedding_cache_entries
+                ORDER BY created_at, cache_key
+                LIMIT ?
+            )
+            """,
+            (excess,),
+        )
 
 
 def _require_fixed_identity(identity: EmbeddingInputIdentity) -> None:

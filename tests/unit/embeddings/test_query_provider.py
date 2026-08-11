@@ -66,9 +66,15 @@ def _response(
     )
 
 
-def _status_error(error_type: type[openai.APIStatusError], status: int, message: str) -> openai.APIStatusError:
+def _status_error(
+    error_type: type[openai.APIStatusError],
+    status: int,
+    message: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> openai.APIStatusError:
     request = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
-    response = httpx.Response(status, request=request)
+    response = httpx.Response(status, request=request, headers=headers)
     return error_type(message, response=response, body={"message": message})
 
 
@@ -130,11 +136,62 @@ async def test_transient_timeout_is_retried_once() -> None:
         environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
         client_factory=lambda _key: client,
         sleep=sleep,
+        random_source=lambda: 0.5,
     )
 
     assert len(await provider.embed_query("find the lease")) == EMBEDDING_DIMENSIONS
     assert len(client.embeddings.calls) == 2
     assert sleeps == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_retry_uses_bounded_jitter_and_safe_retry_after() -> None:
+    failure = _status_error(
+        openai.RateLimitError,
+        429,
+        "rate limited",
+        headers={"retry-after": "0.75", "retry-after-ms": "500"},
+    )
+    client = _Client([failure, _response()])
+    sleeps: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    provider = OpenAIQueryEmbeddingProvider(
+        environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
+        client_factory=lambda _key: client,
+        sleep=sleep,
+        random_source=lambda: 1.0,
+    )
+
+    assert len(await provider.embed_query("query")) == EMBEDDING_DIMENSIONS
+    assert sleeps == [0.75]
+
+
+@pytest.mark.asyncio
+async def test_unsafe_retry_after_is_clamped_to_interactive_budget() -> None:
+    failure = _status_error(
+        openai.RateLimitError,
+        429,
+        "rate limited",
+        headers={"retry-after": "3600"},
+    )
+    client = _Client([failure, _response()])
+    sleeps: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    provider = OpenAIQueryEmbeddingProvider(
+        environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
+        client_factory=lambda _key: client,
+        sleep=sleep,
+        random_source=lambda: 0.5,
+    )
+
+    assert len(await provider.embed_query("query")) == EMBEDDING_DIMENSIONS
+    assert sleeps == [1.0]
 
 
 @pytest.mark.asyncio

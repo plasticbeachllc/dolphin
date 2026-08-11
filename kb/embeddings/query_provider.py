@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
+import random
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol, cast
 
@@ -49,6 +51,10 @@ class _AsyncOpenAIClient(Protocol):
 
 ClientFactory = Callable[[str], _AsyncOpenAIClient]
 AsyncSleep = Callable[[float], Awaitable[None]]
+RandomSource = Callable[[], float]
+
+_RETRY_JITTER_FRACTION = 0.25
+_MAX_RETRY_DELAY_SECONDS = 1.0
 
 
 class OpenAIQueryEmbeddingProvider:
@@ -60,10 +66,12 @@ class OpenAIQueryEmbeddingProvider:
         environment: Mapping[str, str] | None = None,
         client_factory: ClientFactory | None = None,
         sleep: AsyncSleep = asyncio.sleep,
+        random_source: RandomSource = random.random,
     ) -> None:
         self._environment = os.environ if environment is None else environment
         self._client_factory = client_factory or _default_client
         self._sleep = sleep
+        self._random_source = random_source
         self._client: _AsyncOpenAIClient | None = None
 
     async def embed_query(self, query: str) -> tuple[float, ...]:
@@ -97,7 +105,7 @@ class OpenAIQueryEmbeddingProvider:
             except Exception as exc:
                 failure = _classified_failure(exc)
                 if isinstance(failure, TransientProviderFailure) and attempt + 1 < _MAX_ATTEMPTS:
-                    await self._sleep(_RETRY_DELAY_SECONDS)
+                    await self._sleep(_safe_retry_delay(exc, self._random_source))
                     continue
                 raise failure from None
         raise PermanentProviderFailure("provider_error")
@@ -173,3 +181,38 @@ def _classified_failure(exc: Exception) -> QueryEmbeddingError:
             return TransientProviderFailure("server")
         return PermanentProviderFailure("request_rejected")
     return PermanentProviderFailure("provider_error")
+
+
+def _safe_retry_delay(exc: Exception, random_source: RandomSource) -> float:
+    try:
+        sample = float(random_source())
+    except (TypeError, ValueError, OverflowError):
+        sample = 0.5
+    if not math.isfinite(sample) or not 0 <= sample <= 1:
+        sample = 0.5
+    jitter = 1 + ((sample * 2) - 1) * _RETRY_JITTER_FRACTION
+    delay = _RETRY_DELAY_SECONDS * jitter
+    retry_after = _safe_retry_after_seconds(exc)
+    if retry_after is not None:
+        delay = max(delay, retry_after)
+    return min(delay, _MAX_RETRY_DELAY_SECONDS)
+
+
+def _safe_retry_after_seconds(exc: Exception) -> float | None:
+    if not isinstance(exc, openai.APIStatusError):
+        return None
+    candidates = (
+        (exc.response.headers.get("retry-after"), 1.0),
+        (exc.response.headers.get("retry-after-ms"), 0.001),
+    )
+    safe_values: list[float] = []
+    for raw_value, scale in candidates:
+        if raw_value is None or len(raw_value) > 32:
+            continue
+        try:
+            value = float(raw_value) * scale
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(value) and value >= 0:
+            safe_values.append(min(value, _MAX_RETRY_DELAY_SECONDS))
+    return max(safe_values, default=None)
