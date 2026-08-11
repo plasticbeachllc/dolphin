@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import timedelta
 from threading import BoundedSemaphore, Event, Thread
 from time import monotonic
@@ -39,6 +40,7 @@ _SEARCH_READ_LEASE_DURATION = timedelta(seconds=30)
 _SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS = 5.0
 _SEARCH_READ_LEASE_KEEPER_STOP_SECONDS = 5.0
 _SEARCH_CALL_DEADLINE_SECONDS = 30.0
+_SEARCH_CALL_DRAIN_SECONDS = 12.0
 _SEARCH_ADMISSION_CAPACITY = BoundedSemaphore(8)
 _MAX_SEARCH_SCOPE_WORKSPACES = 32
 _LEASE_RELEASE_ATTEMPTS = 3
@@ -73,12 +75,12 @@ class _CoverageLeaseKeeper:
     def __init__(
         self,
         coordinator: _SearchCoverageCoordinator,
-        coverage: SearchCoverage,
+        admitted: Sequence[AdmittedSearchWorkspace],
         admission_capacity: BoundedSemaphore,
     ) -> None:
         self._coordinator = coordinator
         self._admission_capacity = admission_capacity
-        self._leases = tuple(item.read_lease for item in coverage.workspaces)
+        self._leases = tuple(item.read_lease for item in admitted)
         self._stop = Event()
         self._done = Event()
         self._failed = Event()
@@ -101,7 +103,6 @@ class _CoverageLeaseKeeper:
     def failed(self) -> bool:
         return self._failed.is_set()
 
-    @property
     def deadline_exceeded(self) -> bool:
         return self._deadline_exceeded.is_set()
 
@@ -116,6 +117,7 @@ class _CoverageLeaseKeeper:
                 remaining = deadline - monotonic()
                 if remaining <= 0:
                     self._deadline_exceeded.set()
+                    self._stop.wait(_SEARCH_CALL_DRAIN_SECONDS)
                     return
                 if self._stop.wait(min(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS, remaining)):
                     return
@@ -195,8 +197,10 @@ class SearchCoverageService:
             admission_capacity.release()
             raise
 
-        coverage = SearchCoverage(workspaces=tuple(admitted))
-        keeper = _CoverageLeaseKeeper(self._coordinator, coverage, admission_capacity)
+        keeper = _CoverageLeaseKeeper(self._coordinator, admitted, admission_capacity)
+        coverage = SearchCoverage(
+            workspaces=tuple(replace(item, deadline_exceeded=keeper.deadline_exceeded) for item in admitted)
+        )
         try:
             keeper.start()
         except Exception:
@@ -209,7 +213,7 @@ class SearchCoverageService:
         finally:
             primary_failure = sys.exception()
             completion_failure: SearchAdmissionUnavailable | None = None
-            if keeper.deadline_exceeded and primary_failure is None:
+            if keeper.deadline_exceeded() and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search exceeded its bounded read deadline")
             elif keeper.failed and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search lease renewal failed unexpectedly")
@@ -222,7 +226,7 @@ class SearchCoverageService:
                 completion_failure = SearchAdmissionUnavailable(
                     "Dolphin search lease cleanup is still completing safely"
                 )
-            elif keeper.deadline_exceeded and primary_failure is None:
+            elif keeper.deadline_exceeded() and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search exceeded its bounded read deadline")
             elif keeper.failed and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search lease renewal failed unexpectedly")
@@ -242,6 +246,8 @@ class SearchCoverageService:
             raise
         except GenerationCoordinatorError as exc:
             raise SearchAdmissionUnavailable("Dolphin search coverage is no longer available") from exc
+        except Exception as exc:
+            raise SearchAdmissionUnavailable("Dolphin search coverage validation failed unexpectedly") from exc
 
     def _resolve_scope(
         self,

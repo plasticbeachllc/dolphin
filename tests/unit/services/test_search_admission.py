@@ -229,6 +229,22 @@ def test_validation_fails_closed_when_any_retained_snapshot_changes() -> None:
     assert coordinator.released == ["read_ws_ready"]
 
 
+def test_unexpected_final_validation_error_still_closes_the_keeper() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator(
+        {workspace.workspace_id: _published(workspace.workspace_id)},
+        validation_error=ValueError("raw backend exception"),
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="validation failed unexpectedly"):
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+            [workspace.workspace_id]
+        ):
+            pass
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
 def test_slow_multi_workspace_work_renews_the_complete_lease_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -376,6 +392,7 @@ class _Coordinator:
         renew_error: Exception | None = None,
         renew_blocker: tuple[Event, Event] | None = None,
         release_failures: int = 0,
+        validation_error: Exception | None = None,
     ) -> None:
         self.snapshots = snapshots
         self.acquire_error_for = acquire_error_for
@@ -384,6 +401,7 @@ class _Coordinator:
         self.renew_error = renew_error
         self.renew_blocker = renew_blocker
         self.release_failures = release_failures
+        self.validation_error = validation_error
         self.acquired: list[str] = []
         self.released: list[str] = []
         self.validated: list[str] = []
@@ -410,6 +428,8 @@ class _Coordinator:
 
     def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot:
         self.validated.append(lease_id)
+        if self.validation_error is not None:
+            raise self.validation_error
         if self.validation_override is not None:
             return self.validation_override
         workspace_id = lease_id.removeprefix("read_")

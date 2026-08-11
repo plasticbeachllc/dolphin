@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from kb.generation import GenerationReadLease, PublishedSnapshot
 from kb.services.workspace_registry import (
@@ -13,6 +14,10 @@ from kb.services.workspace_registry import (
     WorkspaceSnapshot,
 )
 from kb.services.workspace_resolution import WorkspaceResolution
+
+
+def _deadline_not_exceeded() -> bool:
+    return False
 
 
 class SearchAdmissionError(RuntimeError):
@@ -101,6 +106,11 @@ class SearchOperationFailed(SearchAdmissionError):
 class AdmittedSearchWorkspace:
     workspace: WorkspaceSnapshot
     read_lease: GenerationReadLease
+    deadline_exceeded: Callable[[], bool] = field(
+        default=_deadline_not_exceeded,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def snapshot(self) -> PublishedSnapshot:

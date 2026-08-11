@@ -62,8 +62,8 @@ def test_real_coverage_keyword_and_vector_stores_share_one_published_snapshot(
 
     with admission.admit([registration.workspace_id]) as coverage:
         assert coverage.snapshots == (snapshot,)
-        result = retrieval.retrieve_for_lease(
-            coverage.workspaces[0].read_lease,
+        result = retrieval.retrieve_for_admitted_workspace(
+            coverage.workspaces[0],
             "needle",
             query_vector=_basis(1),
         )
@@ -125,9 +125,9 @@ def test_slow_multi_workspace_retrieval_renews_all_real_reader_leases(
     ) as coverage:
         clock.advance(seconds=25)
         time.sleep(0.04)
-        first_result = retrieval.retrieve_for_lease(coverage.workspaces[0].read_lease, "needle", query_vector=None)
+        first_result = retrieval.retrieve_for_admitted_workspace(coverage.workspaces[0], "needle", query_vector=None)
         clock.advance(seconds=25)
-        second_result = retrieval.retrieve_for_lease(coverage.workspaces[1].read_lease, "needle", query_vector=None)
+        second_result = retrieval.retrieve_for_admitted_workspace(coverage.workspaces[1], "needle", query_vector=None)
 
     assert {first_result.snapshot, second_result.snapshot} == {first[1], second[1]}
     with sqlite3.connect(layout.metadata_db) as connection:

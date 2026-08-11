@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import Protocol
 
@@ -24,6 +24,7 @@ from kb.generation_retrieval import (
     rank_generation_candidates,
 )
 from kb.generation_vector import GenerationVectorError, GenerationVectorTimeout, VectorSearchHit
+from kb.search_admission import AdmittedSearchWorkspace
 
 _RETRIEVAL_READ_LEASE_DURATION = timedelta(seconds=30)
 
@@ -81,7 +82,12 @@ class GenerationRetrievalService:
             raise GenerationRetrievalUnavailable("Dolphin published generation is unavailable") from exc
 
         try:
-            return self.retrieve_for_lease(lease, query, query_vector=query_vector)
+            return self._retrieve_for_lease(
+                lease,
+                query,
+                query_vector=query_vector,
+                deadline_exceeded=lambda: False,
+            )
         finally:
             primary_failure = sys.exception()
             try:
@@ -90,16 +96,34 @@ class GenerationRetrievalService:
                 if primary_failure is None:
                     raise GenerationRetrievalUnavailable("Dolphin generation read lease could not be released") from exc
 
-    def retrieve_for_lease(
+    def retrieve_for_admitted_workspace(
+        self,
+        admitted: AdmittedSearchWorkspace,
+        query: str,
+        *,
+        query_vector: Sequence[float] | None,
+    ) -> GenerationRetrievalResult:
+        """Retrieve under admitted caller-held authority without releasing it."""
+
+        return self._retrieve_for_lease(
+            admitted.read_lease,
+            query,
+            query_vector=query_vector,
+            deadline_exceeded=admitted.deadline_exceeded,
+        )
+
+    def _retrieve_for_lease(
         self,
         lease: GenerationReadLease,
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        deadline_exceeded: Callable[[], bool],
     ) -> GenerationRetrievalResult:
-        """Retrieve under caller-held authority without releasing its reader lease."""
+        """Execute bounded retrieval under one exact retained lease."""
 
         try:
+            _require_search_deadline(deadline_exceeded)
             if self._coordinator.snapshot_for_lease(lease.lease_id) != lease.snapshot:
                 raise GenerationRetrievalUnavailable("Dolphin generation read lease changed before retrieval")
             keyword_hits = self._keyword_store.search(
@@ -107,6 +131,7 @@ class GenerationRetrievalService:
                 query,
                 limit=GENERATION_BRANCH_CANDIDATE_LIMIT,
             )
+            _require_search_deadline(deadline_exceeded)
             vector_hits = (
                 None
                 if query_vector is None
@@ -116,6 +141,7 @@ class GenerationRetrievalService:
                     limit=GENERATION_BRANCH_CANDIDATE_LIMIT,
                 )
             )
+            _require_search_deadline(deadline_exceeded)
             ranked_targets, horizon_reached = rank_generation_candidates(keyword_hits, vector_hits)
             if self._coordinator.snapshot_for_lease(lease.lease_id) != lease.snapshot:
                 raise GenerationRetrievalUnavailable("Dolphin generation read lease changed during retrieval")
@@ -135,3 +161,8 @@ class GenerationRetrievalService:
             raise
         except (GenerationCoordinatorError, GenerationKeywordError, GenerationVectorError) as exc:
             raise GenerationRetrievalUnavailable("Dolphin generation retrieval is unavailable") from exc
+
+
+def _require_search_deadline(deadline_exceeded: Callable[[], bool]) -> None:
+    if deadline_exceeded():
+        raise GenerationRetrievalTimeout("Dolphin search read deadline expired; retry the request")
