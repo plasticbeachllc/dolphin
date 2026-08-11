@@ -459,6 +459,37 @@ class WorkspaceRegistry:
             return None
         return snapshot
 
+    def inspect_latest_workspace_operation(
+        self,
+        workspace_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> OperationSnapshot | None:
+        """Read the latest operation without extending its diagnostic lifetime."""
+        with self._read_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT o.operation_id, o.workspace_id, o.kind, o.state, o.target_head_commit, o.attempt,
+                       o.created_at, o.updated_at, o.terminal_at, c.phase, c.known_eligible_files,
+                       c.processed_files, c.parsed_files, c.reused_chunks, c.embedding_cache_hits,
+                       c.embedding_cache_misses, c.embedded_chunks, c.pause_reason, c.pipeline_key
+                FROM workspace_operations AS o
+                LEFT JOIN operation_checkpoints AS c ON c.operation_id = o.operation_id
+                WHERE o.workspace_id = ?
+                ORDER BY o.updated_at DESC, o.rowid DESC
+                LIMIT 1
+                """,
+                (workspace_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        snapshot = _operation_snapshot_from_row(row)
+        terminal_at = snapshot.terminal_at
+        observed_at = now or datetime.now(UTC)
+        if terminal_at is not None and observed_at >= terminal_at + _OPERATION_STATUS_RETENTION:
+            return None
+        return snapshot
+
     def register_runtime(
         self,
         *,

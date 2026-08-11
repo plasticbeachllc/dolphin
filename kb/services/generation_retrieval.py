@@ -81,6 +81,27 @@ class GenerationRetrievalService:
             raise GenerationRetrievalUnavailable("Dolphin published generation is unavailable") from exc
 
         try:
+            return self.retrieve_for_lease(lease, query, query_vector=query_vector)
+        finally:
+            primary_failure = sys.exception()
+            try:
+                self._coordinator.release_read(lease)
+            except GenerationCoordinatorError as exc:
+                if primary_failure is None:
+                    raise GenerationRetrievalUnavailable("Dolphin generation read lease could not be released") from exc
+
+    def retrieve_for_lease(
+        self,
+        lease: GenerationReadLease,
+        query: str,
+        *,
+        query_vector: Sequence[float] | None,
+    ) -> GenerationRetrievalResult:
+        """Retrieve under caller-held authority without releasing its reader lease."""
+
+        try:
+            if self._coordinator.snapshot_for_lease(lease.lease_id) != lease.snapshot:
+                raise GenerationRetrievalUnavailable("Dolphin generation read lease changed before retrieval")
             keyword_hits = self._keyword_store.search(
                 lease.lease_id,
                 query,
@@ -114,10 +135,3 @@ class GenerationRetrievalService:
             raise
         except (GenerationCoordinatorError, GenerationKeywordError, GenerationVectorError) as exc:
             raise GenerationRetrievalUnavailable("Dolphin generation retrieval is unavailable") from exc
-        finally:
-            primary_failure = sys.exception()
-            try:
-                self._coordinator.release_read(lease)
-            except GenerationCoordinatorError as exc:
-                if primary_failure is None:
-                    raise GenerationRetrievalUnavailable("Dolphin generation read lease could not be released") from exc

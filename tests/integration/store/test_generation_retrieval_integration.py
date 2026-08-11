@@ -14,6 +14,7 @@ from kb.generation_content import StagedChunkMembership
 from kb.generation_vector import StagedGenerationVector
 from kb.runtime.storage import macos_storage_layout
 from kb.services.generation_retrieval import GenerationRetrievalService
+from kb.services.search_admission import SearchCoverageService
 from kb.services.workspace_registry import WorkspaceRegistry
 from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
@@ -23,7 +24,7 @@ from kb.store.generation_keyword import SQLiteGenerationKeywordStore
 from kb.store.generation_vector import LanceGenerationVectorStore
 
 
-def test_real_keyword_and_vector_stores_share_one_published_snapshot(
+def test_real_coverage_keyword_and_vector_stores_share_one_published_snapshot(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -85,11 +86,21 @@ def test_real_keyword_and_vector_stores_share_one_published_snapshot(
         expected_previous_generation_id=None,
     )
 
-    result = GenerationRetrievalService(
+    retrieval = GenerationRetrievalService(
         coordinator,
         SQLiteGenerationKeywordStore(layout, clock=lambda: now),
         vectors,
-    ).retrieve(registration.workspace_id, "needle", query_vector=_basis(1))
+    )
+    admission = SearchCoverageService(registry, coordinator)
+
+    with admission.admit([registration.workspace_id]) as coverage:
+        assert coverage.snapshots == (snapshot,)
+        result = retrieval.retrieve_for_lease(
+            coverage.workspaces[0].read_lease,
+            "needle",
+            query_vector=_basis(1),
+        )
+        admission.validate(coverage)
 
     assert result.snapshot == snapshot
     assert result.retrieval_mode == "hybrid"

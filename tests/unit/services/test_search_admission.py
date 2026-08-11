@@ -1,0 +1,354 @@
+"""Tests for all-or-nothing search coverage admission."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from kb.generation import (
+    GenerationCoordinatorError,
+    GenerationReadLease,
+    GenerationReadLeaseUnavailable,
+    PublishedSnapshot,
+)
+from kb.search_admission import (
+    SearchAdmissionInvalid,
+    SearchAdmissionUnavailable,
+    SearchIndexBuilding,
+    SearchOperationFailed,
+    SearchScopeFuseTripped,
+    SearchWorkspaceMissing,
+    SearchWorkspaceResolutionFailed,
+)
+from kb.services.search_admission import SearchCoverageService
+from kb.services.workspace_registry import (
+    OperationCountersSnapshot,
+    OperationPauseReason,
+    OperationSnapshot,
+    OperationState,
+    WorkspaceEffectiveState,
+    WorkspaceSnapshot,
+)
+from kb.services.workspace_resolution import WorkspaceResolution, WorkspaceResolutionOutcome
+
+_NOW = datetime(2026, 8, 10, tzinfo=UTC)
+
+
+def test_published_workspace_is_admitted_while_newer_indexing_continues() -> None:
+    workspace = _workspace("ws_ready", state="indexing")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    registry = _Registry(
+        {workspace.workspace_id: workspace},
+        {workspace.workspace_id: _operation(workspace.workspace_id, OperationState.RUNNING)},
+    )
+    service = SearchCoverageService(registry, coordinator)
+
+    with service.admit([workspace.workspace_id]) as coverage:
+        assert coverage.workspace_ids == (workspace.workspace_id,)
+        assert coverage.snapshots == (_published(workspace.workspace_id),)
+        service.validate(coverage)
+        assert coordinator.released == []
+
+    assert registry.operation_calls == []
+    assert coordinator.acquired == [workspace.workspace_id]
+    assert coordinator.validated == ["read_ws_ready"]
+    assert coordinator.released == ["read_ws_ready"]
+
+
+def test_incomplete_multi_workspace_scope_returns_every_blocker_before_acquiring_reads() -> None:
+    ready = _workspace("ws_ready", state="ready")
+    queued = _workspace("ws_queued", state="indexing")
+    paused = _workspace("ws_paused", state="indexing")
+    coordinator = _Coordinator(
+        {
+            ready.workspace_id: _published(ready.workspace_id),
+            queued.workspace_id: None,
+            paused.workspace_id: None,
+        }
+    )
+    registry = _Registry(
+        {item.workspace_id: item for item in (ready, queued, paused)},
+        {
+            queued.workspace_id: _operation(queued.workspace_id, OperationState.QUEUED),
+            paused.workspace_id: _operation(paused.workspace_id, OperationState.PAUSED, pause_reason="disk_pressure"),
+        },
+    )
+
+    with pytest.raises(SearchIndexBuilding) as failure:
+        with SearchCoverageService(registry, coordinator).admit(
+            [ready.workspace_id, queued.workspace_id, paused.workspace_id]
+        ):
+            raise AssertionError("incomplete coverage must not enter the search body")
+
+    assert [detail.workspace_id for detail in failure.value.details] == ["ws_paused", "ws_queued"]
+    assert failure.value.details[0].pause_reason == "disk_pressure"
+    assert coordinator.acquired == []
+
+
+def test_scope_fuse_takes_precedence_over_ordinary_index_building() -> None:
+    approval = _workspace("ws_approval", state="indexing")
+    queued = _workspace("ws_queued", state="indexing")
+    registry = _Registry(
+        {item.workspace_id: item for item in (approval, queued)},
+        {
+            approval.workspace_id: _operation(approval.workspace_id, OperationState.AWAITING_APPROVAL),
+            queued.workspace_id: _operation(queued.workspace_id, OperationState.QUEUED),
+        },
+    )
+    coordinator = _Coordinator({approval.workspace_id: None, queued.workspace_id: None})
+
+    with pytest.raises(SearchScopeFuseTripped) as failure:
+        with SearchCoverageService(registry, coordinator).admit([queued.workspace_id, approval.workspace_id]):
+            raise AssertionError("approval-blocked coverage must not enter the search body")
+
+    assert failure.value.detail.workspace_id == approval.workspace_id
+    assert coordinator.acquired == []
+
+
+@pytest.mark.parametrize("state", [OperationState.FAILED, OperationState.CANCELLED, OperationState.SUCCEEDED])
+def test_terminal_operation_without_a_publication_fails_closed(state: OperationState) -> None:
+    workspace = _workspace("ws_terminal", state="failed")
+    registry = _Registry(
+        {workspace.workspace_id: workspace},
+        {workspace.workspace_id: _operation(workspace.workspace_id, state)},
+    )
+    coordinator = _Coordinator({workspace.workspace_id: None})
+
+    with pytest.raises(SearchOperationFailed) as failure:
+        with SearchCoverageService(registry, coordinator).admit([workspace.workspace_id]):
+            raise AssertionError("terminal incomplete coverage must not be admitted")
+
+    assert failure.value.details[0].operation_state is state
+    assert coordinator.acquired == []
+
+
+def test_missing_duplicate_empty_and_unresolved_scopes_fail_before_lease_work() -> None:
+    coordinator = _Coordinator({})
+    service = SearchCoverageService(_Registry({}, {}), coordinator)
+
+    with pytest.raises(SearchWorkspaceMissing) as missing:
+        with service.admit(["ws_missing"]):
+            raise AssertionError
+    assert missing.value.workspace_ids == ("ws_missing",)
+
+    for invalid in ([], ["ws_same", "ws_same"]):
+        with pytest.raises(SearchAdmissionInvalid):
+            with service.admit(invalid):
+                raise AssertionError
+
+    with pytest.raises(SearchWorkspaceResolutionFailed):
+        with service.admit(None, current_resolution=WorkspaceResolution(outcome=WorkspaceResolutionOutcome.REQUIRED)):
+            raise AssertionError
+    assert coordinator.acquired == []
+
+
+def test_null_scope_uses_one_already_resolved_current_workspace() -> None:
+    workspace = _workspace("ws_current", state="ready")
+    registry = _Registry({workspace.workspace_id: workspace}, {})
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    resolution = WorkspaceResolution(outcome=WorkspaceResolutionOutcome.RESOLVED, workspace=workspace)
+
+    with SearchCoverageService(registry, coordinator).admit(None, current_resolution=resolution) as coverage:
+        assert coverage.workspace_ids == (workspace.workspace_id,)
+
+    assert coordinator.released == ["read_ws_current"]
+
+
+def test_partial_acquisition_failure_releases_every_prior_lease() -> None:
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    registry = _Registry({item.workspace_id: item for item in (first, second)}, {})
+    coordinator = _Coordinator(
+        {
+            first.workspace_id: _published(first.workspace_id),
+            second.workspace_id: _published(second.workspace_id),
+        },
+        acquire_error_for=second.workspace_id,
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
+        with SearchCoverageService(registry, coordinator).admit([second.workspace_id, first.workspace_id]):
+            raise AssertionError
+
+    assert coordinator.acquired == [first.workspace_id, second.workspace_id]
+    assert coordinator.released == ["read_ws_first"]
+
+
+def test_invalid_lease_authority_is_released_before_admission_fails() -> None:
+    workspace = _workspace("ws_expected", state="ready")
+    registry = _Registry({workspace.workspace_id: workspace}, {})
+    coordinator = _Coordinator(
+        {workspace.workspace_id: _published(workspace.workspace_id)},
+        acquired_snapshot_override=_published("ws_other"),
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="invalid workspace authority"):
+        with SearchCoverageService(registry, coordinator).admit([workspace.workspace_id]):
+            raise AssertionError
+
+    assert coordinator.released == ["read_ws_expected"]
+
+
+def test_release_failure_does_not_mask_partial_acquisition_failure() -> None:
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    registry = _Registry({item.workspace_id: item for item in (first, second)}, {})
+    coordinator = _Coordinator(
+        {
+            first.workspace_id: _published(first.workspace_id),
+            second.workspace_id: _published(second.workspace_id),
+        },
+        acquire_error_for=second.workspace_id,
+        release_error=True,
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
+        with SearchCoverageService(registry, coordinator).admit([first.workspace_id, second.workspace_id]):
+            raise AssertionError
+
+    assert coordinator.released == ["read_ws_first"]
+
+
+def test_validation_fails_closed_when_any_retained_snapshot_changes() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    registry = _Registry({workspace.workspace_id: workspace}, {})
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    service = SearchCoverageService(registry, coordinator)
+
+    with service.admit([workspace.workspace_id]) as coverage:
+        coordinator.validation_override = _published(workspace.workspace_id, revision=2)
+        with pytest.raises(SearchAdmissionUnavailable, match="changed"):
+            service.validate(coverage)
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
+class _Registry:
+    def __init__(
+        self,
+        workspaces: dict[str, WorkspaceSnapshot],
+        operations: dict[str, OperationSnapshot],
+    ) -> None:
+        self.workspaces = workspaces
+        self.operations = operations
+        self.operation_calls: list[str] = []
+
+    def inspect_workspace(self, workspace_id: str) -> WorkspaceSnapshot | None:
+        return self.workspaces.get(workspace_id)
+
+    def inspect_latest_workspace_operation(self, workspace_id: str) -> OperationSnapshot | None:
+        self.operation_calls.append(workspace_id)
+        return self.operations.get(workspace_id)
+
+
+class _Coordinator:
+    def __init__(
+        self,
+        snapshots: dict[str, PublishedSnapshot | None],
+        *,
+        acquire_error_for: str | None = None,
+        acquired_snapshot_override: PublishedSnapshot | None = None,
+        release_error: bool = False,
+    ) -> None:
+        self.snapshots = snapshots
+        self.acquire_error_for = acquire_error_for
+        self.acquired_snapshot_override = acquired_snapshot_override
+        self.release_error = release_error
+        self.acquired: list[str] = []
+        self.released: list[str] = []
+        self.validated: list[str] = []
+        self.validation_override: PublishedSnapshot | None = None
+
+    def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None:
+        return self.snapshots[workspace_id]
+
+    def acquire_read(self, workspace_id: str, *, lease_duration: timedelta) -> GenerationReadLease:
+        assert lease_duration == timedelta(seconds=30)
+        self.acquired.append(workspace_id)
+        if workspace_id == self.acquire_error_for:
+            raise GenerationReadLeaseUnavailable("changed")
+        snapshot = self.snapshots[workspace_id]
+        assert snapshot is not None
+        return GenerationReadLease(
+            lease_id=f"read_{workspace_id}",
+            snapshot=self.acquired_snapshot_override or snapshot,
+            acquired_at=_NOW,
+            expires_at=_NOW + lease_duration,
+        )
+
+    def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot:
+        self.validated.append(lease_id)
+        if self.validation_override is not None:
+            return self.validation_override
+        workspace_id = lease_id.removeprefix("read_")
+        snapshot = self.snapshots[workspace_id]
+        assert snapshot is not None
+        return snapshot
+
+    def release_read(self, lease: GenerationReadLease) -> None:
+        self.released.append(lease.lease_id)
+        if self.release_error:
+            raise GenerationCoordinatorError("release failed")
+
+
+def _workspace(workspace_id: str, *, state: WorkspaceEffectiveState) -> WorkspaceSnapshot:
+    return WorkspaceSnapshot(
+        workspace_id=workspace_id,
+        repository_id=f"repo_{workspace_id}",
+        repository_display_name=workspace_id,
+        workspace_display_name=workspace_id,
+        root=f"/repos/{workspace_id}",
+        branch="main",
+        head_commit="a" * 40,
+        state=state,
+    )
+
+
+def _operation(
+    workspace_id: str,
+    state: OperationState,
+    *,
+    pause_reason: OperationPauseReason | None = None,
+) -> OperationSnapshot:
+    return OperationSnapshot(
+        operation_id=f"op_{workspace_id}",
+        workspace_id=workspace_id,
+        kind="initial_index",
+        state=state,
+        target_head_commit="a" * 40,
+        attempt=1,
+        created_at=_NOW,
+        updated_at=_NOW,
+        terminal_at=_NOW
+        if state in {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.CANCELLED}
+        else None,
+        phase="preflight",
+        counters=OperationCountersSnapshot(known_eligible_files=10, processed_files=2),
+        pause_reason=pause_reason,
+        pipeline_key="pipeline-v1",
+    )
+
+
+def _published(workspace_id: str, *, revision: int = 1) -> PublishedSnapshot:
+    return PublishedSnapshot(
+        publication_id=f"publication_{workspace_id}_{revision}",
+        generation_id=f"generation_{workspace_id}_{revision}",
+        workspace_id=workspace_id,
+        operation_id=f"op_{workspace_id}",
+        target_fingerprint="a" * 64,
+        pipeline_key="pipeline-v1",
+        manifest_id=f"manifest_{workspace_id}",
+        manifest_digest="b" * 64,
+        vector_commit_token=f"vector-{workspace_id}",
+        vector_digest="c" * 64,
+        vector_row_count=1,
+        vector_provider="openai",
+        vector_model="text-embedding-3-small",
+        vector_dimensions=1_536,
+        embedding_contract_version=1,
+        metadata_item_count=1,
+        keyword_item_count=1,
+        revision=revision,
+        published_at=_NOW,
+    )

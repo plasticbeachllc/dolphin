@@ -191,6 +191,35 @@ async def test_failed_or_cancelled_initial_index_is_retried_as_a_new_attempt(
 
 
 @pytest.mark.asyncio
+async def test_latest_workspace_operation_returns_the_newest_attempt(tmp_path: Path) -> None:
+    worktree_root = _commit_repository(tmp_path / "repository")
+    home = tmp_path / "home"
+    home.mkdir()
+    registry = WorkspaceRegistry(macos_storage_layout(home=home))
+    registration, first = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("latest-workspace-operation"),
+    )
+    registry.finish_operation(
+        _claim_operation(registry, first),
+        OperationState.FAILED,
+        observed_at=datetime.now(UTC),
+    )
+    _, retry = registry.register_and_submit_initial_index(
+        await discover_git_worktree(worktree_root),
+        cleanup_receipt=_cleanup_receipt("latest-workspace-operation"),
+    )
+
+    latest = registry.inspect_latest_workspace_operation(registration.workspace_id)
+
+    assert latest is not None
+    assert latest.operation_id == retry.operation_id
+    assert latest.attempt == 2
+    assert latest.state is OperationState.QUEUED
+    assert registry.inspect_latest_workspace_operation("ws_missing") is None
+
+
+@pytest.mark.asyncio
 async def test_terminal_operation_cannot_be_restarted(tmp_path: Path) -> None:
     worktree_root = _commit_repository(tmp_path / "repository")
     home = tmp_path / "home"
@@ -725,6 +754,13 @@ def test_operation_snapshot_expires_terminal_status_without_extending_it(
     assert (
         registry.inspect_operation(
             operation.operation_id,
+            now=snapshot.terminal_at + timedelta(days=30),
+        )
+        is None
+    )
+    assert (
+        registry.inspect_latest_workspace_operation(
+            operation.workspace_id,
             now=snapshot.terminal_at + timedelta(days=30),
         )
         is None
