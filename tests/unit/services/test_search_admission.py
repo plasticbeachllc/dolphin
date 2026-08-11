@@ -321,6 +321,43 @@ def test_unexpected_lease_keeper_failure_fails_the_request_clearly(
     assert coordinator.released == ["read_ws_ready"]
 
 
+def test_blocked_renewal_is_bounded_and_releases_admission_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(search_admission_module, "_SEARCH_ADMISSION_CAPACITY", BoundedSemaphore(1))
+    renew_started = Event()
+    allow_renewal = Event()
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    first_coordinator = _Coordinator(
+        {first.workspace_id: _published(first.workspace_id)},
+        renew_blocker=(renew_started, allow_renewal),
+    )
+    second_coordinator = _Coordinator({second.workspace_id: _published(second.workspace_id)})
+
+    try:
+        with pytest.raises(SearchAdmissionUnavailable, match="renewal failed unexpectedly"):
+            with SearchCoverageService(
+                _Registry({first.workspace_id: first}, {}),
+                first_coordinator,
+            ).admit([first.workspace_id]):
+                assert renew_started.wait(timeout=1)
+                time.sleep(0.03)
+
+        with SearchCoverageService(
+            _Registry({second.workspace_id: second}, {}),
+            second_coordinator,
+        ).admit([second.workspace_id]):
+            pass
+    finally:
+        allow_renewal.set()
+
+    assert first_coordinator.released == ["read_ws_first"]
+    assert second_coordinator.released == ["read_ws_second"]
+
+
 def test_search_admission_has_a_bounded_global_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(search_admission_module, "_SEARCH_ADMISSION_CAPACITY", BoundedSemaphore(1))
     first = _workspace("ws_first", state="ready")

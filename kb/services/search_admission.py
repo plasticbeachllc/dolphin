@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import queue
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
@@ -38,12 +39,57 @@ from kb.services.workspace_resolution import WorkspaceResolution, WorkspaceResol
 
 _SEARCH_READ_LEASE_DURATION = timedelta(seconds=30)
 _SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS = 5.0
+_SEARCH_READ_LEASE_RENEW_TIMEOUT_SECONDS = 2.0
 _SEARCH_READ_LEASE_KEEPER_STOP_SECONDS = 5.0
 _SEARCH_CALL_DEADLINE_SECONDS = 30.0
 _SEARCH_CALL_DRAIN_SECONDS = 12.0
 _SEARCH_ADMISSION_CAPACITY = BoundedSemaphore(8)
 _MAX_SEARCH_SCOPE_WORKSPACES = 32
 _LEASE_RELEASE_ATTEMPTS = 3
+_MAX_CONCURRENT_RENEWAL_CALLS = 8
+
+
+class _CoordinatorDeadlineRunner:
+    """Bound blocking coordinator calls without allowing unbounded worker growth."""
+
+    def __init__(self) -> None:
+        self._slots = BoundedSemaphore(_MAX_CONCURRENT_RENEWAL_CALLS)
+
+    def call(self, operation: Callable[[], None], *, timeout: float) -> None:
+        started_at = monotonic()
+        if not self._slots.acquire(timeout=timeout):
+            raise TimeoutError("Dolphin search renewal workers are occupied")
+        completed: queue.Queue[BaseException | None] = queue.Queue(maxsize=1)
+
+        def run() -> None:
+            try:
+                try:
+                    operation()
+                except BaseException as exc:
+                    completed.put(exc)
+                else:
+                    completed.put(None)
+            finally:
+                self._slots.release()
+
+        try:
+            Thread(target=run, name="dolphin-search-renewal", daemon=True).start()
+        except RuntimeError:
+            self._slots.release()
+            raise
+
+        remaining = timeout - (monotonic() - started_at)
+        if remaining <= 0:
+            raise TimeoutError("Dolphin search reader lease renewal exceeded its deadline")
+        try:
+            failure = completed.get(timeout=remaining)
+        except queue.Empty as exc:
+            raise TimeoutError("Dolphin search reader lease renewal exceeded its deadline") from exc
+        if failure is not None:
+            raise failure
+
+
+_COORDINATOR_DEADLINES = _CoordinatorDeadlineRunner()
 
 
 class _WorkspaceCoverageRegistry(Protocol):
@@ -125,10 +171,16 @@ class _CoverageLeaseKeeper:
                 if self._stop.wait(min(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS, remaining)):
                     return
                 try:
-                    self._coordinator.renew_reads(
-                        self._leases,
-                        lease_duration=_SEARCH_READ_LEASE_DURATION,
+                    _COORDINATOR_DEADLINES.call(
+                        lambda: self._coordinator.renew_reads(
+                            self._leases,
+                            lease_duration=_SEARCH_READ_LEASE_DURATION,
+                        ),
+                        timeout=_SEARCH_READ_LEASE_RENEW_TIMEOUT_SECONDS,
                     )
+                except TimeoutError:
+                    self._failed.set()
+                    return
                 except GenerationCoordinatorError:
                     # A transient missed renewal is safe while the existing authority is
                     # live. Later renewals may recover; final validation fails closed if not.
@@ -139,9 +191,11 @@ class _CoverageLeaseKeeper:
                     self._failed.set()
                     return
         finally:
-            self._release_leases()
             self._admission_capacity.release()
-            self._done.set()
+            try:
+                self._release_leases()
+            finally:
+                self._done.set()
 
     def _release_leases(self) -> None:
         for _attempt in range(_LEASE_RELEASE_ATTEMPTS):
