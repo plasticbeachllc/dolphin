@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import timedelta
 from threading import BoundedSemaphore, Event, Thread
 from time import monotonic
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 from kb.generation import GenerationCoordinatorError, GenerationReadLease, PublishedSnapshot
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
@@ -47,17 +47,20 @@ _SEARCH_ADMISSION_CAPACITY = BoundedSemaphore(8)
 _MAX_SEARCH_SCOPE_WORKSPACES = 32
 _LEASE_RELEASE_ATTEMPTS = 3
 _MAX_CONCURRENT_RENEWAL_CALLS = 8
+_ResultT = TypeVar("_ResultT")
 
 
 class _CoordinatorDeadlineRunner:
-    """Bound blocking coordinator calls without allowing unbounded worker growth."""
+    """Bound coordinator workers while retaining one isolated recovery lane."""
 
-    def __init__(self) -> None:
-        self._slots = BoundedSemaphore(_MAX_CONCURRENT_RENEWAL_CALLS)
+    def __init__(self, *, capacity: int = _MAX_CONCURRENT_RENEWAL_CALLS) -> None:
+        self._slots = BoundedSemaphore(capacity)
+        self._recovery_slot = BoundedSemaphore(1)
 
     def call(self, operation: Callable[[], None], *, timeout: float) -> None:
         started_at = monotonic()
-        if not self._slots.acquire(timeout=timeout):
+        slot = self._slots if self._slots.acquire(blocking=False) else self._recovery_slot
+        if slot is self._recovery_slot and not slot.acquire(timeout=timeout):
             raise TimeoutError("Dolphin search renewal workers are occupied")
         completed: queue.Queue[BaseException | None] = queue.Queue(maxsize=1)
 
@@ -70,12 +73,12 @@ class _CoordinatorDeadlineRunner:
                 else:
                     completed.put(None)
             finally:
-                self._slots.release()
+                slot.release()
 
         try:
             Thread(target=run, name="dolphin-search-renewal", daemon=True).start()
         except RuntimeError:
-            self._slots.release()
+            slot.release()
             raise
 
         remaining = timeout - (monotonic() - started_at)
@@ -156,6 +159,9 @@ class _CoverageLeaseKeeper:
             self._deadline_exceeded.set()
         return self._deadline_exceeded.is_set()
 
+    def authority_unavailable(self) -> bool:
+        return self.failed or self.deadline_exceeded()
+
     @property
     def cleanup_failed(self) -> bool:
         return self._cleanup_failed.is_set()
@@ -180,6 +186,7 @@ class _CoverageLeaseKeeper:
                     )
                 except TimeoutError:
                     self._failed.set()
+                    self._stop.wait(_SEARCH_CALL_DRAIN_SECONDS)
                     return
                 except GenerationCoordinatorError:
                     # A transient missed renewal is safe while the existing authority is
@@ -189,6 +196,7 @@ class _CoverageLeaseKeeper:
                     # Coordinator implementations must normalize backend failures. Record
                     # any contract violation so this request fails clearly at its boundary.
                     self._failed.set()
+                    self._stop.wait(_SEARCH_CALL_DRAIN_SECONDS)
                     return
         finally:
             self._admission_capacity.release()
@@ -221,8 +229,20 @@ class SearchCoverageService:
         self._registry = registry
         self._coordinator = coordinator
 
+    def execute(
+        self,
+        workspace_ids: Sequence[str] | None,
+        operation: Callable[[SearchCoverage], _ResultT],
+        *,
+        current_resolution: WorkspaceResolution | None = None,
+    ) -> _ResultT:
+        """Return a materialized result only after its exact coverage validates."""
+
+        with self._admit(workspace_ids, current_resolution=current_resolution) as coverage:
+            return operation(coverage)
+
     @contextmanager
-    def admit(
+    def _admit(
         self,
         workspace_ids: Sequence[str] | None,
         *,
@@ -260,7 +280,7 @@ class SearchCoverageService:
 
         keeper = _CoverageLeaseKeeper(self._coordinator, admitted, admission_capacity)
         coverage = SearchCoverage(
-            workspaces=tuple(replace(item, deadline_exceeded=keeper.deadline_exceeded) for item in admitted)
+            workspaces=tuple(replace(item, deadline_exceeded=keeper.authority_unavailable) for item in admitted)
         )
         try:
             keeper.start()

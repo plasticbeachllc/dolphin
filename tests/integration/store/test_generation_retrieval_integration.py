@@ -17,6 +17,7 @@ from kb.generation import PublishedSnapshot
 from kb.generation_content import StagedChunkMembership
 from kb.generation_vector import StagedGenerationVector
 from kb.runtime.storage import macos_storage_layout
+from kb.search_admission import SearchCoverage
 from kb.services import search_admission as search_admission_module
 from kb.services.generation_retrieval import GenerationRetrievalService
 from kb.services.search_admission import SearchCoverageService
@@ -60,14 +61,15 @@ def test_real_coverage_keyword_and_vector_stores_share_one_published_snapshot(
     )
     admission = SearchCoverageService(registry, coordinator)
 
-    with admission.admit([registration.workspace_id]) as coverage:
+    def retrieve(coverage: SearchCoverage):
         assert coverage.snapshots == (snapshot,)
-        result = retrieval.retrieve_for_admitted_workspace(
+        return retrieval.retrieve_for_admitted_workspace(
             coverage.workspaces[0],
             "needle",
             query_vector=_basis(1),
         )
-        admission.validate(coverage)
+
+    result = admission.execute([registration.workspace_id], retrieve)
 
     assert result.snapshot == snapshot
     assert result.retrieval_mode == "hybrid"
@@ -120,14 +122,18 @@ def test_slow_multi_workspace_retrieval_renews_all_real_reader_leases(
         vectors,
     )
 
-    with SearchCoverageService(registry, coordinator).admit(
-        [first[0].workspace_id, second[0].workspace_id]
-    ) as coverage:
+    def retrieve(coverage: SearchCoverage):
         clock.advance(seconds=25)
         time.sleep(0.04)
         first_result = retrieval.retrieve_for_admitted_workspace(coverage.workspaces[0], "needle", query_vector=None)
         clock.advance(seconds=25)
         second_result = retrieval.retrieve_for_admitted_workspace(coverage.workspaces[1], "needle", query_vector=None)
+        return first_result, second_result
+
+    first_result, second_result = SearchCoverageService(registry, coordinator).execute(
+        [first[0].workspace_id, second[0].workspace_id],
+        retrieve,
+    )
 
     assert {first_result.snapshot, second_result.snapshot} == {first[1], second[1]}
     with sqlite3.connect(layout.metadata_db) as connection:

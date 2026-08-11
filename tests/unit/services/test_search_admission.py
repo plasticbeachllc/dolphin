@@ -26,7 +26,7 @@ from kb.search_admission import (
     SearchWorkspaceResolutionFailed,
 )
 from kb.services import search_admission as search_admission_module
-from kb.services.search_admission import SearchCoverageService
+from kb.services.search_admission import SearchCoverageService, _CoordinatorDeadlineRunner
 from kb.services.workspace_registry import (
     OperationCountersSnapshot,
     OperationPauseReason,
@@ -49,7 +49,7 @@ def test_published_workspace_is_admitted_while_newer_indexing_continues() -> Non
     )
     service = SearchCoverageService(registry, coordinator)
 
-    with service.admit([workspace.workspace_id]) as coverage:
+    with service._admit([workspace.workspace_id]) as coverage:
         assert coverage.workspace_ids == (workspace.workspace_id,)
         assert coverage.snapshots == (_published(workspace.workspace_id),)
         service.validate(coverage)
@@ -81,7 +81,7 @@ def test_incomplete_multi_workspace_scope_returns_every_blocker_before_acquiring
     )
 
     with pytest.raises(SearchIndexBuilding) as failure:
-        with SearchCoverageService(registry, coordinator).admit(
+        with SearchCoverageService(registry, coordinator)._admit(
             [ready.workspace_id, queued.workspace_id, paused.workspace_id]
         ):
             raise AssertionError("incomplete coverage must not enter the search body")
@@ -104,7 +104,7 @@ def test_scope_fuse_takes_precedence_over_ordinary_index_building() -> None:
     coordinator = _Coordinator({approval.workspace_id: None, queued.workspace_id: None})
 
     with pytest.raises(SearchScopeFuseTripped) as failure:
-        with SearchCoverageService(registry, coordinator).admit([queued.workspace_id, approval.workspace_id]):
+        with SearchCoverageService(registry, coordinator)._admit([queued.workspace_id, approval.workspace_id]):
             raise AssertionError("approval-blocked coverage must not enter the search body")
 
     assert failure.value.detail.workspace_id == approval.workspace_id
@@ -121,7 +121,7 @@ def test_terminal_operation_without_a_publication_fails_closed(state: OperationS
     coordinator = _Coordinator({workspace.workspace_id: None})
 
     with pytest.raises(SearchOperationFailed) as failure:
-        with SearchCoverageService(registry, coordinator).admit([workspace.workspace_id]):
+        with SearchCoverageService(registry, coordinator)._admit([workspace.workspace_id]):
             raise AssertionError("terminal incomplete coverage must not be admitted")
 
     assert failure.value.details[0].operation_state is state
@@ -133,22 +133,22 @@ def test_missing_duplicate_empty_and_unresolved_scopes_fail_before_lease_work() 
     service = SearchCoverageService(_Registry({}, {}), coordinator)
 
     with pytest.raises(SearchWorkspaceMissing) as missing:
-        with service.admit(["ws_missing"]):
+        with service._admit(["ws_missing"]):
             raise AssertionError
     assert missing.value.workspace_ids == ("ws_missing",)
 
     for invalid in ([], ["ws_same", "ws_same"], [f"ws_{index}" for index in range(33)]):
         with pytest.raises(SearchAdmissionInvalid):
-            with service.admit(invalid):
+            with service._admit(invalid):
                 raise AssertionError
 
     for invalid_container in ("ws_ready", cast(Sequence[str], iter(["ws_ready"]))):
         with pytest.raises(SearchAdmissionInvalid, match="bounded sequence"):
-            with service.admit(invalid_container):
+            with service._admit(invalid_container):
                 raise AssertionError
 
     with pytest.raises(SearchWorkspaceResolutionFailed):
-        with service.admit(None, current_resolution=WorkspaceResolution(outcome=WorkspaceResolutionOutcome.REQUIRED)):
+        with service._admit(None, current_resolution=WorkspaceResolution(outcome=WorkspaceResolutionOutcome.REQUIRED)):
             raise AssertionError
     assert coordinator.acquired == []
 
@@ -159,7 +159,7 @@ def test_null_scope_uses_one_already_resolved_current_workspace() -> None:
     coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
     resolution = WorkspaceResolution(outcome=WorkspaceResolutionOutcome.RESOLVED, workspace=workspace)
 
-    with SearchCoverageService(registry, coordinator).admit(None, current_resolution=resolution) as coverage:
+    with SearchCoverageService(registry, coordinator)._admit(None, current_resolution=resolution) as coverage:
         assert coverage.workspace_ids == (workspace.workspace_id,)
 
     assert coordinator.released == ["read_ws_current"]
@@ -178,7 +178,7 @@ def test_partial_acquisition_failure_releases_every_prior_lease() -> None:
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
-        with SearchCoverageService(registry, coordinator).admit([second.workspace_id, first.workspace_id]):
+        with SearchCoverageService(registry, coordinator)._admit([second.workspace_id, first.workspace_id]):
             raise AssertionError
 
     assert coordinator.acquired == [first.workspace_id, second.workspace_id]
@@ -194,7 +194,7 @@ def test_invalid_lease_authority_is_released_before_admission_fails() -> None:
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="invalid workspace authority"):
-        with SearchCoverageService(registry, coordinator).admit([workspace.workspace_id]):
+        with SearchCoverageService(registry, coordinator)._admit([workspace.workspace_id]):
             raise AssertionError
 
     assert coordinator.released == ["read_ws_expected"]
@@ -214,7 +214,7 @@ def test_release_failure_does_not_mask_partial_acquisition_failure() -> None:
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
-        with SearchCoverageService(registry, coordinator).admit([first.workspace_id, second.workspace_id]):
+        with SearchCoverageService(registry, coordinator)._admit([first.workspace_id, second.workspace_id]):
             raise AssertionError
 
     assert coordinator.released == ["read_ws_first"]
@@ -236,7 +236,7 @@ def test_unexpected_release_failure_releases_remaining_leases_and_admission_capa
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
-        with SearchCoverageService(_Registry(workspaces, {}), failing_coordinator).admit(tuple(workspaces)):
+        with SearchCoverageService(_Registry(workspaces, {}), failing_coordinator)._admit(tuple(workspaces)):
             raise AssertionError
 
     assert failing_coordinator.released == ["read_ws_second", "read_ws_first"]
@@ -245,7 +245,7 @@ def test_unexpected_release_failure_releases_remaining_leases_and_admission_capa
     with SearchCoverageService(
         _Registry({first.workspace_id: first}, {}),
         recovery_coordinator,
-    ).admit([first.workspace_id]):
+    )._admit([first.workspace_id]):
         pass
 
 
@@ -255,11 +255,26 @@ def test_validation_fails_closed_when_any_retained_snapshot_changes() -> None:
     coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
     service = SearchCoverageService(registry, coordinator)
 
-    with service.admit([workspace.workspace_id]) as coverage:
+    with service._admit([workspace.workspace_id]) as coverage:
         coordinator.validation_override = _published(workspace.workspace_id, revision=2)
         with pytest.raises(SearchAdmissionUnavailable, match="changed"):
             service.validate(coverage)
         coordinator.validation_override = None
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
+def test_execute_does_not_return_a_materialized_result_until_coverage_validates() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+    service = SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)
+
+    def materialize(_coverage: object) -> str:
+        coordinator.validation_override = _published(workspace.workspace_id, revision=2)
+        return "unsafe-result"
+
+    with pytest.raises(SearchAdmissionUnavailable, match="changed"):
+        service.execute([workspace.workspace_id], materialize)
 
     assert coordinator.released == ["read_ws_ready"]
 
@@ -272,7 +287,7 @@ def test_unexpected_final_validation_error_still_closes_the_keeper() -> None:
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="validation failed unexpectedly"):
-        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
             [workspace.workspace_id]
         ):
             pass
@@ -294,7 +309,7 @@ def test_slow_multi_workspace_work_renews_the_complete_lease_set(
         }
     )
 
-    with SearchCoverageService(registry, coordinator).admit([first.workspace_id, second.workspace_id]):
+    with SearchCoverageService(registry, coordinator)._admit([first.workspace_id, second.workspace_id]):
         time.sleep(0.035)
 
     assert coordinator.renewed
@@ -313,7 +328,7 @@ def test_unexpected_lease_keeper_failure_fails_the_request_clearly(
     )
 
     with pytest.raises(SearchAdmissionUnavailable, match="renewal failed unexpectedly"):
-        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
             [workspace.workspace_id]
         ):
             time.sleep(0.025)
@@ -342,20 +357,43 @@ def test_blocked_renewal_is_bounded_and_releases_admission_capacity(
             with SearchCoverageService(
                 _Registry({first.workspace_id: first}, {}),
                 first_coordinator,
-            ).admit([first.workspace_id]):
+            )._admit([first.workspace_id]):
                 assert renew_started.wait(timeout=1)
                 time.sleep(0.03)
+                assert first_coordinator.released == []
 
         with SearchCoverageService(
             _Registry({second.workspace_id: second}, {}),
             second_coordinator,
-        ).admit([second.workspace_id]):
+        )._admit([second.workspace_id]):
             pass
     finally:
         allow_renewal.set()
 
     assert first_coordinator.released == ["read_ws_first"]
     assert second_coordinator.released == ["read_ws_second"]
+
+
+def test_renewal_deadline_runner_retains_a_bounded_recovery_lane() -> None:
+    runner = _CoordinatorDeadlineRunner(capacity=2)
+    allow_blocked_calls = Event()
+    started = (Event(), Event())
+
+    def blocked_call(index: int) -> None:
+        started[index].set()
+        allow_blocked_calls.wait()
+
+    try:
+        for index in range(2):
+            with pytest.raises(TimeoutError, match="exceeded its deadline"):
+                runner.call(lambda index=index: blocked_call(index), timeout=0.01)
+            assert started[index].is_set()
+
+        completed: list[bool] = []
+        runner.call(lambda: completed.append(True), timeout=0.1)
+        assert completed == [True]
+    finally:
+        allow_blocked_calls.set()
 
 
 def test_search_admission_has_a_bounded_global_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -371,12 +409,12 @@ def test_search_admission_has_a_bounded_global_capacity(monkeypatch: pytest.Monk
         _Coordinator({second.workspace_id: _published(second.workspace_id)}),
     )
 
-    with first_service.admit([first.workspace_id]):
+    with first_service._admit([first.workspace_id]):
         with pytest.raises(SearchAdmissionUnavailable, match="bounded capacity"):
-            with second_service.admit([second.workspace_id]):
+            with second_service._admit([second.workspace_id]):
                 raise AssertionError
 
-    with second_service.admit([second.workspace_id]):
+    with second_service._admit([second.workspace_id]):
         pass
 
 
@@ -387,7 +425,7 @@ def test_keeper_deadline_stops_renewal_and_releases_authority(monkeypatch: pytes
     coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
 
     with pytest.raises(SearchAdmissionUnavailable, match="bounded read deadline"):
-        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
             [workspace.workspace_id]
         ):
             time.sleep(0.05)
@@ -403,7 +441,7 @@ def test_close_immediately_after_fixed_deadline_cannot_bypass_timeout(monkeypatc
     coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
 
     with pytest.raises(SearchAdmissionUnavailable, match="bounded read deadline"):
-        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
             [workspace.workspace_id]
         ):
             current[0] = 40.0
@@ -424,7 +462,7 @@ def test_keeper_owns_delayed_cleanup_after_close_timeout(monkeypatch: pytest.Mon
 
     try:
         with pytest.raises(SearchAdmissionUnavailable, match="cleanup is still completing safely"):
-            with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+            with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
                 [workspace.workspace_id]
             ):
                 assert renew_started.wait(timeout=1)
@@ -443,7 +481,7 @@ def test_keeper_retries_transient_release_failure() -> None:
         release_failures=1,
     )
 
-    with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+    with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator)._admit(
         [workspace.workspace_id]
     ):
         pass
