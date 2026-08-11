@@ -1359,7 +1359,7 @@ class WorkspaceRegistry:
                             dimensions INTEGER NOT NULL CHECK (dimensions = 1536),
                             contract_version INTEGER NOT NULL CHECK (contract_version = 1),
                             vector BLOB NOT NULL CHECK (length(vector) = 6144),
-                            vector_digest TEXT NOT NULL CHECK (length(vector_digest) = 64),
+                            entry_mac TEXT NOT NULL CHECK (length(entry_mac) = 64),
                             created_at TEXT NOT NULL CHECK (length(created_at) BETWEEN 1 AND 64)
                         ) STRICT
                         """

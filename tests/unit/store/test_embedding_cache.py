@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -80,6 +81,8 @@ def test_round_trip_persists_no_raw_embedding_input(tmp_path: Path) -> None:
     assert database.parent.joinpath("query-cache.key").stat().st_mode & 0o077 == 0
     assert database.parent.joinpath("query-cache.key").read_bytes() not in database.read_bytes()
     assert "input_utf8_bytes" not in columns
+    assert "entry_mac" in columns
+    assert "vector_digest" not in columns
     assert eviction_index == ("embedding_cache_entries_created",)
     assert eviction_columns == [("created_at",), ("cache_key",)]
 
@@ -197,13 +200,13 @@ def test_expired_entry_is_a_read_miss_without_mutating_cache_state(tmp_path: Pat
         assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
 
 
-@pytest.mark.parametrize("column", ["vector_digest", "model", "contract_version", "created_at"])
+@pytest.mark.parametrize("column", ["entry_mac", "model", "contract_version", "created_at"])
 def test_corrupt_persisted_binding_fails_closed(tmp_path: Path, column: str) -> None:
     cache, database = _cache(tmp_path)
     identity = identify_embedding_input("query")
     cache.put(identity, _vector())
     values: dict[str, object] = {
-        "vector_digest": "0" * 64,
+        "entry_mac": "0" * 64,
         "model": "text-embedding-3-large",
         "contract_version": identity.contract_version + 1,
         "created_at": "not-a-timestamp",
@@ -214,6 +217,42 @@ def test_corrupt_persisted_binding_fails_closed(tmp_path: Path, column: str) -> 
         connection.commit()
 
     with pytest.raises(EmbeddingCacheCorrupt):
+        cache.get(identity)
+
+
+def test_unkeyed_vector_digest_forgery_fails_closed(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    identity = identify_embedding_input("query")
+    cache.put(identity, _vector())
+    forged_payload = embedding_cache_module._VECTOR_BYTES.pack(*_vector(0.25))
+    with sqlite3.connect(database) as connection:
+        durable_cache_key = connection.execute("SELECT cache_key FROM embedding_cache_entries").fetchone()[0]
+        legacy_digest = hashlib.sha256()
+        legacy_digest.update(b"dolphin:embedding-cache-vector:v1\x00")
+        legacy_digest.update(durable_cache_key.encode("ascii"))
+        legacy_digest.update(forged_payload)
+        connection.execute(
+            "UPDATE embedding_cache_entries SET vector = ?, entry_mac = ?",
+            (forged_payload, legacy_digest.hexdigest()),
+        )
+        connection.commit()
+
+    with pytest.raises(EmbeddingCacheCorrupt, match="entry MAC"):
+        cache.get(identity)
+
+
+def test_valid_looking_timestamp_extension_fails_entry_authentication(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    identity = identify_embedding_input("query")
+    cache.put(identity, _vector())
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE embedding_cache_entries SET created_at = ?",
+            ("2036-08-10T00:00:00+00:00",),
+        )
+        connection.commit()
+
+    with pytest.raises(EmbeddingCacheCorrupt, match="entry MAC"):
         cache.get(identity)
 
 

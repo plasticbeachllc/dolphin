@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import sqlite3
 import struct
@@ -25,8 +24,9 @@ _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 250
 _MAX_CACHE_ENTRIES = 8_192
 _CACHE_ENTRY_MAX_AGE = timedelta(days=30)
 _VECTOR_BYTES = struct.Struct(f"!{EMBEDDING_DIMENSIONS}f")
-_VECTOR_DIGEST_DOMAIN = b"dolphin:embedding-cache-vector:v1\x00"
+_ENTRY_MAC_DOMAIN = b"dolphin:embedding-cache-entry:v2\x00"
 _DURABLE_CACHE_KEY_DOMAIN = b"dolphin:query-cache-key:v1\x00"
+_MAC_FIELD_LENGTH = struct.Struct("!I")
 
 
 class EmbeddingCacheError(RuntimeError):
@@ -58,11 +58,12 @@ class SQLiteEmbeddingCache:
     def get(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
         _require_fixed_identity(identity)
         with self._connection(read_only=True) as connection:
-            durable_cache_key = self._durable_cache_key(connection, identity)
+            secret = self._identity_secret_for(connection)
+            durable_cache_key = _durable_cache_key(secret, identity)
             row = connection.execute(
                 """
                 SELECT cache_key, format, provider, model, dimensions, contract_version,
-                       vector, vector_digest, created_at
+                       vector, entry_mac, created_at
                 FROM embedding_cache_entries
                 WHERE cache_key = ?
                 """,
@@ -70,7 +71,7 @@ class SQLiteEmbeddingCache:
             ).fetchone()
         if row is None:
             return None
-        cached = _cached_embedding(identity, durable_cache_key, row)
+        cached = _cached_embedding(identity, durable_cache_key, secret, row)
         if _require_persisted_timestamp(row[8]) <= _utc_datetime(self._clock()) - _CACHE_ENTRY_MAX_AGE:
             return None
         return cached
@@ -87,19 +88,20 @@ class SQLiteEmbeddingCache:
         created_at = _timestamp(now)
         with self._connection() as connection:
             try:
-                durable_cache_key = self._durable_cache_key(connection, identity)
-                digest = _vector_digest(durable_cache_key, payload)
+                secret = self._identity_secret_for(connection)
+                durable_cache_key = _durable_cache_key(secret, identity)
+                entry_mac = _entry_mac(secret, durable_cache_key, identity, payload, created_at)
                 connection.execute("BEGIN IMMEDIATE")
                 row = _embedding_row(connection, durable_cache_key)
                 if row is not None:
                     connection.commit()
-                    return _cached_embedding(identity, durable_cache_key, row)
+                    return _cached_embedding(identity, durable_cache_key, secret, row)
                 _prune_cache_for_insert(connection, now)
                 connection.execute(
                     """
                     INSERT INTO embedding_cache_entries (
                         cache_key, format, provider, model, dimensions, contract_version,
-                        vector, vector_digest, created_at
+                        vector, entry_mac, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -110,7 +112,7 @@ class SQLiteEmbeddingCache:
                         identity.dimensions,
                         identity.contract_version,
                         payload,
-                        digest,
+                        entry_mac,
                         created_at,
                     ),
                 )
@@ -121,13 +123,12 @@ class SQLiteEmbeddingCache:
                 raise
         if row is None:
             raise EmbeddingCacheCorrupt("Dolphin embedding cache installation is missing")
-        return _cached_embedding(identity, durable_cache_key, row)
+        return _cached_embedding(identity, durable_cache_key, secret, row)
 
-    def _durable_cache_key(
+    def _identity_secret_for(
         self,
         connection: sqlite3.Connection,
-        identity: EmbeddingInputIdentity,
-    ) -> str:
+    ) -> bytes:
         with self._identity_secret_guard:
             secret = self._identity_secret
             if secret is None:
@@ -139,11 +140,7 @@ class SQLiteEmbeddingCache:
                 except StorageLayoutError:
                     raise EmbeddingCacheCorrupt("Dolphin embedding cache identity secret is corrupt") from None
                 self._identity_secret = secret
-        return hmac.digest(
-            secret,
-            _DURABLE_CACHE_KEY_DOMAIN + bytes.fromhex(identity.cache_key),
-            "sha256",
-        ).hex()
+        return secret
 
     @contextmanager
     def _connection(self, *, read_only: bool = False) -> Iterator[sqlite3.Connection]:
@@ -176,6 +173,7 @@ class SQLiteEmbeddingCache:
 def _cached_embedding(
     identity: EmbeddingInputIdentity,
     durable_cache_key: str,
+    secret: bytes,
     row: tuple[object, ...],
 ) -> CachedEmbedding:
     if len(row) != 9 or tuple(row[:6]) != (
@@ -190,9 +188,17 @@ def _cached_embedding(
     raw_payload = row[6]
     if not isinstance(raw_payload, bytes) or len(raw_payload) != _VECTOR_BYTES.size:
         raise EmbeddingCacheCorrupt("Dolphin embedding cache vector is corrupt")
-    if row[7] != _vector_digest(durable_cache_key, raw_payload):
-        raise EmbeddingCacheCorrupt("Dolphin embedding cache vector digest is corrupt")
-    _require_persisted_timestamp(row[8])
+    created_at = row[8]
+    _require_persisted_timestamp(created_at)
+    if (
+        not isinstance(created_at, str)
+        or not isinstance(row[7], str)
+        or not hmac.compare_digest(
+            row[7],
+            _entry_mac(secret, durable_cache_key, identity, raw_payload, created_at),
+        )
+    ):
+        raise EmbeddingCacheCorrupt("Dolphin embedding cache entry MAC is corrupt")
     try:
         vector = canonicalize_embedding_vector(_VECTOR_BYTES.unpack(raw_payload))
         return CachedEmbedding(identity=identity, vector=vector)
@@ -204,7 +210,7 @@ def _embedding_row(connection: sqlite3.Connection, cache_key: str) -> tuple[obje
     return connection.execute(
         """
         SELECT cache_key, format, provider, model, dimensions, contract_version,
-               vector, vector_digest, created_at
+               vector, entry_mac, created_at
         FROM embedding_cache_entries
         WHERE cache_key = ?
         """,
@@ -252,12 +258,36 @@ def _require_fixed_identity(identity: EmbeddingInputIdentity) -> None:
         raise EmbeddingCacheError("Dolphin embedding cache identity is incompatible")
 
 
-def _vector_digest(cache_key: str, payload: bytes) -> str:
-    digest = hashlib.sha256()
-    digest.update(_VECTOR_DIGEST_DOMAIN)
-    digest.update(cache_key.encode("ascii"))
-    digest.update(payload)
-    return digest.hexdigest()
+def _durable_cache_key(secret: bytes, identity: EmbeddingInputIdentity) -> str:
+    return hmac.digest(
+        secret,
+        _DURABLE_CACHE_KEY_DOMAIN + bytes.fromhex(identity.cache_key),
+        "sha256",
+    ).hex()
+
+
+def _entry_mac(
+    secret: bytes,
+    cache_key: str,
+    identity: EmbeddingInputIdentity,
+    payload: bytes,
+    created_at: str,
+) -> str:
+    message = bytearray(_ENTRY_MAC_DOMAIN)
+    fields = (
+        cache_key.encode("ascii"),
+        identity.format.encode("utf-8"),
+        identity.provider.encode("utf-8"),
+        identity.model.encode("utf-8"),
+        str(identity.dimensions).encode("ascii"),
+        str(identity.contract_version).encode("ascii"),
+        payload,
+        created_at.encode("ascii"),
+    )
+    for field in fields:
+        message.extend(_MAC_FIELD_LENGTH.pack(len(field)))
+        message.extend(field)
+    return hmac.digest(secret, message, "sha256").hex()
 
 
 def _timestamp(value: datetime) -> str:
