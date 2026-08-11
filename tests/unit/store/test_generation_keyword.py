@@ -358,17 +358,26 @@ def test_keyword_scope_applies_before_the_posting_budget(
         text="common evidence",
         relative_path="src/main.py",
     )
-    excluded = _membership(
-        context.artifacts,
-        suffix="unscoped-common",
-        text="common evidence",
-        relative_path="tests/main.py",
-    )
+    excluded = [
+        _membership(
+            context.artifacts,
+            suffix=f"unscoped-common-{index}",
+            text="common evidence",
+            relative_path=f"tests/main-{index}.py",
+        )
+        for index in range(32)
+    ]
     snapshot = _publish(
-        context, context.content.stage_manifest(context.lease, context.generation, [included, excluded])
+        context,
+        context.content.stage_manifest(context.lease, context.generation, [included, *excluded]),
     )
     read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
     monkeypatch.setattr("kb.store.generation_keyword.MAX_KEYWORD_POSTINGS_PER_QUERY", 1)
+
+    def reject_global_posting_scan(*_args: object) -> None:
+        raise AssertionError("scoped retrieval must not rehash global postings")
+
+    monkeypatch.setattr("kb.store.generation_keyword._term_commits_from_rows", reject_global_posting_scan)
     scope = SearchScope.from_inputs(paths=["src/**"], exclude_paths=[], languages=[])
 
     hits = context.keyword.search(read_lease.lease_id, "common", scope=scope, limit=10)

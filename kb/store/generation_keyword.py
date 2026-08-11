@@ -247,7 +247,6 @@ def _verified_query_postings(
     *,
     search_scope: SearchScope,
 ) -> tuple[tuple[str, str, str, int], ...]:
-    _require_query_term_commits(connection, generation_id, query_terms)
     placeholders = ", ".join("?" for _term in query_terms)
     rows = connection.execute(
         f"""
@@ -263,26 +262,26 @@ def _verified_query_postings(
     ).fetchall()
     if len(rows) > MAX_KEYWORD_POSTINGS_PER_QUERY:
         raise GenerationKeywordQueryTooBroad("Dolphin keyword query is too broad; use rarer or more specific terms")
-    return tuple((str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows)
+    postings = tuple((str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows)
+    _require_query_postings_authorized(
+        connection,
+        generation_id,
+        query_terms,
+        postings,
+        require_complete=search_scope.filter_shape == "none",
+    )
+    return postings
 
 
-def _require_query_term_commits(
+def _require_query_postings_authorized(
     connection: sqlite3.Connection,
     generation_id: str,
     query_terms: tuple[str, ...],
+    postings: tuple[tuple[str, str, str, int], ...],
+    *,
+    require_complete: bool,
 ) -> None:
     placeholders = ", ".join("?" for _term in query_terms)
-    rows = connection.execute(
-        f"""
-        SELECT v.term, d.chunk_instance_id, v.col, v.offset
-        FROM generation_keyword_vocabulary AS v
-        JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
-        WHERE d.generation_id = ? AND v.term IN ({placeholders})
-        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
-        """,
-        (generation_id, *query_terms),
-    )
-    observed = _term_commits_from_rows(generation_id, rows)
     expected_rows = connection.execute(
         f"""
         SELECT term, posting_digest, posting_count
@@ -292,7 +291,13 @@ def _require_query_term_commits(
         (generation_id, *query_terms),
     ).fetchall()
     expected = {str(row[0]): (str(row[1]), int(row[2])) for row in expected_rows}
-    if observed != expected:
+    observed_terms = {posting[0] for posting in postings}
+    # A filtered subset cannot reproduce a global term digest. Publication
+    # validates those commitments once, and every supported document/commit
+    # mutation invalidates their revision binding before any read can proceed.
+    if not observed_terms.issubset(expected) or (
+        require_complete and _term_commits_from_rows(generation_id, iter(postings)) != expected
+    ):
         raise GenerationKeywordError("Dolphin published keyword index is corrupt")
 
 
