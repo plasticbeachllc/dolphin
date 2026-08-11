@@ -6,7 +6,8 @@ import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
-from threading import Event, Thread
+from threading import BoundedSemaphore, Event, Thread
+from time import monotonic
 from typing import Protocol
 
 from kb.generation import GenerationCoordinatorError, GenerationReadLease, PublishedSnapshot
@@ -37,7 +38,10 @@ from kb.services.workspace_resolution import WorkspaceResolution, WorkspaceResol
 _SEARCH_READ_LEASE_DURATION = timedelta(seconds=30)
 _SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS = 5.0
 _SEARCH_READ_LEASE_KEEPER_STOP_SECONDS = 5.0
+_SEARCH_CALL_DEADLINE_SECONDS = 30.0
+_SEARCH_ADMISSION_CAPACITY = BoundedSemaphore(8)
 _MAX_SEARCH_SCOPE_WORKSPACES = 32
+_LEASE_RELEASE_ATTEMPTS = 3
 
 
 class _WorkspaceCoverageRegistry(Protocol):
@@ -70,11 +74,16 @@ class _CoverageLeaseKeeper:
         self,
         coordinator: _SearchCoverageCoordinator,
         coverage: SearchCoverage,
+        admission_capacity: BoundedSemaphore,
     ) -> None:
         self._coordinator = coordinator
+        self._admission_capacity = admission_capacity
         self._leases = tuple(item.read_lease for item in coverage.workspaces)
         self._stop = Event()
+        self._done = Event()
         self._failed = Event()
+        self._deadline_exceeded = Event()
+        self._cleanup_failed = Event()
         self._thread = Thread(target=self._run, name="dolphin-search-lease-keeper", daemon=True)
         self._started = False
 
@@ -82,33 +91,64 @@ class _CoverageLeaseKeeper:
         self._thread.start()
         self._started = True
 
-    def stop(self) -> bool:
+    def close(self) -> bool:
         if not self._started:
             return True
         self._stop.set()
-        self._thread.join(timeout=_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS)
-        return not self._thread.is_alive()
+        return self._done.wait(timeout=_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS)
 
     @property
     def failed(self) -> bool:
         return self._failed.is_set()
 
+    @property
+    def deadline_exceeded(self) -> bool:
+        return self._deadline_exceeded.is_set()
+
+    @property
+    def cleanup_failed(self) -> bool:
+        return self._cleanup_failed.is_set()
+
     def _run(self) -> None:
-        while not self._stop.wait(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS):
-            try:
-                self._coordinator.renew_reads(
-                    self._leases,
-                    lease_duration=_SEARCH_READ_LEASE_DURATION,
-                )
-            except GenerationCoordinatorError:
-                # A transient missed renewal is safe while the existing authority is
-                # live. Later renewals may recover; final validation fails closed if not.
-                continue
-            except Exception:
-                # Coordinator implementations must normalize backend failures. Record
-                # any contract violation so this request fails clearly at its boundary.
-                self._failed.set()
+        deadline = monotonic() + _SEARCH_CALL_DEADLINE_SECONDS
+        try:
+            while True:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    self._deadline_exceeded.set()
+                    return
+                if self._stop.wait(min(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS, remaining)):
+                    return
+                try:
+                    self._coordinator.renew_reads(
+                        self._leases,
+                        lease_duration=_SEARCH_READ_LEASE_DURATION,
+                    )
+                except GenerationCoordinatorError:
+                    # A transient missed renewal is safe while the existing authority is
+                    # live. Later renewals may recover; final validation fails closed if not.
+                    continue
+                except Exception:
+                    # Coordinator implementations must normalize backend failures. Record
+                    # any contract violation so this request fails clearly at its boundary.
+                    self._failed.set()
+                    return
+        finally:
+            self._release_leases()
+            self._admission_capacity.release()
+            self._done.set()
+
+    def _release_leases(self) -> None:
+        for _attempt in range(_LEASE_RELEASE_ATTEMPTS):
+            failed = False
+            for lease in reversed(self._leases):
+                try:
+                    self._coordinator.release_read(lease)
+                except Exception:
+                    failed = True
+            if not failed:
                 return
+        self._cleanup_failed.set()
 
 
 class SearchCoverageService:
@@ -132,9 +172,12 @@ class SearchCoverageService:
         """Yield exact reader leases, releasing every acquired lease on every outcome."""
 
         scope = self._resolve_scope(workspace_ids, current_resolution=current_resolution)
-        workspaces = self._require_complete_preflight(scope)
+        admission_capacity = _SEARCH_ADMISSION_CAPACITY
+        if not admission_capacity.acquire(blocking=False):
+            raise SearchAdmissionUnavailable("Dolphin search admission is at bounded capacity")
         admitted: list[AdmittedSearchWorkspace] = []
         try:
+            workspaces = self._require_complete_preflight(scope)
             for workspace in workspaces:
                 lease = self._coordinator.acquire_read(
                     workspace.workspace_id,
@@ -145,33 +188,46 @@ class SearchCoverageService:
                     raise SearchAdmissionUnavailable("Dolphin search reader lease has invalid workspace authority")
         except (WorkspaceRegistryError, GenerationCoordinatorError) as exc:
             self._release_after_failed_admission(admitted)
+            admission_capacity.release()
             raise SearchAdmissionUnavailable("Dolphin could not pin complete search coverage") from exc
         except Exception:
             self._release_after_failed_admission(admitted)
+            admission_capacity.release()
             raise
 
         coverage = SearchCoverage(workspaces=tuple(admitted))
-        keeper = _CoverageLeaseKeeper(self._coordinator, coverage)
+        keeper = _CoverageLeaseKeeper(self._coordinator, coverage, admission_capacity)
         try:
             keeper.start()
+        except Exception:
+            self._release_after_failed_admission(admitted)
+            admission_capacity.release()
+            raise
+
+        try:
             yield coverage
         finally:
             primary_failure = sys.exception()
             completion_failure: SearchAdmissionUnavailable | None = None
-            if not keeper.stop() and primary_failure is None:
-                completion_failure = SearchAdmissionUnavailable("Dolphin search lease keeper did not stop safely")
-            if keeper.failed and primary_failure is None:
+            if keeper.deadline_exceeded and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search exceeded its bounded read deadline")
+            elif keeper.failed and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search lease renewal failed unexpectedly")
             if primary_failure is None and completion_failure is None:
                 try:
                     self.validate(coverage)
                 except SearchAdmissionUnavailable as exc:
                     completion_failure = exc
-            try:
-                self._release_all(coverage)
-            except SearchAdmissionUnavailable:
-                if primary_failure is None and completion_failure is None:
-                    raise
+            if not keeper.close() and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable(
+                    "Dolphin search lease cleanup is still completing safely"
+                )
+            elif keeper.deadline_exceeded and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search exceeded its bounded read deadline")
+            elif keeper.failed and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search lease renewal failed unexpectedly")
+            elif keeper.cleanup_failed and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search reader leases could not be released")
             if primary_failure is None and completion_failure is not None:
                 raise completion_failure
 

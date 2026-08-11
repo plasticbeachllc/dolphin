@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from threading import BoundedSemaphore, Event
 
 import pytest
 
@@ -269,6 +270,83 @@ def test_unexpected_lease_keeper_failure_fails_the_request_clearly(
     assert coordinator.released == ["read_ws_ready"]
 
 
+def test_search_admission_has_a_bounded_global_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_ADMISSION_CAPACITY", BoundedSemaphore(1))
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    first_service = SearchCoverageService(
+        _Registry({first.workspace_id: first}, {}),
+        _Coordinator({first.workspace_id: _published(first.workspace_id)}),
+    )
+    second_service = SearchCoverageService(
+        _Registry({second.workspace_id: second}, {}),
+        _Coordinator({second.workspace_id: _published(second.workspace_id)}),
+    )
+
+    with first_service.admit([first.workspace_id]):
+        with pytest.raises(SearchAdmissionUnavailable, match="bounded capacity"):
+            with second_service.admit([second.workspace_id]):
+                raise AssertionError
+
+    with second_service.admit([second.workspace_id]):
+        pass
+
+
+def test_keeper_deadline_stops_renewal_and_releases_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_CALL_DEADLINE_SECONDS", 0.03)
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+
+    with pytest.raises(SearchAdmissionUnavailable, match="bounded read deadline"):
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+            [workspace.workspace_id]
+        ):
+            time.sleep(0.05)
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
+def test_keeper_owns_delayed_cleanup_after_close_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS", 0.01)
+    renew_started = Event()
+    allow_renewal = Event()
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator(
+        {workspace.workspace_id: _published(workspace.workspace_id)},
+        renew_blocker=(renew_started, allow_renewal),
+    )
+
+    try:
+        with pytest.raises(SearchAdmissionUnavailable, match="cleanup is still completing safely"):
+            with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+                [workspace.workspace_id]
+            ):
+                assert renew_started.wait(timeout=1)
+        assert coordinator.released == []
+    finally:
+        allow_renewal.set()
+
+    assert coordinator.release_completed.wait(timeout=1)
+    assert coordinator.released == ["read_ws_ready"]
+
+
+def test_keeper_retries_transient_release_failure() -> None:
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator(
+        {workspace.workspace_id: _published(workspace.workspace_id)},
+        release_failures=1,
+    )
+
+    with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+        [workspace.workspace_id]
+    ):
+        pass
+
+    assert coordinator.released == ["read_ws_ready", "read_ws_ready"]
+
+
 class _Registry:
     def __init__(
         self,
@@ -296,17 +374,22 @@ class _Coordinator:
         acquired_snapshot_override: PublishedSnapshot | None = None,
         release_error: bool = False,
         renew_error: Exception | None = None,
+        renew_blocker: tuple[Event, Event] | None = None,
+        release_failures: int = 0,
     ) -> None:
         self.snapshots = snapshots
         self.acquire_error_for = acquire_error_for
         self.acquired_snapshot_override = acquired_snapshot_override
         self.release_error = release_error
         self.renew_error = renew_error
+        self.renew_blocker = renew_blocker
+        self.release_failures = release_failures
         self.acquired: list[str] = []
         self.released: list[str] = []
         self.validated: list[str] = []
         self.renewed: list[tuple[str, ...]] = []
         self.validation_override: PublishedSnapshot | None = None
+        self.release_completed = Event()
 
     def current_snapshot(self, workspace_id: str) -> PublishedSnapshot | None:
         return self.snapshots[workspace_id]
@@ -342,13 +425,22 @@ class _Coordinator:
     ) -> None:
         assert lease_duration == timedelta(seconds=30)
         self.renewed.append(tuple(lease.lease_id for lease in leases))
+        if self.renew_blocker is not None:
+            started, allowed = self.renew_blocker
+            started.set()
+            if not allowed.wait(timeout=1):
+                raise GenerationCoordinatorError("test renewal remained blocked")
         if self.renew_error is not None:
             raise self.renew_error
 
     def release_read(self, lease: GenerationReadLease) -> None:
         self.released.append(lease.lease_id)
+        if self.release_failures:
+            self.release_failures -= 1
+            raise GenerationCoordinatorError("transient release failure")
         if self.release_error:
             raise GenerationCoordinatorError("release failed")
+        self.release_completed.set()
 
 
 def _workspace(workspace_id: str, *, state: WorkspaceEffectiveState) -> WorkspaceSnapshot:
