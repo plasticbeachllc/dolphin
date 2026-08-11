@@ -94,8 +94,14 @@ class SQLiteEmbeddingCache:
                 connection.execute("BEGIN IMMEDIATE")
                 row = _embedding_row(connection, durable_cache_key)
                 if row is not None:
-                    connection.commit()
-                    return _cached_embedding(identity, durable_cache_key, secret, row)
+                    cached = _cached_embedding(identity, durable_cache_key, secret, row)
+                    if _require_persisted_timestamp(row[8]) > _utc_datetime(now) - _CACHE_ENTRY_MAX_AGE:
+                        connection.commit()
+                        return cached
+                    connection.execute(
+                        "DELETE FROM embedding_cache_entries WHERE cache_key = ?",
+                        (durable_cache_key,),
+                    )
                 _prune_cache_for_insert(connection, now)
                 connection.execute(
                     """

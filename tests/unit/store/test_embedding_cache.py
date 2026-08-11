@@ -200,6 +200,24 @@ def test_expired_entry_is_a_read_miss_without_mutating_cache_state(tmp_path: Pat
         assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
 
 
+def test_expired_same_key_entry_is_refreshed(tmp_path: Path) -> None:
+    observed_at = [datetime(2026, 6, 1, tzinfo=UTC)]
+    cache, database = _cache(tmp_path, clock=lambda: observed_at[0])
+    identity = identify_embedding_input("expired query")
+    original = cache.put(identity, _vector(0.125))
+    observed_at[0] = datetime(2026, 7, 2, tzinfo=UTC)
+
+    assert cache.get(identity) is None
+    refreshed = cache.put(identity, _vector(0.25))
+
+    assert refreshed.vector == _vector(0.25)
+    assert refreshed != original
+    assert cache.get(identity) == refreshed
+    with sqlite3.connect(database) as connection:
+        row = connection.execute("SELECT COUNT(*), MAX(created_at) FROM embedding_cache_entries").fetchone()
+    assert row == (1, "2026-07-02T00:00:00+00:00")
+
+
 @pytest.mark.parametrize("column", ["entry_mac", "model", "contract_version", "created_at"])
 def test_corrupt_persisted_binding_fails_closed(tmp_path: Path, column: str) -> None:
     cache, database = _cache(tmp_path)
