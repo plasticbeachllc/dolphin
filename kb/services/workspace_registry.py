@@ -1369,6 +1369,12 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE INDEX embedding_cache_entries_created
+                        ON embedding_cache_entries (created_at, cache_key)
+                        """
+                    )
+                    connection.execute(
+                        """
                         CREATE TABLE IF NOT EXISTS workspace_operations (
                             operation_id TEXT PRIMARY KEY,
                             workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),

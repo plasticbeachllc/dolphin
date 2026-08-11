@@ -136,7 +136,9 @@ class SQLiteEmbeddingCache:
             yield connection
         except EmbeddingCacheError:
             raise
-        except (sqlite3.Error, StorageLayoutError) as exc:
+        except sqlite3.Error as exc:
+            raise _classified_sqlite_error(exc) from exc
+        except StorageLayoutError as exc:
             raise EmbeddingCacheUnavailable("Dolphin embedding cache is unavailable") from exc
         finally:
             if connection is not None:
@@ -245,3 +247,20 @@ def _require_persisted_timestamp(value: object) -> datetime:
     if parsed is None or parsed.tzinfo is None:
         raise EmbeddingCacheCorrupt("Dolphin embedding cache timestamp is corrupt")
     return parsed.astimezone(UTC)
+
+
+def _classified_sqlite_error(exc: sqlite3.Error) -> EmbeddingCacheError:
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    primary_code = error_code & 0xFF if isinstance(error_code, int) else None
+    unavailable_codes = {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+        sqlite3.SQLITE_CANTOPEN,
+        sqlite3.SQLITE_IOERR,
+        sqlite3.SQLITE_FULL,
+        sqlite3.SQLITE_READONLY,
+        sqlite3.SQLITE_PERM,
+    }
+    if primary_code in unavailable_codes:
+        return EmbeddingCacheUnavailable("Dolphin embedding cache is unavailable")
+    return EmbeddingCacheCorrupt("Dolphin embedding cache database is corrupt")

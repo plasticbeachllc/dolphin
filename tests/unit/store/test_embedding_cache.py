@@ -65,7 +65,16 @@ def test_round_trip_persists_no_raw_embedding_input(tmp_path: Path) -> None:
         row = connection.execute(
             "SELECT provider, model, dimensions, contract_version, length(vector) FROM embedding_cache_entries"
         ).fetchone()
+        eviction_index = connection.execute(
+            "SELECT name FROM pragma_index_list('embedding_cache_entries') "
+            "WHERE name = 'embedding_cache_entries_created'"
+        ).fetchone()
+        eviction_columns = connection.execute(
+            "SELECT name FROM pragma_index_info('embedding_cache_entries_created') ORDER BY seqno"
+        ).fetchall()
     assert row == ("openai", "text-embedding-3-small", 1536, 1, 6144)
+    assert eviction_index == ("embedding_cache_entries_created",)
+    assert eviction_columns == [("created_at",), ("cache_key",)]
 
 
 def test_exact_miss_does_not_accept_another_input(tmp_path: Path) -> None:
@@ -200,4 +209,30 @@ def test_absent_metadata_store_is_optional_unavailable_state(tmp_path: Path) -> 
     cache = SQLiteEmbeddingCache(macos_storage_layout(home=home))
 
     with pytest.raises(EmbeddingCacheUnavailable):
+        cache.get(identify_embedding_input("query"))
+
+
+def test_bounded_sqlite_contention_is_optional_unavailability(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    with sqlite3.connect(database, isolation_level=None) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        with pytest.raises(EmbeddingCacheUnavailable):
+            cache.put(identify_embedding_input("query"), _vector())
+
+
+def test_missing_cache_table_is_structural_corruption_not_optional_unavailability(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP TABLE embedding_cache_entries")
+        connection.commit()
+
+    with pytest.raises(EmbeddingCacheCorrupt, match="database is corrupt"):
+        cache.get(identify_embedding_input("query"))
+
+
+def test_malformed_database_is_structural_corruption_not_optional_unavailability(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    database.write_bytes(b"not a sqlite database")
+
+    with pytest.raises(EmbeddingCacheCorrupt, match="database is corrupt"):
         cache.get(identify_embedding_input("query"))
