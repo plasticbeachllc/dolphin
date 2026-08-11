@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Sequence
 from typing import Literal
 
@@ -16,6 +15,7 @@ MAX_SEARCH_PATH_PATTERNS = 64
 MAX_SEARCH_PATH_PATTERN_LENGTH = 512
 MAX_SEARCH_LANGUAGES = 7
 MAX_SEARCH_SCOPE_WORKSPACES = 32
+MAX_SEARCH_GLOBSTARS_PER_PATTERN = 8
 
 SearchLanguage = Literal["python", "javascript", "typescript", "svelte", "sql", "markdown", "rust"]
 SearchFilterShape = Literal["none", "path", "language", "both"]
@@ -123,11 +123,9 @@ class SearchScope(_ScopeModel):
     def matches(self, relative_path: str, language: str) -> bool:
         """Apply exact scope semantics to one canonical indexed membership."""
 
-        if self.paths and not any(re.fullmatch(_glob_regex(pattern), relative_path) for pattern in self.paths):
+        if self.paths and not any(_path_matches(pattern, relative_path) for pattern in self.paths):
             return False
-        if self.exclude_paths and any(
-            re.fullmatch(_glob_regex(pattern), relative_path) for pattern in self.exclude_paths
-        ):
+        if self.exclude_paths and any(_path_matches(pattern, relative_path) for pattern in self.exclude_paths):
             return False
         return not self.languages or language in self.indexed_languages
 
@@ -213,6 +211,7 @@ def _normalize_languages(values: Sequence[str]) -> tuple[SearchLanguage, ...]:
 
 
 def _validate_path_pattern(value: str) -> None:
+    parts = value.split("/") if isinstance(value, str) else ()
     if (
         not isinstance(value, str)
         or not value
@@ -223,9 +222,63 @@ def _validate_path_pattern(value: str) -> None:
         or value.startswith("/")
         or value.endswith("/")
         or "//" in value
-        or any(part in {"", ".", ".."} for part in value.split("/"))
+        or any(part in {"", ".", ".."} for part in parts)
+        or any("**" in part and part != "**" for part in parts)
+        or any(first == second == "**" for first, second in zip(parts, parts[1:], strict=False))
+        or sum(part == "**" for part in parts) > MAX_SEARCH_GLOBSTARS_PER_PATTERN
     ):
         raise SearchScopeError("Dolphin search path pattern must be canonical and repo-relative")
+
+
+def _path_matches(pattern: str, relative_path: str) -> bool:
+    """Match canonical path segments in deterministic polynomial time."""
+
+    pattern_segments = pattern.split("/")
+    path_segments = relative_path.split("/")
+    previous = [False] * (len(path_segments) + 1)
+    previous[0] = True
+    for pattern_segment in pattern_segments:
+        current = [False] * (len(path_segments) + 1)
+        if pattern_segment == "**":
+            current[0] = previous[0]
+            for path_index in range(1, len(path_segments) + 1):
+                current[path_index] = previous[path_index] or current[path_index - 1]
+        else:
+            for path_index, path_segment in enumerate(path_segments, start=1):
+                current[path_index] = previous[path_index - 1] and _segment_matches(
+                    pattern_segment,
+                    path_segment,
+                )
+        previous = current
+        if not any(previous):
+            return False
+    return previous[-1]
+
+
+def _segment_matches(pattern: str, value: str) -> bool:
+    """Simulate a segment wildcard NFA with integer bitsets and no backtracking."""
+
+    wildcard_mask = 0
+    question_mask = 0
+    literal_masks: dict[str, int] = {}
+    for index, character in enumerate(pattern):
+        bit = 1 << index
+        if character == "*":
+            wildcard_mask |= bit
+        elif character == "?":
+            question_mask |= bit
+        else:
+            literal_masks[character] = literal_masks.get(character, 0) | bit
+
+    states = 1
+    states |= (states & wildcard_mask) << 1
+    for character in value:
+        advancing = states & (question_mask | literal_masks.get(character, 0))
+        states = (advancing << 1) | (states & wildcard_mask)
+        states |= (states & wildcard_mask) << 1
+        if states == 0:
+            return False
+    return bool(states & (1 << len(pattern)))
 
 
 def _glob_regex(pattern: str) -> str:
@@ -239,6 +292,9 @@ def _glob_regex(pattern: str) -> str:
                 if index + 1 < len(pattern) and pattern[index + 1] == "/":
                     output.append("(?:(?:.|\\n)*/)?")
                     index += 1
+                elif index > 1 and pattern[index - 2] == "/":
+                    output.pop()
+                    output.append("(?:/(?:.|\\n)*)?")
                 else:
                     output.append("(?:.|\\n)*")
             else:
