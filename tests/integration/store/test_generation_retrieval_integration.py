@@ -16,11 +16,13 @@ from kb.artifacts import identify_embedding_input
 from kb.generation import PublishedSnapshot
 from kb.generation_content import StagedChunkMembership
 from kb.generation_vector import StagedGenerationVector
+from kb.query_embedding import QueryEmbeddingResolution
 from kb.runtime.storage import macos_storage_layout
 from kb.search_admission import SearchCoverage
 from kb.services import search_admission as search_admission_module
 from kb.services.generation_retrieval import GenerationRetrievalService
 from kb.services.search_admission import SearchCoverageService
+from kb.services.search_execution import SearchExecutionService
 from kb.services.workspace_registry import OperationState, WorkspaceRegistration, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
@@ -138,6 +140,89 @@ def test_slow_multi_workspace_retrieval_renews_all_real_reader_leases(
     assert {first_result.snapshot, second_result.snapshot} == {first[1], second[1]}
     with sqlite3.connect(layout.metadata_db) as connection:
         assert connection.execute("SELECT count(*) FROM generation_reader_leases").fetchone() == (0,)
+
+
+@pytest.mark.asyncio
+async def test_first_page_execution_uses_one_embedding_and_one_global_real_store_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    now = datetime(2026, 8, 10, 15, tzinfo=UTC)
+    layout = macos_storage_layout(home=_directory(tmp_path / "home"))
+    registry = WorkspaceRegistry(layout)
+    monkeypatch.setattr("kb.services.workspace_registry.validate_git_worktree_snapshot", lambda _worktree: None)
+    artifacts = ChunkArtifactStore(layout)
+    content = SQLiteGenerationContentStore(layout, artifacts, clock=lambda: now)
+    vectors = LanceGenerationVectorStore(layout, clock=lambda: now)
+    coordinator = SQLiteGenerationCoordinator(layout, vectors=vectors, clock=lambda: now)
+    first = _publish_workspace(
+        tmp_path=tmp_path,
+        suffix="execution-first",
+        pid=107,
+        clock=lambda: now,
+        registry=registry,
+        coordinator=coordinator,
+        artifacts=artifacts,
+        content=content,
+        vectors=vectors,
+    )
+    second = _publish_workspace(
+        tmp_path=tmp_path,
+        suffix="execution-second",
+        pid=107,
+        clock=lambda: now,
+        registry=registry,
+        coordinator=coordinator,
+        artifacts=artifacts,
+        content=content,
+        vectors=vectors,
+    )
+    embeddings = _EmbeddingResolver()
+    retrieval = GenerationRetrievalService(
+        coordinator,
+        SQLiteGenerationKeywordStore(layout, clock=lambda: now),
+        vectors,
+    )
+
+    plan = await SearchExecutionService(
+        SearchCoverageService(registry, coordinator),
+        embeddings,
+        retrieval,
+    ).execute_first_page(
+        "needle",
+        [second[0].workspace_id, first[0].workspace_id],
+    )
+
+    assert embeddings.queries == ["needle"]
+    assert {snapshot.workspace_id for snapshot in plan.snapshots} == {
+        first[0].workspace_id,
+        second[0].workspace_id,
+    }
+    assert {target.workspace_id for target in plan.ranked_targets} == {
+        first[0].workspace_id,
+        second[0].workspace_id,
+    }
+    assert plan.ranked_targets_retained == 4
+    assert all("score" not in target.model_dump() for target in plan.ranked_targets)
+    with sqlite3.connect(layout.metadata_db) as connection:
+        assert connection.execute("SELECT count(*) FROM generation_reader_leases").fetchone() == (0,)
+
+
+class _EmbeddingResolver:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def resolve(self, query: str) -> QueryEmbeddingResolution:
+        self.queries.append(query)
+        return QueryEmbeddingResolution(
+            identity=identify_embedding_input(query),
+            vector=_basis(1),
+            source="cache",
+            retrieval_mode="hybrid",
+            degraded_reason=None,
+            retryable=False,
+            cache_write="not_needed",
+        )
 
 
 def _directory(path: Path) -> Path:

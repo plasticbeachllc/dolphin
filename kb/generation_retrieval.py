@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from fractions import Fraction
 from typing import ClassVar, Literal
 
@@ -87,6 +88,16 @@ class GenerationRetrievalResult(_RetrievalModel):
         return self
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class TransientGenerationCandidates:
+    """Canonical scored candidates that must never cross a result or persistence boundary."""
+
+    snapshot: PublishedSnapshot
+    retrieval_mode: RetrievalMode
+    keyword_hits: tuple[KeywordSearchHit, ...]
+    vector_hits: tuple[VectorSearchHit, ...] | None
+
+
 def rank_generation_candidates(
     keyword_hits: Sequence[KeywordSearchHit],
     vector_hits: Sequence[VectorSearchHit] | None,
@@ -97,8 +108,7 @@ def rank_generation_candidates(
     means that the vector branch ran successfully and found no candidates.
     """
 
-    keyword = _canonical_keyword_hits(keyword_hits)
-    vector = None if vector_hits is None else _canonical_vector_hits(vector_hits)
+    keyword, vector = canonicalize_generation_candidates(keyword_hits, vector_hits)
     branch_ranks: dict[str, dict[RetrievalSource, int]] = {}
     for rank, hit in enumerate(keyword, start=1):
         branch_ranks.setdefault(hit.chunk_instance_id, {})["keyword"] = rank
@@ -123,6 +133,17 @@ def rank_generation_candidates(
         for rank, (chunk_instance_id, ranks) in enumerate(retained, start=1)
     )
     return targets, len(ordered) > GENERATION_RANKED_TARGET_HORIZON
+
+
+def canonicalize_generation_candidates(
+    keyword_hits: Sequence[KeywordSearchHit],
+    vector_hits: Sequence[VectorSearchHit] | None,
+) -> tuple[tuple[KeywordSearchHit, ...], tuple[VectorSearchHit, ...] | None]:
+    """Validate and order transient branch candidates without comparing score scales."""
+
+    keyword = _canonical_keyword_hits(keyword_hits)
+    vector = None if vector_hits is None else _canonical_vector_hits(vector_hits)
+    return keyword, vector
 
 
 def _canonical_keyword_hits(hits: Sequence[KeywordSearchHit]) -> tuple[KeywordSearchHit, ...]:

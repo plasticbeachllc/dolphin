@@ -21,6 +21,8 @@ from kb.generation_retrieval import (
     GenerationRetrievalResult,
     GenerationRetrievalTimeout,
     GenerationRetrievalUnavailable,
+    TransientGenerationCandidates,
+    canonicalize_generation_candidates,
     rank_generation_candidates,
 )
 from kb.generation_vector import GenerationVectorError, GenerationVectorTimeout, VectorSearchHit
@@ -112,6 +114,22 @@ class GenerationRetrievalService:
             deadline_exceeded=admitted.deadline_exceeded,
         )
 
+    def candidates_for_admitted_workspace(
+        self,
+        admitted: AdmittedSearchWorkspace,
+        query: str,
+        *,
+        query_vector: Sequence[float] | None,
+    ) -> TransientGenerationCandidates:
+        """Return canonical transient candidates under caller-held authority."""
+
+        return self._candidates_for_lease(
+            admitted.read_lease,
+            query,
+            query_vector=query_vector,
+            deadline_exceeded=admitted.deadline_exceeded,
+        )
+
     def _retrieve_for_lease(
         self,
         lease: GenerationReadLease,
@@ -121,6 +139,33 @@ class GenerationRetrievalService:
         deadline_exceeded: Callable[[], bool],
     ) -> GenerationRetrievalResult:
         """Execute bounded retrieval under one exact retained lease."""
+
+        candidates = self._candidates_for_lease(
+            lease,
+            query,
+            query_vector=query_vector,
+            deadline_exceeded=deadline_exceeded,
+        )
+        ranked_targets, horizon_reached = rank_generation_candidates(
+            candidates.keyword_hits,
+            candidates.vector_hits,
+        )
+        return GenerationRetrievalResult(
+            snapshot=candidates.snapshot,
+            retrieval_mode=candidates.retrieval_mode,
+            ranked_targets=ranked_targets,
+            ranked_horizon_reached=horizon_reached,
+        )
+
+    def _candidates_for_lease(
+        self,
+        lease: GenerationReadLease,
+        query: str,
+        *,
+        query_vector: Sequence[float] | None,
+        deadline_exceeded: Callable[[], bool],
+    ) -> TransientGenerationCandidates:
+        """Execute bounded branches and retain scores only for immediate in-process fusion."""
 
         try:
             _require_search_deadline(deadline_exceeded)
@@ -142,14 +187,14 @@ class GenerationRetrievalService:
                 )
             )
             _require_search_deadline(deadline_exceeded)
-            ranked_targets, horizon_reached = rank_generation_candidates(keyword_hits, vector_hits)
+            keyword_hits, vector_hits = canonicalize_generation_candidates(keyword_hits, vector_hits)
             if self._coordinator.snapshot_for_lease(lease.lease_id) != lease.snapshot:
                 raise GenerationRetrievalUnavailable("Dolphin generation read lease changed during retrieval")
-            return GenerationRetrievalResult(
+            return TransientGenerationCandidates(
                 snapshot=lease.snapshot,
                 retrieval_mode="lexical_structural" if vector_hits is None else "hybrid",
-                ranked_targets=ranked_targets,
-                ranked_horizon_reached=horizon_reached,
+                keyword_hits=keyword_hits,
+                vector_hits=vector_hits,
             )
         except GenerationKeywordQueryTooBroad as exc:
             raise GenerationRetrievalQueryTooBroad(
