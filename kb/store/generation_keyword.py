@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from itertools import groupby
@@ -35,8 +35,6 @@ _SQLITE_PROGRESS_STEPS = 1_000
 _PRIVATE_ID_MAX_LENGTH = 128
 _WORD_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
 _UNFILTERED_SCOPE = SearchScope(paths=(), exclude_paths=(), languages=())
-
-type _KeywordPostingRow = tuple[str, str, str, int] | tuple[str, str, str, int, str, str]
 
 
 class SQLiteGenerationKeywordStore:
@@ -78,8 +76,19 @@ class SQLiteGenerationKeywordStore:
                 return 1
             return 0
 
+        def membership_matches(relative_path: object, language: object) -> int:
+            if not isinstance(relative_path, str) or not isinstance(language, str):
+                raise GenerationKeywordError("Dolphin published keyword metadata is corrupt")
+            return int(scope.matches(relative_path, language))
+
         with self._connection() as connection:
             connection.set_progress_handler(interrupt_after_deadline, _SQLITE_PROGRESS_STEPS)
+            connection.create_function(
+                "dolphin_search_scope_matches",
+                2,
+                membership_matches,
+                deterministic=True,
+            )
             try:
                 connection.execute("BEGIN")
                 published_scope = _require_live_published_scope(connection, read_lease_id, observed_at)
@@ -100,6 +109,7 @@ class SQLiteGenerationKeywordStore:
                 raise
             finally:
                 connection.set_progress_handler(None, 0)
+                connection.create_function("dolphin_search_scope_matches", 2, None)
         try:
             scores: dict[str, int] = {}
             for _term, chunk_instance_id, _column, _offset in postings:
@@ -237,33 +247,42 @@ def _verified_query_postings(
     *,
     search_scope: SearchScope,
 ) -> tuple[tuple[str, str, str, int], ...]:
+    _require_query_term_commits(connection, generation_id, query_terms)
     placeholders = ", ".join("?" for _term in query_terms)
     rows = connection.execute(
         f"""
-        SELECT v.term, d.chunk_instance_id, v.col, v.offset, d.relative_path, d.language
+        SELECT v.term, d.chunk_instance_id, v.col, v.offset
         FROM generation_keyword_vocabulary AS v
         JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
         WHERE d.generation_id = ? AND v.term IN ({placeholders})
+          AND dolphin_search_scope_matches(d.relative_path, d.language) = 1
+        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
         LIMIT ?
         """,
         (generation_id, *query_terms, MAX_KEYWORD_POSTINGS_PER_QUERY + 1),
     ).fetchall()
     if len(rows) > MAX_KEYWORD_POSTINGS_PER_QUERY:
         raise GenerationKeywordQueryTooBroad("Dolphin keyword query is too broad; use rarer or more specific terms")
-    scoped_rows = tuple(
-        sorted(
-            (
-                str(row[0]),
-                str(row[1]),
-                str(row[2]),
-                int(row[3]),
-                str(row[4]),
-                str(row[5]),
-            )
-            for row in rows
-        )
+    return tuple((str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows)
+
+
+def _require_query_term_commits(
+    connection: sqlite3.Connection,
+    generation_id: str,
+    query_terms: tuple[str, ...],
+) -> None:
+    placeholders = ", ".join("?" for _term in query_terms)
+    rows = connection.execute(
+        f"""
+        SELECT v.term, d.chunk_instance_id, v.col, v.offset
+        FROM generation_keyword_vocabulary AS v
+        JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
+        WHERE d.generation_id = ? AND v.term IN ({placeholders})
+        ORDER BY v.term, d.chunk_instance_id, v.col, v.offset
+        """,
+        (generation_id, *query_terms),
     )
-    observed = _term_commits_from_rows(generation_id, iter(scoped_rows))
+    observed = _term_commits_from_rows(generation_id, rows)
     expected_rows = connection.execute(
         f"""
         SELECT term, posting_digest, posting_count
@@ -275,7 +294,6 @@ def _verified_query_postings(
     expected = {str(row[0]): (str(row[1]), int(row[2])) for row in expected_rows}
     if observed != expected:
         raise GenerationKeywordError("Dolphin published keyword index is corrupt")
-    return tuple(row[:4] for row in scoped_rows if search_scope.matches(row[4], row[5]))
 
 
 def _prepare_query(query: str) -> tuple[str, ...]:
@@ -327,7 +345,7 @@ def _prepare_query(query: str) -> tuple[str, ...]:
 
 def _term_commits_from_rows(
     generation_id: str,
-    rows: Iterable[_KeywordPostingRow] | sqlite3.Cursor,
+    rows: Iterator[tuple[str, str, str, int]] | sqlite3.Cursor,
 ) -> dict[str, tuple[str, int]]:
     commits: dict[str, tuple[str, int]] = {}
     for term, grouped in groupby(rows, key=lambda row: row[0]):

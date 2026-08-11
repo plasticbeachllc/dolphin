@@ -347,6 +347,35 @@ def test_keyword_search_fails_explicitly_when_posting_budget_is_exceeded(
         context.keyword.search(read_lease.lease_id, "common", limit=10)
 
 
+def test_keyword_scope_applies_before_the_posting_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    included = _membership(
+        context.artifacts,
+        suffix="scoped-common",
+        text="common evidence",
+        relative_path="src/main.py",
+    )
+    excluded = _membership(
+        context.artifacts,
+        suffix="unscoped-common",
+        text="common evidence",
+        relative_path="tests/main.py",
+    )
+    snapshot = _publish(
+        context, context.content.stage_manifest(context.lease, context.generation, [included, excluded])
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    monkeypatch.setattr("kb.store.generation_keyword.MAX_KEYWORD_POSTINGS_PER_QUERY", 1)
+    scope = SearchScope.from_inputs(paths=["src/**"], exclude_paths=[], languages=[])
+
+    hits = context.keyword.search(read_lease.lease_id, "common", scope=scope, limit=10)
+
+    assert [hit.chunk_instance_id for hit in hits] == [included.chunk_instance_id]
+
+
 def test_keyword_search_cooperatively_interrupts_at_its_backend_deadline(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
