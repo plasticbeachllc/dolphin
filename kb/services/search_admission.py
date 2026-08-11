@@ -86,6 +86,7 @@ class _CoverageLeaseKeeper:
         self._failed = Event()
         self._deadline_exceeded = Event()
         self._cleanup_failed = Event()
+        self._deadline = monotonic() + _SEARCH_CALL_DEADLINE_SECONDS
         self._thread = Thread(target=self._run, name="dolphin-search-lease-keeper", daemon=True)
         self._started = False
 
@@ -96,6 +97,7 @@ class _CoverageLeaseKeeper:
     def close(self) -> bool:
         if not self._started:
             return True
+        self.deadline_exceeded()
         self._stop.set()
         return self._done.wait(timeout=_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS)
 
@@ -104,6 +106,8 @@ class _CoverageLeaseKeeper:
         return self._failed.is_set()
 
     def deadline_exceeded(self) -> bool:
+        if monotonic() >= self._deadline:
+            self._deadline_exceeded.set()
         return self._deadline_exceeded.is_set()
 
     @property
@@ -111,10 +115,9 @@ class _CoverageLeaseKeeper:
         return self._cleanup_failed.is_set()
 
     def _run(self) -> None:
-        deadline = monotonic() + _SEARCH_CALL_DEADLINE_SECONDS
         try:
             while True:
-                remaining = deadline - monotonic()
+                remaining = self._deadline - monotonic()
                 if remaining <= 0:
                     self._deadline_exceeded.set()
                     self._stop.wait(_SEARCH_CALL_DRAIN_SECONDS)

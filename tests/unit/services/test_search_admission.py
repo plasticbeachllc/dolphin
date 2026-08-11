@@ -323,6 +323,22 @@ def test_keeper_deadline_stops_renewal_and_releases_authority(monkeypatch: pytes
     assert coordinator.released == ["read_ws_ready"]
 
 
+def test_close_immediately_after_fixed_deadline_cannot_bypass_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    current = [10.0]
+    monkeypatch.setattr(search_admission_module, "monotonic", lambda: current[0])
+    monkeypatch.setattr(search_admission_module, "_SEARCH_CALL_DEADLINE_SECONDS", 30.0)
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator({workspace.workspace_id: _published(workspace.workspace_id)})
+
+    with pytest.raises(SearchAdmissionUnavailable, match="bounded read deadline"):
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+            [workspace.workspace_id]
+        ):
+            current[0] = 40.0
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
 def test_keeper_owns_delayed_cleanup_after_close_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
     monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS", 0.01)
