@@ -27,8 +27,10 @@ from kb.generation_retrieval import (
 )
 from kb.generation_vector import GenerationVectorError, GenerationVectorTimeout, VectorSearchHit
 from kb.search_admission import AdmittedSearchWorkspace
+from kb.search_scope import SearchScope
 
 _RETRIEVAL_READ_LEASE_DURATION = timedelta(seconds=30)
+_UNFILTERED_SCOPE = SearchScope(paths=(), exclude_paths=(), languages=())
 
 
 class _RetrievalCoordinator(Protocol):
@@ -40,7 +42,14 @@ class _RetrievalCoordinator(Protocol):
 
 
 class _KeywordReader(Protocol):
-    def search(self, read_lease_id: str, query: str, *, limit: int) -> tuple[KeywordSearchHit, ...]: ...
+    def search(
+        self,
+        read_lease_id: str,
+        query: str,
+        *,
+        scope: SearchScope,
+        limit: int,
+    ) -> tuple[KeywordSearchHit, ...]: ...
 
 
 class _VectorReader(Protocol):
@@ -49,6 +58,7 @@ class _VectorReader(Protocol):
         read_lease_id: str,
         query_vector: Sequence[float],
         *,
+        scope: SearchScope,
         limit: int,
     ) -> tuple[VectorSearchHit, ...]: ...
 
@@ -72,6 +82,7 @@ class GenerationRetrievalService:
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope = _UNFILTERED_SCOPE,
     ) -> GenerationRetrievalResult:
         """Build one score-free ranked plan; ``None`` explicitly omits vector retrieval."""
 
@@ -88,6 +99,7 @@ class GenerationRetrievalService:
                 lease,
                 query,
                 query_vector=query_vector,
+                scope=scope,
                 deadline_exceeded=lambda: False,
             )
         finally:
@@ -104,6 +116,7 @@ class GenerationRetrievalService:
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope = _UNFILTERED_SCOPE,
     ) -> GenerationRetrievalResult:
         """Retrieve under admitted caller-held authority without releasing it."""
 
@@ -111,6 +124,7 @@ class GenerationRetrievalService:
             admitted.read_lease,
             query,
             query_vector=query_vector,
+            scope=scope,
             deadline_exceeded=admitted.deadline_exceeded,
         )
 
@@ -120,6 +134,7 @@ class GenerationRetrievalService:
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope = _UNFILTERED_SCOPE,
     ) -> TransientGenerationCandidates:
         """Return canonical transient candidates under caller-held authority."""
 
@@ -127,6 +142,7 @@ class GenerationRetrievalService:
             admitted.read_lease,
             query,
             query_vector=query_vector,
+            scope=scope,
             deadline_exceeded=admitted.deadline_exceeded,
         )
 
@@ -136,6 +152,7 @@ class GenerationRetrievalService:
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope,
         deadline_exceeded: Callable[[], bool],
     ) -> GenerationRetrievalResult:
         """Execute bounded retrieval under one exact retained lease."""
@@ -144,6 +161,7 @@ class GenerationRetrievalService:
             lease,
             query,
             query_vector=query_vector,
+            scope=scope,
             deadline_exceeded=deadline_exceeded,
         )
         ranked_targets, horizon_reached = rank_generation_candidates(
@@ -163,6 +181,7 @@ class GenerationRetrievalService:
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope,
         deadline_exceeded: Callable[[], bool],
     ) -> TransientGenerationCandidates:
         """Execute bounded branches and retain scores only for immediate in-process fusion."""
@@ -174,6 +193,7 @@ class GenerationRetrievalService:
             keyword_hits = self._keyword_store.search(
                 lease.lease_id,
                 query,
+                scope=scope,
                 limit=GENERATION_BRANCH_CANDIDATE_LIMIT,
             )
             _require_search_deadline(deadline_exceeded)
@@ -183,6 +203,7 @@ class GenerationRetrievalService:
                 else self._vector_store.search(
                     lease.lease_id,
                     query_vector,
+                    scope=scope,
                     limit=GENERATION_BRANCH_CANDIDATE_LIMIT,
                 )
             )

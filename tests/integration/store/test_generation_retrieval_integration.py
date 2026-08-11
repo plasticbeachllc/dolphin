@@ -30,6 +30,7 @@ from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
 from kb.store.generation_keyword import SQLiteGenerationKeywordStore
 from kb.store.generation_vector import LanceGenerationVectorStore
+from kb.store.search_scope import SQLiteSearchScopeStore
 
 
 def test_real_coverage_keyword_and_vector_stores_share_one_published_snapshot(
@@ -186,6 +187,7 @@ async def test_first_page_execution_uses_one_embedding_and_one_global_real_store
 
     plan = await SearchExecutionService(
         SearchCoverageService(registry, coordinator),
+        SQLiteSearchScopeStore(layout, clock=lambda: now),
         embeddings,
         retrieval,
     ).execute_first_page(
@@ -204,6 +206,28 @@ async def test_first_page_execution_uses_one_embedding_and_one_global_real_store
     }
     assert plan.ranked_targets_retained == 4
     assert all("score" not in target.model_dump() for target in plan.ranked_targets)
+
+    filtered = await SearchExecutionService(
+        SearchCoverageService(registry, coordinator),
+        SQLiteSearchScopeStore(layout, clock=lambda: now),
+        embeddings,
+        retrieval,
+    ).execute_first_page(
+        "needle",
+        [second[0].workspace_id, first[0].workspace_id],
+        paths=["src/*-lexical.py"],
+        languages=["py"],
+    )
+
+    assert embeddings.queries == ["needle", "needle"]
+    assert filtered.filter_shape == "both"
+    assert filtered.scope_searchable_chunks == 2
+    assert filtered.ranked_targets_retained == 2
+    assert {target.workspace_id for target in filtered.ranked_targets} == {
+        first[0].workspace_id,
+        second[0].workspace_id,
+    }
+    assert {target.sources for target in filtered.ranked_targets} == {("keyword", "vector")}
     with sqlite3.connect(layout.metadata_db) as connection:
         assert connection.execute("SELECT count(*) FROM generation_reader_leases").fetchone() == (0,)
 
@@ -329,6 +353,8 @@ def _vector(membership: StagedChunkMembership, basis: int) -> StagedGenerationVe
     return StagedGenerationVector(
         chunk_instance_id=membership.chunk_instance_id,
         embedding_cache_key=membership.embedding_cache_key,
+        relative_path=membership.relative_path,
+        language=membership.language,
         vector=_basis(basis),
     )
 

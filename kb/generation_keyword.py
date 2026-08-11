@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from kb.artifacts import MAX_CHUNK_TEXT_UTF8_BYTES, MAX_GENERATION_ARTIFACTS, identify_chunk_text
 from kb.generation_content import MAX_LANGUAGE_LENGTH, MAX_RELATIVE_PATH_LENGTH
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
+from kb.search_scope import SearchScope
 
 GENERATION_KEYWORD_COMMIT_FORMAT = "dolphin-generation-keyword-v1"
 MAX_KEYWORD_QUERY_LENGTH = 4_096
@@ -163,4 +164,11 @@ def _update_frame(digest: _Digest, value: bytes) -> None:
 
 
 class GenerationKeywordStore(Protocol):
-    def search(self, read_lease_id: str, query: str, *, limit: int) -> tuple[KeywordSearchHit, ...]: ...
+    def search(
+        self,
+        read_lease_id: str,
+        query: str,
+        *,
+        scope: SearchScope,
+        limit: int,
+    ) -> tuple[KeywordSearchHit, ...]: ...

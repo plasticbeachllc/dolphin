@@ -36,7 +36,7 @@ PUBLIC_MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
 # This hash covers the complete discovery-visible contract: order, names,
 # descriptions, annotations, and strict input schemas. Deliberate protocol
 # changes must update this pinned value in the same reviewed change.
-FROZEN_PUBLIC_REGISTRY_DIGEST: Final = "c74a7528d1997df5eee2e8f45151a16d9809e003f98017d6b84af2eb94d74301"
+FROZEN_PUBLIC_REGISTRY_DIGEST: Final = "25955b0697bb5370164936540bc4a68c1b2de98b2ca45b258ffb81d15097e14c"
 
 
 @dataclass(frozen=True, slots=True)

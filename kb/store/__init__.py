@@ -2,4 +2,5 @@ from .chunk_artifacts import ChunkArtifactStore as ChunkArtifactStore
 from .generation_coordinator import SQLiteGenerationCoordinator as SQLiteGenerationCoordinator
 from .generation_vector import LanceGenerationVectorStore as LanceGenerationVectorStore
 from .lancedb_store import LanceDBStore as LanceDBStore
+from .search_scope import SQLiteSearchScopeStore as SQLiteSearchScopeStore
 from .sqlite_meta import SQLiteMetadataStore as SQLiteMetadataStore

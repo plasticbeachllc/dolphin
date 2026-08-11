@@ -16,11 +16,12 @@ from kb.generation_retrieval import (
 )
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
 from kb.query_embedding import QueryEmbeddingResolution, TransientProviderCategory
+from kb.search_scope import ResolvedSearchScope, SearchFilterShape
 
 SEARCH_RANKING_POLICY_VERSION = "search-global-rrf-v1"
 MAX_SEARCH_EXECUTION_WORKSPACES = 32
 
-SearchRetrievalMode = Literal["hybrid", "lexical_structural"]
+SearchRetrievalMode = Literal["hybrid", "lexical_structural", "not_needed"]
 SearchRetrievalSource = Literal["keyword", "vector"]
 
 
@@ -66,8 +67,11 @@ class FirstPageSearchPlan(_SearchExecutionModel):
         min_length=1,
         max_length=MAX_SEARCH_EXECUTION_WORKSPACES,
     )
+    scope_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    filter_shape: SearchFilterShape
+    scope_searchable_chunks: int = Field(ge=0)
     retrieval_mode: SearchRetrievalMode
-    query_embedding_source: Literal["cache", "live", "unavailable"]
+    query_embedding_source: Literal["cache", "live", "unavailable", "not_needed"]
     degraded_reason: TransientProviderCategory | None
     retryable: bool
     ranking_policy_version: Literal["search-global-rrf-v1"] = SEARCH_RANKING_POLICY_VERSION
@@ -95,13 +99,26 @@ class FirstPageSearchPlan(_SearchExecutionModel):
             raise ValueError("search retained-target metadata does not match the ranked plan")
         if self.ranked_horizon_reached and len(self.ranked_targets) != self.ranked_target_horizon:
             raise ValueError("a reached search horizon requires a full ranked plan")
-        if self.retrieval_mode == "hybrid":
+        if self.retrieval_mode == "not_needed":
             valid_execution = (
-                self.query_embedding_source in {"cache", "live"} and self.degraded_reason is None and not self.retryable
+                self.scope_searchable_chunks == 0
+                and self.query_embedding_source == "not_needed"
+                and self.degraded_reason is None
+                and not self.retryable
+                and not self.ranked_targets
+                and not self.ranked_horizon_reached
+            )
+        elif self.retrieval_mode == "hybrid":
+            valid_execution = (
+                self.scope_searchable_chunks > 0
+                and self.query_embedding_source in {"cache", "live"}
+                and self.degraded_reason is None
+                and not self.retryable
             )
         else:
             valid_execution = (
-                self.query_embedding_source == "unavailable"
+                self.scope_searchable_chunks > 0
+                and self.query_embedding_source == "unavailable"
                 and self.degraded_reason is not None
                 and self.retryable
                 and all("vector" not in target.sources for target in self.ranked_targets)
@@ -114,15 +131,22 @@ class FirstPageSearchPlan(_SearchExecutionModel):
 def build_first_page_search_plan(
     candidates: tuple[TransientGenerationCandidates, ...],
     embedding: QueryEmbeddingResolution,
+    resolved_scope: ResolvedSearchScope,
 ) -> FirstPageSearchPlan:
     """Fuse every workspace/branch list once, then permanently discard scores."""
 
     if not 1 <= len(candidates) <= MAX_SEARCH_EXECUTION_WORKSPACES:
         raise SearchExecutionError("Dolphin search candidate workspace set is empty or too large")
+    if resolved_scope.searchable_chunks == 0:
+        raise SearchExecutionError("Dolphin empty search scope must not run retrieval")
     ordered = tuple(sorted(candidates, key=lambda item: item.snapshot.workspace_id))
     workspace_ids = tuple(item.snapshot.workspace_id for item in ordered)
     if len(set(workspace_ids)) != len(workspace_ids):
         raise SearchExecutionError("Dolphin search candidate workspace set contains duplicates")
+    expected_counts = tuple((item.snapshot.workspace_id, item.snapshot.generation_id) for item in ordered)
+    observed_counts = tuple((item.workspace_id, item.generation_id) for item in resolved_scope.workspace_counts)
+    if observed_counts != expected_counts:
+        raise SearchExecutionError("Dolphin resolved search scope does not match candidate authority")
 
     keyword_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
     vector_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
@@ -174,6 +198,9 @@ def build_first_page_search_plan(
     )
     return FirstPageSearchPlan(
         snapshots=tuple(item.snapshot for item in ordered),
+        scope_digest=resolved_scope.scope_digest,
+        filter_shape=resolved_scope.filter_shape,
+        scope_searchable_chunks=resolved_scope.searchable_chunks,
         retrieval_mode=embedding.retrieval_mode,
         query_embedding_source=embedding.source,
         degraded_reason=embedding.degraded_reason,
@@ -181,4 +208,34 @@ def build_first_page_search_plan(
         ranked_targets_retained=len(targets),
         ranked_horizon_reached=len(ranked) > GENERATION_RANKED_TARGET_HORIZON,
         ranked_targets=targets,
+    )
+
+
+def build_empty_scope_search_plan(
+    snapshots: tuple[PublishedSnapshot, ...],
+    resolved_scope: ResolvedSearchScope,
+) -> FirstPageSearchPlan:
+    """Return a provider-free empty plan under the exact admitted authority."""
+
+    ordered = tuple(sorted(snapshots, key=lambda snapshot: snapshot.workspace_id))
+    if not 1 <= len(ordered) <= MAX_SEARCH_EXECUTION_WORKSPACES or len(
+        {snapshot.workspace_id for snapshot in ordered}
+    ) != len(ordered):
+        raise SearchExecutionError("Dolphin empty search snapshot set is invalid")
+    expected = tuple((snapshot.workspace_id, snapshot.generation_id) for snapshot in ordered)
+    observed = tuple((item.workspace_id, item.generation_id) for item in resolved_scope.workspace_counts)
+    if resolved_scope.searchable_chunks != 0 or observed != expected:
+        raise SearchExecutionError("Dolphin empty search scope does not match admitted authority")
+    return FirstPageSearchPlan(
+        snapshots=ordered,
+        scope_digest=resolved_scope.scope_digest,
+        filter_shape=resolved_scope.filter_shape,
+        scope_searchable_chunks=0,
+        retrieval_mode="not_needed",
+        query_embedding_source="not_needed",
+        degraded_reason=None,
+        retryable=False,
+        ranked_targets_retained=0,
+        ranked_horizon_reached=False,
+        ranked_targets=(),
     )

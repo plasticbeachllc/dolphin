@@ -38,6 +38,7 @@ from kb.generation_vector import (
 )
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
+from kb.search_scope import SearchScope
 from kb.services.workspace_registry import OperationLease
 
 _TABLE_PREFIX = "generation_vectors_v1_"
@@ -51,6 +52,7 @@ _VERIFIED_COMMIT_CACHE_SIZE = 128
 _MAX_CONCURRENT_BACKEND_CALLS = 4
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _ResultT = TypeVar("_ResultT")
+_UNFILTERED_SCOPE = SearchScope(paths=(), exclude_paths=(), languages=())
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +111,7 @@ class _StagingScope:
     state: str
     manifest_id: str
     manifest_digest: str
-    memberships: tuple[tuple[str, str], ...]
+    memberships: tuple[tuple[str, str, str, str], ...]
     persisted_commit: VerifiedVectorCommit | None
 
 
@@ -245,24 +247,27 @@ class LanceGenerationVectorStore:
         read_lease_id: str,
         query_vector: Sequence[float],
         *,
+        scope: SearchScope = _UNFILTERED_SCOPE,
         limit: int,
     ) -> tuple[VectorSearchHit, ...]:
         _bounded_id(read_lease_id, "generation read lease ID")
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_VECTOR_RESULTS:
             raise GenerationVectorError("Dolphin vector result limit is invalid")
+        if not isinstance(scope, SearchScope):
+            raise GenerationVectorError("Dolphin vector search scope is invalid")
         try:
             query = canonicalize_embedding_vector(query_vector)
         except (TypeError, ValueError) as exc:
             raise GenerationVectorError("Dolphin query embedding is invalid") from exc
-        scope = self._published_scope(read_lease_id)
-        if not self._is_verified(scope.commit):
-            self.verify_commit(scope.commit)
-        with self.hold_commit(scope.commit):
-            if scope.commit.row_count == 0:
-                self._require_hits_authorized(read_lease_id, scope, ())
+        published_scope = self._published_scope(read_lease_id)
+        if not self._is_verified(published_scope.commit):
+            self.verify_commit(published_scope.commit)
+        with self.hold_commit(published_scope.commit):
+            if published_scope.commit.row_count == 0:
+                self._require_hits_authorized(read_lease_id, published_scope, ())
                 return ()
 
-            table_name, version = _parse_backend_token(scope.commit)
+            table_name, version = _parse_backend_token(published_scope.commit)
             table = _require_table(self._connect(), table_name)
             observed_version = self._call_backend(
                 lambda: _table_version(table),
@@ -273,13 +278,7 @@ class LanceGenerationVectorStore:
             started_at = self._monotonic()
             try:
                 rows = self._call_backend(
-                    lambda: (
-                        table.search(list(query), vector_column_name="vector")
-                        .metric("cosine")
-                        .select(["generation_id", "chunk_instance_id", "embedding_cache_key", "_distance"])
-                        .limit(limit)
-                        .to_list(timeout=_QUERY_TIMEOUT)
-                    ),
+                    lambda: _search_table(table, query, scope=scope, limit=limit),
                     message="Dolphin vector retrieval timed out",
                 )
             except GenerationVectorTimeout:
@@ -293,9 +292,14 @@ class LanceGenerationVectorStore:
                 monotonic=self._monotonic,
                 message="Dolphin vector retrieval timed out",
             )
-            hits, identities = _hits_from_rows(rows, scope.generation_id, limit)
-            self._require_hits_authorized(read_lease_id, scope, identities)
-            self.require_unchanged(scope.commit)
+            hits, identities = _hits_from_rows(
+                rows,
+                published_scope.generation_id,
+                limit,
+                search_scope=scope,
+            )
+            self._require_hits_authorized(read_lease_id, published_scope, identities)
+            self.require_unchanged(published_scope.commit)
             return hits
 
     def _call_backend(self, operation: Callable[[], _ResultT], *, message: str) -> _ResultT:
@@ -416,7 +420,7 @@ class LanceGenerationVectorStore:
             persisted = _optional_commit(generation.generation_id, tuple(row[5:12]))
             memberships = connection.execute(
                 """
-                SELECT chunk_instance_id, embedding_cache_key
+                SELECT chunk_instance_id, embedding_cache_key, relative_path, language
                 FROM generation_chunk_memberships
                 WHERE generation_id = ?
                 ORDER BY chunk_instance_id
@@ -428,7 +432,12 @@ class LanceGenerationVectorStore:
             manifest_id=_bounded_id(row[18], "generation manifest ID"),
             manifest_digest=_digest(row[19], "generation manifest digest"),
             memberships=tuple(
-                (_bounded_id(item[0], "chunk instance ID"), _digest(item[1], "embedding cache key"))
+                (
+                    _bounded_id(item[0], "chunk instance ID"),
+                    _digest(item[1], "embedding cache key"),
+                    str(item[2]),
+                    str(item[3]),
+                )
                 for item in memberships
             ),
             persisted_commit=persisted,
@@ -492,7 +501,7 @@ class LanceGenerationVectorStore:
         self,
         read_lease_id: str,
         scope: _PublishedVectorScope,
-        identities: tuple[tuple[str, str], ...],
+        identities: tuple[tuple[str, str, str, str], ...],
     ) -> None:
         current = self._published_scope(read_lease_id)
         if current != scope:
@@ -503,13 +512,21 @@ class LanceGenerationVectorStore:
         with _metadata_connection(self._layout) as connection:
             rows = connection.execute(
                 f"""
-                SELECT chunk_instance_id, embedding_cache_key
+                SELECT chunk_instance_id, embedding_cache_key, relative_path, language
                 FROM generation_chunk_memberships
                 WHERE generation_id = ? AND chunk_instance_id IN ({placeholders})
                 """,
                 (scope.generation_id, *(identity[0] for identity in identities)),
             ).fetchall()
-        expected = {(_bounded_id(row[0], "chunk instance ID"), _digest(row[1], "embedding cache key")) for row in rows}
+        expected = {
+            (
+                _bounded_id(row[0], "chunk instance ID"),
+                _digest(row[1], "embedding cache key"),
+                str(row[2]),
+                str(row[3]),
+            )
+            for row in rows
+        }
         if expected != set(identities) or len(expected) != len(identities):
             raise GenerationVectorCorrupt("Dolphin vector result is not authorized by its published snapshot")
 
@@ -549,7 +566,10 @@ def _validate_staged_vectors(vectors: Sequence[StagedGenerationVector]) -> tuple
 
 
 def _require_vector_membership(scope: _StagingScope, vectors: tuple[StagedGenerationVector, ...]) -> None:
-    supplied = tuple((vector.chunk_instance_id, vector.embedding_cache_key) for vector in vectors)
+    supplied = tuple(
+        (vector.chunk_instance_id, vector.embedding_cache_key, vector.relative_path, vector.language)
+        for vector in vectors
+    )
     if supplied != scope.memberships:
         raise GenerationVectorConflict("Dolphin vectors do not match the staged chunk manifest")
 
@@ -585,6 +605,8 @@ def _vector_schema() -> Any:
             pa.field("generation_id", pa.string(), nullable=False),
             pa.field("chunk_instance_id", pa.string(), nullable=False),
             pa.field("embedding_cache_key", pa.string(), nullable=False),
+            pa.field("relative_path", pa.string(), nullable=False),
+            pa.field("language", pa.string(), nullable=False),
             pa.field("vector_digest", pa.string(), nullable=False),
             pa.field("vector", pa.list_(pa.float32(), EMBEDDING_DIMENSIONS), nullable=False),
         ]
@@ -606,6 +628,8 @@ def _create_table(
                 "generation_id": generation_id,
                 "chunk_instance_id": vector.chunk_instance_id,
                 "embedding_cache_key": vector.embedding_cache_key,
+                "relative_path": vector.relative_path,
+                "language": vector.language,
                 "vector_digest": identify_generation_vector_row(vector),
                 "vector": list(vector.vector),
             }
@@ -634,7 +658,17 @@ def _vectors_from_table(
     try:
         rows = (
             table.search()
-            .select(["generation_id", "chunk_instance_id", "embedding_cache_key", "vector_digest", "vector"])
+            .select(
+                [
+                    "generation_id",
+                    "chunk_instance_id",
+                    "embedding_cache_key",
+                    "relative_path",
+                    "language",
+                    "vector_digest",
+                    "vector",
+                ]
+            )
             .limit(count + 1)
             .to_list(timeout=_QUERY_TIMEOUT)
         )
@@ -657,6 +691,8 @@ def _vectors_from_table(
             vector = StagedGenerationVector(
                 chunk_instance_id=row.get("chunk_instance_id"),
                 embedding_cache_key=row.get("embedding_cache_key"),
+                relative_path=row.get("relative_path"),
+                language=row.get("language"),
                 vector=tuple(row.get("vector", ())),
             )
             if row.get("vector_digest") != identify_generation_vector_row(vector):
@@ -668,6 +704,33 @@ def _vectors_from_table(
     if len({vector.chunk_instance_id for vector in ordered}) != len(ordered):
         raise GenerationVectorCorrupt("Dolphin generation vector identities are duplicated")
     return ordered
+
+
+def _search_table(
+    table: Any,
+    query: tuple[float, ...],
+    *,
+    scope: SearchScope,
+    limit: int,
+) -> Any:
+    builder = (
+        table.search(list(query), vector_column_name="vector")
+        .metric("cosine")
+        .select(
+            [
+                "generation_id",
+                "chunk_instance_id",
+                "embedding_cache_key",
+                "relative_path",
+                "language",
+                "_distance",
+            ]
+        )
+    )
+    predicate = scope.lance_predicate()
+    if predicate is not None:
+        builder = builder.where(predicate, prefilter=True)
+    return builder.limit(limit).to_list(timeout=_QUERY_TIMEOUT)
 
 
 def _query_timed_out(
@@ -750,11 +813,13 @@ def _hits_from_rows(
     rows: Any,
     generation_id: str,
     limit: int,
-) -> tuple[tuple[VectorSearchHit, ...], tuple[tuple[str, str], ...]]:
+    *,
+    search_scope: SearchScope,
+) -> tuple[tuple[VectorSearchHit, ...], tuple[tuple[str, str, str, str], ...]]:
     if not isinstance(rows, list) or len(rows) > limit:
         raise GenerationVectorCorrupt("Dolphin vector search returned invalid results")
     hits: list[VectorSearchHit] = []
-    identities: list[tuple[str, str]] = []
+    identities: list[tuple[str, str, str, str]] = []
     seen: set[str] = set()
     try:
         for row in rows:
@@ -762,6 +827,14 @@ def _hits_from_rows(
                 raise GenerationVectorCorrupt("Dolphin vector search crossed its generation scope")
             chunk_instance_id = _bounded_id(row.get("chunk_instance_id"), "chunk instance ID")
             cache_key = _digest(row.get("embedding_cache_key"), "embedding cache key")
+            relative_path = row.get("relative_path")
+            language = row.get("language")
+            if (
+                not isinstance(relative_path, str)
+                or not isinstance(language, str)
+                or not search_scope.matches(relative_path, language)
+            ):
+                raise GenerationVectorCorrupt("Dolphin vector search returned an out-of-scope result")
             if chunk_instance_id in seen:
                 raise GenerationVectorCorrupt("Dolphin vector search returned duplicate results")
             seen.add(chunk_instance_id)
@@ -778,7 +851,7 @@ def _hits_from_rows(
                     score=1.0 - (distance / 2.0),
                 )
             )
-            identities.append((chunk_instance_id, cache_key))
+            identities.append((chunk_instance_id, cache_key, relative_path, language))
     except (TypeError, ValueError, ValidationError) as exc:
         raise GenerationVectorCorrupt("Dolphin vector search result is corrupt") from exc
     return tuple(hits), tuple(identities)

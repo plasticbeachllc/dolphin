@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from threading import Event
 
@@ -16,6 +17,13 @@ from kb.generation_vector import VectorSearchHit
 from kb.query_embedding import QueryEmbeddingResolution
 from kb.search_admission import AdmittedSearchWorkspace, SearchCoverage, SearchWorkspaceMissing
 from kb.search_execution import SearchExecutionError, build_first_page_search_plan
+from kb.search_scope import (
+    ResolvedSearchScope,
+    SearchScope,
+    SearchScopeError,
+    SearchScopeUnavailable,
+    WorkspaceScopeCount,
+)
 from kb.services.search_execution import SearchExecutionService
 from kb.services.workspace_registry import WorkspaceSnapshot
 
@@ -37,7 +45,7 @@ def test_global_fusion_preserves_cross_workspace_targets_and_discards_scores() -
         vector=(),
     )
 
-    plan = build_first_page_search_plan((second, first), _embedding())
+    plan = build_first_page_search_plan((second, first), _embedding(), _resolved_scope("ws_a", "ws_b"))
 
     assert [
         (target.workspace_id, target.chunk_instance_id, target.rank, target.sources) for target in plan.ranked_targets
@@ -66,7 +74,11 @@ def test_global_fusion_round_robins_local_ranks_without_comparing_cross_index_sc
         vector=None,
     )
 
-    plan = build_first_page_search_plan((weak, strong), _embedding(degraded=True))
+    plan = build_first_page_search_plan(
+        (weak, strong),
+        _embedding(degraded=True),
+        _resolved_scope("ws_a", "ws_b"),
+    )
 
     assert [(target.workspace_id, target.chunk_instance_id) for target in plan.ranked_targets] == [
         ("ws_a", "weak"),
@@ -89,7 +101,7 @@ def test_global_fusion_reports_one_horizon_after_all_workspace_candidates() -> N
         vector=(),
     )
 
-    plan = build_first_page_search_plan((first, second), _embedding())
+    plan = build_first_page_search_plan((first, second), _embedding(), _resolved_scope("ws_a", "ws_b"))
 
     assert len(plan.ranked_targets) == 500
     assert plan.ranked_horizon_reached is True
@@ -106,6 +118,7 @@ def test_lexical_plan_carries_prominent_degradation_without_vector_targets() -> 
             ),
         ),
         _embedding(degraded=True),
+        _resolved_scope("ws_a"),
     )
 
     assert plan.retrieval_mode == "lexical_structural"
@@ -124,7 +137,7 @@ def test_global_fusion_rejects_candidate_branch_state_that_disagrees_with_its_mo
     )
 
     with pytest.raises(SearchExecutionError, match="branch state is inconsistent"):
-        build_first_page_search_plan((malformed,), _embedding())
+        build_first_page_search_plan((malformed,), _embedding(), _resolved_scope("ws_a"))
 
 
 @pytest.mark.asyncio
@@ -149,15 +162,19 @@ async def test_service_admits_before_one_embedding_and_retrieves_every_workspace
         events,
     )
 
-    plan = await SearchExecutionService(executor, embeddings, retrieval).execute_first_page(
+    plan = await SearchExecutionService(executor, _ScopeResolver(events), embeddings, retrieval).execute_first_page(
         "find the behavior",
         ["ws_b", "ws_a"],
+        paths=["src/**"],
+        languages=["py"],
     )
 
-    assert events[:2] == ["coverage", "embedding"]
+    assert events[:3] == ["coverage", "scope", "embedding"]
     assert events.count("embedding") == 1
-    assert set(events[2:]) == {"retrieve:ws_a", "retrieve:ws_b"}
+    assert set(events[3:]) == {"retrieve:ws_a", "retrieve:ws_b"}
     assert [target.workspace_id for target in plan.ranked_targets] == ["ws_a", "ws_b"]
+    assert plan.filter_shape == "both"
+    assert plan.scope_searchable_chunks == 2
     assert executor.requested_workspace_ids == ("ws_b", "ws_a")
     assert retrieval.query_vectors and all(len(vector) == 1_536 for vector in retrieval.query_vectors)
 
@@ -168,6 +185,7 @@ async def test_coverage_failure_performs_no_embedding_or_retrieval_work() -> Non
     executor = _CoverageExecutor(_coverage("ws_a"), events, error=SearchWorkspaceMissing(("ws_missing",)))
     service = SearchExecutionService(
         executor,
+        _ScopeResolver(events),
         _EmbeddingResolver(_embedding(), events),
         _CandidateRetriever({}, events),
     )
@@ -176,6 +194,108 @@ async def test_coverage_failure_performs_no_embedding_or_retrieval_work() -> Non
         await service.execute_first_page("query", ["ws_missing"])
 
     assert events == ["coverage"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_task_scope_is_rejected_before_coverage_or_embedding() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever({}, events),
+    )
+
+    with pytest.raises(SearchScopeError, match="canonical and repo-relative"):
+        await service.execute_first_page("query", ["ws_a"], paths=["../secret/**"])
+
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_scope_failure_performs_no_embedding_or_retrieval_work() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events, error=SearchScopeUnavailable("scope failed")),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever({}, events),
+    )
+
+    with pytest.raises(SearchScopeUnavailable, match="scope failed"):
+        await service.execute_first_page("query", ["ws_a"], paths=["src/**"])
+
+    assert events == ["coverage", "scope"]
+
+
+@pytest.mark.asyncio
+async def test_empty_scope_skips_embedding_and_all_retrieval() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events, searchable_chunks={"ws_a": 0}),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever({}, events),
+    )
+
+    plan = await service.execute_first_page("private query", ["ws_a"], paths=["missing/**"])
+
+    assert events == ["coverage", "scope"]
+    assert plan.retrieval_mode == "not_needed"
+    assert plan.query_embedding_source == "not_needed"
+    assert plan.scope_searchable_chunks == 0
+    assert plan.ranked_targets == ()
+    assert plan.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_partial_empty_scope_skips_only_zero_count_workspace_retrieval() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a", "ws_b"), events),
+        _ScopeResolver(events, searchable_chunks={"ws_a": 0, "ws_b": 1}),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever(
+            {
+                "ws_b": _candidates(
+                    "ws_b",
+                    keyword=(KeywordSearchHit(chunk_instance_id="match", score=1),),
+                    vector=(),
+                )
+            },
+            events,
+        ),
+    )
+
+    plan = await service.execute_first_page("query", ["ws_a", "ws_b"], paths=["src/**"])
+
+    assert events == ["coverage", "scope", "embedding", "retrieve:ws_b"]
+    assert [snapshot.workspace_id for snapshot in plan.snapshots] == ["ws_a", "ws_b"]
+    assert [(target.workspace_id, target.chunk_instance_id) for target in plan.ranked_targets] == [("ws_b", "match")]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_drains_scope_resolution_before_coverage_can_close() -> None:
+    events: list[str] = []
+    started = Event()
+    release = Event()
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a"), events),
+        _BlockingScopeResolver(events, started, release),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever({}, events),
+    )
+    execution = asyncio.create_task(service.execute_first_page("query", ["ws_a"], paths=["src/**"]))
+    assert await asyncio.to_thread(started.wait, 1)
+
+    execution.cancel()
+    await asyncio.sleep(0.02)
+    assert not execution.done()
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(execution, timeout=1)
+    assert events == ["coverage", "scope"]
 
 
 @pytest.mark.asyncio
@@ -194,6 +314,7 @@ async def test_service_degradation_omits_vector_retrieval_for_every_workspace() 
 
     plan = await SearchExecutionService(
         _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events),
         _EmbeddingResolver(_embedding(degraded=True), events),
         retrieval,
     ).execute_first_page("query", ["ws_a"])
@@ -215,6 +336,7 @@ async def test_retrieval_failure_waits_for_every_dispatched_workspace() -> None:
     )
     service = SearchExecutionService(
         _CoverageExecutor(_coverage("ws_a", "ws_b"), events),
+        _ScopeResolver(events),
         _EmbeddingResolver(_embedding(), events),
         retrieval,
     )
@@ -235,6 +357,7 @@ async def test_retrieval_failure_cancels_capacity_waiters_and_drains_started_wor
     workspace_ids = ("ws_a", "ws_b", "ws_c")
     service = SearchExecutionService(
         _CoverageExecutor(_coverage(*workspace_ids), []),
+        _ScopeResolver([]),
         _EmbeddingResolver(_embedding(), []),
         retrieval,
     )
@@ -263,6 +386,7 @@ async def test_cancellation_drains_dispatched_retrieval_before_returning() -> No
     )
     service = SearchExecutionService(
         _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events),
         _EmbeddingResolver(_embedding(), events),
         retrieval,
     )
@@ -288,6 +412,7 @@ async def test_cancellation_does_not_start_workspace_retrievals_waiting_for_capa
     retrieval = _CapacityBlockingRetriever(started, all_slots_started, release, capacity=2)
     service = SearchExecutionService(
         _CoverageExecutor(_coverage(*workspace_ids), []),
+        _ScopeResolver([]),
         _EmbeddingResolver(_embedding(), []),
         retrieval,
     )
@@ -326,6 +451,53 @@ class _CoverageExecutor:
         return await operation(self.coverage)
 
 
+class _ScopeResolver:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        error: Exception | None = None,
+        searchable_chunks: dict[str, int] | None = None,
+    ) -> None:
+        self.events = events
+        self.error = error
+        self.searchable_chunks = searchable_chunks
+
+    def resolve(
+        self,
+        leases: Sequence[GenerationReadLease],
+        scope: SearchScope,
+    ) -> ResolvedSearchScope:
+        self.events.append("scope")
+        if self.error is not None:
+            raise self.error
+        return _resolved_scope(
+            *(lease.snapshot.workspace_id for lease in leases),
+            scope=scope,
+            searchable_chunks=self.searchable_chunks,
+        )
+
+
+class _BlockingScopeResolver(_ScopeResolver):
+    def __init__(self, events: list[str], started: Event, release: Event) -> None:
+        super().__init__(events)
+        self.started = started
+        self.release = release
+
+    def resolve(
+        self,
+        leases: Sequence[GenerationReadLease],
+        scope: SearchScope,
+    ) -> ResolvedSearchScope:
+        self.events.append("scope")
+        self.started.set()
+        assert self.release.wait(timeout=1)
+        return _resolved_scope(
+            *(lease.snapshot.workspace_id for lease in leases),
+            scope=scope,
+        )
+
+
 class _EmbeddingResolver:
     def __init__(self, resolution: QueryEmbeddingResolution, events: list[str]) -> None:
         self.resolution = resolution
@@ -360,8 +532,9 @@ class _CandidateRetriever:
         query: str,
         *,
         query_vector,
+        scope,
     ) -> TransientGenerationCandidates:
-        assert query
+        assert query and scope.digest
         self.events.append(f"retrieve:{admitted.workspace.workspace_id}")
         self.query_vectors.append(tuple(query_vector) if query_vector is not None else ())
         if self.blocker is not None:
@@ -391,8 +564,9 @@ class _CapacityBlockingRetriever:
         query: str,
         *,
         query_vector,
+        scope,
     ) -> TransientGenerationCandidates:
-        assert query and query_vector is not None
+        assert query and query_vector is not None and scope.digest
         self.started.append(admitted.workspace.workspace_id)
         if len(self.started) == self.capacity:
             self.all_slots_started.set()
@@ -412,8 +586,9 @@ class _FailFastRetriever:
         query: str,
         *,
         query_vector,
+        scope,
     ) -> TransientGenerationCandidates:
-        assert query and query_vector is not None
+        assert query and query_vector is not None and scope.digest
         workspace_id = admitted.workspace.workspace_id
         self.started.append(workspace_id)
         if len(self.started) == 2:
@@ -455,6 +630,28 @@ def _candidates(
 
 def _coverage(*workspace_ids: str) -> SearchCoverage:
     return SearchCoverage(workspaces=tuple(_admitted(workspace_id) for workspace_id in sorted(workspace_ids)))
+
+
+def _resolved_scope(
+    *workspace_ids: str,
+    scope: SearchScope | None = None,
+    searchable_chunks: dict[str, int] | None = None,
+) -> ResolvedSearchScope:
+    resolved_scope = scope or SearchScope(paths=(), exclude_paths=(), languages=())
+    counts = tuple(
+        WorkspaceScopeCount(
+            workspace_id=workspace_id,
+            generation_id=f"generation_{workspace_id}",
+            searchable_chunks=1 if searchable_chunks is None else searchable_chunks[workspace_id],
+        )
+        for workspace_id in sorted(workspace_ids)
+    )
+    return ResolvedSearchScope(
+        scope_digest=resolved_scope.digest,
+        filter_shape=resolved_scope.filter_shape,
+        workspace_counts=counts,
+        searchable_chunks=sum(item.searchable_chunks for item in counts),
+    )
 
 
 def _admitted(workspace_id: str) -> AdmittedSearchWorkspace:

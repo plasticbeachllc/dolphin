@@ -23,6 +23,7 @@ from kb.generation_vector import (
     StagedGenerationVector,
 )
 from kb.runtime.storage import StorageLayout, macos_storage_layout
+from kb.search_scope import SearchScope
 from kb.services.workspace_registry import OperationLease, OperationState, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
 from kb.store import generation_vector as generation_vector_store
@@ -30,6 +31,7 @@ from kb.store.chunk_artifacts import ChunkArtifactStore
 from kb.store.generation_content import SQLiteGenerationContentStore
 from kb.store.generation_coordinator import SQLiteGenerationCoordinator
 from kb.store.generation_vector import LanceGenerationVectorStore
+from kb.store.search_scope import SQLiteSearchScopeStore
 
 
 def test_vectors_are_invisible_until_atomic_publication_and_search_uses_the_reader_snapshot(
@@ -90,6 +92,74 @@ def test_published_vector_search_surfaces_its_backend_deadline(
 
     with pytest.raises(GenerationVectorTimeout, match="retrieval timed out"):
         context.vectors.search(read_lease.lease_id, _basis(0), limit=1)
+
+
+def test_vector_prefilter_returns_best_eligible_hit_before_top_k(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    excluded_closest = _membership(
+        context.artifacts,
+        "excluded",
+        "excluded closest",
+        relative_path="tests/closest.py",
+    )
+    included = _membership(context.artifacts, "included", "included evidence", relative_path="src/main.py")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [excluded_closest, included])
+    commit = context.vectors.stage_and_commit(
+        context.lease,
+        context.generation,
+        [_vector(excluded_closest, 0), _vector(included, 1)],
+    )
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    query = tuple(1.0 if index in {0, 1} else 0.0 for index in range(1_536))
+    scope = SearchScope.from_inputs(paths=["src/**"], exclude_paths=[], languages=["python"])
+
+    hits = context.vectors.search(read_lease.lease_id, query, scope=scope, limit=1)
+
+    assert [hit.chunk_instance_id for hit in hits] == [included.chunk_instance_id]
+
+
+def test_scope_store_counts_exact_filtered_memberships_under_the_reader_lease(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    included = _membership(context.artifacts, "included", "included", relative_path="src/main.py")
+    excluded = _membership(context.artifacts, "excluded", "excluded", relative_path="tests/main.py")
+    manifest = context.content.stage_manifest(context.lease, context.generation, [included, excluded])
+    commit = context.vectors.stage_and_commit(
+        context.lease,
+        context.generation,
+        [_vector(included, 0), _vector(excluded, 1)],
+    )
+    context.coordinator.record_vector_ready(context.lease, commit)
+    context.coordinator.mark_ready(context.lease, manifest)
+    snapshot = context.coordinator.publish(
+        context.lease,
+        context.generation.generation_id,
+        expected_previous_generation_id=None,
+    )
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    store = SQLiteSearchScopeStore(context.layout, clock=lambda: context.now)
+
+    unfiltered = store.resolve([read_lease], SearchScope.from_inputs(paths=[], exclude_paths=[], languages=[]))
+    filtered = store.resolve(
+        [read_lease],
+        SearchScope.from_inputs(paths=["src/**"], exclude_paths=[], languages=["python"]),
+    )
+
+    assert unfiltered.searchable_chunks == 2
+    assert filtered.searchable_chunks == 1
+    assert filtered.workspace_counts[0].searchable_chunks == 1
 
 
 def test_published_vector_search_rejects_a_successful_backend_overrun(
@@ -294,6 +364,8 @@ def test_staging_requires_exact_chunk_and_embedding_cache_membership(
     wrong_cache_key = StagedGenerationVector(
         chunk_instance_id=membership.chunk_instance_id,
         embedding_cache_key="f" * 64,
+        relative_path=membership.relative_path,
+        language=membership.language,
         vector=_basis(0),
     )
 
@@ -386,12 +458,16 @@ def test_vector_input_and_search_limits_are_strict_and_bounded(
         StagedGenerationVector(
             chunk_instance_id=membership.chunk_instance_id,
             embedding_cache_key=membership.embedding_cache_key,
+            relative_path=membership.relative_path,
+            language=membership.language,
             vector=(1.0,),
         )
     with pytest.raises(ValidationError, match="finite"):
         StagedGenerationVector(
             chunk_instance_id=membership.chunk_instance_id,
             embedding_cache_key=membership.embedding_cache_key,
+            relative_path=membership.relative_path,
+            language=membership.language,
             vector=(float("nan"),) + (0.0,) * 1_535,
         )
     with pytest.raises(GenerationVectorError, match="result limit is invalid"):
@@ -489,15 +565,22 @@ def _context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Context:
     )
 
 
-def _membership(artifacts: ChunkArtifactStore, suffix: str, text: str) -> StagedChunkMembership:
+def _membership(
+    artifacts: ChunkArtifactStore,
+    suffix: str,
+    text: str,
+    *,
+    relative_path: str | None = None,
+    language: str = "python",
+) -> StagedChunkMembership:
     return StagedChunkMembership(
         chunk_instance_id=f"chunk_{suffix}",
         artifact=artifacts.put_exact_text(text),
-        relative_path=f"src/{suffix}.py",
+        relative_path=relative_path or f"src/{suffix}.py",
         source_file_fingerprint=hashlib.sha256(f"file:{suffix}".encode()).hexdigest(),
         start_line=1,
         end_line=1,
-        language="python",
+        language=language,
         chunker_key="python-tree-sitter-v1",
         embedding_cache_key=identify_embedding_input(text).cache_key,
     )
@@ -507,6 +590,8 @@ def _vector(membership: StagedChunkMembership, basis: int) -> StagedGenerationVe
     return StagedGenerationVector(
         chunk_instance_id=membership.chunk_instance_id,
         embedding_cache_key=membership.embedding_cache_key,
+        relative_path=membership.relative_path,
+        language=membership.language,
         vector=_basis(basis),
     )
 
