@@ -74,6 +74,7 @@ class _CoverageLeaseKeeper:
         self._coordinator = coordinator
         self._leases = tuple(item.read_lease for item in coverage.workspaces)
         self._stop = Event()
+        self._failed = Event()
         self._thread = Thread(target=self._run, name="dolphin-search-lease-keeper", daemon=True)
         self._started = False
 
@@ -88,6 +89,10 @@ class _CoverageLeaseKeeper:
         self._thread.join(timeout=_SEARCH_READ_LEASE_KEEPER_STOP_SECONDS)
         return not self._thread.is_alive()
 
+    @property
+    def failed(self) -> bool:
+        return self._failed.is_set()
+
     def _run(self) -> None:
         while not self._stop.wait(_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS):
             try:
@@ -99,6 +104,11 @@ class _CoverageLeaseKeeper:
                 # A transient missed renewal is safe while the existing authority is
                 # live. Later renewals may recover; final validation fails closed if not.
                 continue
+            except Exception:
+                # Coordinator implementations must normalize backend failures. Record
+                # any contract violation so this request fails clearly at its boundary.
+                self._failed.set()
+                return
 
 
 class SearchCoverageService:
@@ -150,6 +160,8 @@ class SearchCoverageService:
             completion_failure: SearchAdmissionUnavailable | None = None
             if not keeper.stop() and primary_failure is None:
                 completion_failure = SearchAdmissionUnavailable("Dolphin search lease keeper did not stop safely")
+            if keeper.failed and primary_failure is None:
+                completion_failure = SearchAdmissionUnavailable("Dolphin search lease renewal failed unexpectedly")
             if primary_failure is None and completion_failure is None:
                 try:
                     self.validate(coverage)

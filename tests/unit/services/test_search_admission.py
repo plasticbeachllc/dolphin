@@ -250,6 +250,25 @@ def test_slow_multi_workspace_work_renews_the_complete_lease_set(
     assert coordinator.released == ["read_ws_second", "read_ws_first"]
 
 
+def test_unexpected_lease_keeper_failure_fails_the_request_clearly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_READ_LEASE_RENEW_INTERVAL_SECONDS", 0.01)
+    workspace = _workspace("ws_ready", state="ready")
+    coordinator = _Coordinator(
+        {workspace.workspace_id: _published(workspace.workspace_id)},
+        renew_error=ValueError("unexpected backend exception"),
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="renewal failed unexpectedly"):
+        with SearchCoverageService(_Registry({workspace.workspace_id: workspace}, {}), coordinator).admit(
+            [workspace.workspace_id]
+        ):
+            time.sleep(0.025)
+
+    assert coordinator.released == ["read_ws_ready"]
+
+
 class _Registry:
     def __init__(
         self,
@@ -276,11 +295,13 @@ class _Coordinator:
         acquire_error_for: str | None = None,
         acquired_snapshot_override: PublishedSnapshot | None = None,
         release_error: bool = False,
+        renew_error: Exception | None = None,
     ) -> None:
         self.snapshots = snapshots
         self.acquire_error_for = acquire_error_for
         self.acquired_snapshot_override = acquired_snapshot_override
         self.release_error = release_error
+        self.renew_error = renew_error
         self.acquired: list[str] = []
         self.released: list[str] = []
         self.validated: list[str] = []
@@ -321,6 +342,8 @@ class _Coordinator:
     ) -> None:
         assert lease_duration == timedelta(seconds=30)
         self.renewed.append(tuple(lease.lease_id for lease in leases))
+        if self.renew_error is not None:
+            raise self.renew_error
 
     def release_read(self, lease: GenerationReadLease) -> None:
         self.released.append(lease.lease_id)
