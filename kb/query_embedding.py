@@ -45,6 +45,12 @@ class TransientProviderFailure(QueryEmbeddingError):
         super().__init__(f"Dolphin query embedding provider is temporarily unavailable ({category})")
 
 
+class QueryEmbeddingOverloaded(QueryEmbeddingError):
+    """Bounded local query-embedding admission has no free capacity."""
+
+    retryable: ClassVar[Literal[True]] = True
+
+
 class PermanentProviderFailure(QueryEmbeddingError):
     """OpenAI failed in a way that local fallback must not conceal."""
 

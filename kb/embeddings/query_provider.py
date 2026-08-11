@@ -82,6 +82,7 @@ class OpenAIQueryEmbeddingProvider:
         self._random_source = random_source
         self._clock = clock
         self._client: _AsyncOpenAIClient | None = None
+        self._client_lock = asyncio.Lock()
 
     async def embed_query(self, query: str) -> tuple[float, ...]:
         """Return one canonical vector or a closed, safe failure category."""
@@ -89,14 +90,7 @@ class OpenAIQueryEmbeddingProvider:
         api_key = self._environment.get(DOLPHIN_OPENAI_API_KEY, "").strip()
         if not api_key:
             raise CredentialMissing("Dolphin requires DOLPHIN_OPENAI_API_KEY in the MCP server environment")
-        client = self._client
-        if client is None:
-            try:
-                client = self._client_factory(api_key)
-            except Exception as exc:
-                _raise_classified(exc)
-            self._client = client
-        assert client is not None
+        client = await self._client_for(api_key)
 
         for attempt in range(_MAX_ATTEMPTS):
             try:
@@ -121,13 +115,30 @@ class OpenAIQueryEmbeddingProvider:
 
     async def close(self) -> None:
         """Release the lazily created SDK client without retaining credential state."""
-        client, self._client = self._client, None
-        if client is None:
-            return
-        try:
-            await client.close()
-        except Exception:
-            raise PermanentProviderFailure("provider_error") from None
+        async with self._client_lock:
+            client, self._client = self._client, None
+            if client is None:
+                return
+            try:
+                await client.close()
+            except Exception:
+                raise PermanentProviderFailure("provider_error") from None
+
+    async def _client_for(self, api_key: str) -> _AsyncOpenAIClient:
+        client = self._client
+        if client is not None:
+            return client
+        async with self._client_lock:
+            client = self._client
+            if client is not None:
+                return client
+            try:
+                client = self._client_factory(api_key)
+            except Exception as exc:
+                _raise_classified(exc)
+            assert client is not None
+            self._client = client
+            return client
 
 
 def _default_client(api_key: str) -> _AsyncOpenAIClient:

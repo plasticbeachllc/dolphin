@@ -11,12 +11,15 @@ from kb.query_embedding import (
     MAX_QUERY_CHARACTERS,
     CachedEmbedding,
     EmbeddingContractViolation,
+    QueryEmbeddingOverloaded,
     QueryEmbeddingResolution,
     TransientProviderFailure,
 )
 from kb.store.embedding_cache import EmbeddingCacheCorrupt, EmbeddingCacheError, EmbeddingCacheUnavailable
 
 _MAX_CONCURRENT_QUERY_PROVIDER_CALLS = 4
+_MAX_CONCURRENT_QUERY_EMBEDDING_ADMISSIONS = 32
+_MAX_CONCURRENT_QUERY_CACHE_CALLS = 4
 
 
 class _EmbeddingCache(Protocol):
@@ -36,32 +39,39 @@ class QueryEmbeddingService:
         self._cache = cache
         self._provider = provider
         self._provider_slots = asyncio.Semaphore(_MAX_CONCURRENT_QUERY_PROVIDER_CALLS)
+        self._cache_slots = asyncio.Semaphore(_MAX_CONCURRENT_QUERY_CACHE_CALLS)
         self._single_flights: dict[str, asyncio.Task[QueryEmbeddingResolution]] = {}
         self._single_flights_guard = asyncio.Lock()
 
     async def resolve(self, query: str) -> QueryEmbeddingResolution:
         identity = _query_identity(query)
-        cached = await self._cached(identity)
-        if cached is not None:
-            return _cached_resolution(identity, cached)
-
         async with self._single_flights_guard:
             flight = self._single_flights.get(identity.cache_key)
             if flight is None:
+                if len(self._single_flights) >= _MAX_CONCURRENT_QUERY_EMBEDDING_ADMISSIONS:
+                    raise QueryEmbeddingOverloaded("Dolphin query embedding admission is temporarily full")
                 flight = asyncio.create_task(
-                    self._resolve_miss(query, identity),
+                    self._run_flight(query, identity),
                     name=f"dolphin-query-embedding-{identity.cache_key[:12]}",
                 )
                 self._single_flights[identity.cache_key] = flight
-                flight.add_done_callback(
-                    lambda completed, cache_key=identity.cache_key: self._schedule_flight_retirement(
-                        cache_key,
-                        completed,
-                    )
-                )
+                flight.add_done_callback(_consume_flight_exception)
         return await asyncio.shield(flight)
 
-    async def _resolve_miss(
+    async def _run_flight(
+        self,
+        query: str,
+        identity: EmbeddingInputIdentity,
+    ) -> QueryEmbeddingResolution:
+        try:
+            return await self._resolve_admitted(query, identity)
+        finally:
+            flight = asyncio.current_task()
+            async with self._single_flights_guard:
+                if self._single_flights.get(identity.cache_key) is flight:
+                    del self._single_flights[identity.cache_key]
+
+    async def _resolve_admitted(
         self,
         query: str,
         identity: EmbeddingInputIdentity,
@@ -89,7 +99,8 @@ class QueryEmbeddingService:
             raise EmbeddingContractViolation("Dolphin query embedding response violates the fixed contract") from None
 
         try:
-            persisted = await asyncio.to_thread(self._cache.put, identity, live_vector)
+            async with self._cache_slots:
+                persisted = await asyncio.to_thread(self._cache.put, identity, live_vector)
         except EmbeddingCacheUnavailable:
             vector = live_vector
             cache_write = "skipped_unavailable"
@@ -112,7 +123,8 @@ class QueryEmbeddingService:
 
     async def _cached(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
         try:
-            cached = await asyncio.to_thread(self._cache.get, identity)
+            async with self._cache_slots:
+                cached = await asyncio.to_thread(self._cache.get, identity)
         except EmbeddingCacheUnavailable:
             return None
         except (EmbeddingCacheCorrupt, EmbeddingCacheError):
@@ -120,27 +132,6 @@ class QueryEmbeddingService:
         if cached is not None and cached.identity != identity:
             raise EmbeddingContractViolation("Dolphin query embedding cache violates the fixed contract")
         return cached
-
-    def _schedule_flight_retirement(
-        self,
-        cache_key: str,
-        flight: asyncio.Task[QueryEmbeddingResolution],
-    ) -> None:
-        asyncio.create_task(
-            self._retire_flight(cache_key, flight),
-            name=f"dolphin-query-embedding-retire-{cache_key[:12]}",
-        )
-
-    async def _retire_flight(
-        self,
-        cache_key: str,
-        flight: asyncio.Task[QueryEmbeddingResolution],
-    ) -> None:
-        if not flight.cancelled():
-            flight.exception()
-        async with self._single_flights_guard:
-            if self._single_flights.get(cache_key) is flight:
-                del self._single_flights[cache_key]
 
 
 def _cached_resolution(
@@ -156,6 +147,11 @@ def _cached_resolution(
         retryable=False,
         cache_write="not_needed",
     )
+
+
+def _consume_flight_exception(flight: asyncio.Task[QueryEmbeddingResolution]) -> None:
+    if not flight.cancelled():
+        flight.exception()
 
 
 def _query_identity(query: str) -> EmbeddingInputIdentity:

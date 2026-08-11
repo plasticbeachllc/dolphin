@@ -126,6 +126,28 @@ async def test_request_pins_model_dimensions_encoding_and_timeout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_lazy_initialization_creates_and_closes_one_client() -> None:
+    client = _Client([_response(), _response(), _response(), _response()])
+    created: list[str] = []
+
+    def factory(key: str) -> _Client:
+        created.append(key)
+        return client
+
+    provider = OpenAIQueryEmbeddingProvider(
+        environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
+        client_factory=factory,
+    )
+
+    vectors = await asyncio.gather(*(provider.embed_query(f"query {index}") for index in range(4)))
+    await provider.close()
+
+    assert all(len(vector) == EMBEDDING_DIMENSIONS for vector in vectors)
+    assert created == ["secret"]
+    assert client.closed is True
+
+
+@pytest.mark.asyncio
 async def test_transient_timeout_is_retried_once() -> None:
     request = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
     client = _Client([openai.APITimeoutError(request), _response()])

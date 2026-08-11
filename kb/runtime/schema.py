@@ -1,3 +1,3 @@
 """Version authority for Dolphin's freely replaceable prerelease metadata schema."""
 
-METADATA_SCHEMA_VERSION = 16
+METADATA_SCHEMA_VERSION = 15
