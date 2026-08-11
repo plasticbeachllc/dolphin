@@ -51,10 +51,13 @@ def test_global_fusion_preserves_cross_workspace_targets_and_discards_scores() -
     assert "score" not in plan.model_dump_json()
 
 
-def test_global_fusion_orders_each_backend_branch_across_workspaces_before_rrf() -> None:
+def test_global_fusion_round_robins_local_ranks_without_comparing_cross_index_scores() -> None:
     weak = _candidates(
         "ws_a",
-        keyword=(KeywordSearchHit(chunk_instance_id="weak", score=1),),
+        keyword=(
+            KeywordSearchHit(chunk_instance_id="weak", score=1),
+            KeywordSearchHit(chunk_instance_id="weaker", score=0.5),
+        ),
         vector=None,
     )
     strong = _candidates(
@@ -66,8 +69,9 @@ def test_global_fusion_orders_each_backend_branch_across_workspaces_before_rrf()
     plan = build_first_page_search_plan((weak, strong), _embedding(degraded=True))
 
     assert [(target.workspace_id, target.chunk_instance_id) for target in plan.ranked_targets] == [
-        ("ws_b", "strong"),
         ("ws_a", "weak"),
+        ("ws_b", "strong"),
+        ("ws_a", "weaker"),
     ]
 
 
@@ -248,6 +252,31 @@ async def test_cancellation_drains_dispatched_retrieval_before_returning() -> No
         await asyncio.wait_for(execution, timeout=1)
 
 
+@pytest.mark.asyncio
+async def test_cancellation_does_not_start_workspace_retrievals_waiting_for_capacity() -> None:
+    workspace_ids = tuple(f"ws_{index:02d}" for index in range(9))
+    started: list[str] = []
+    all_slots_started = Event()
+    release = Event()
+    retrieval = _CapacityBlockingRetriever(started, all_slots_started, release)
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage(*workspace_ids), []),
+        _EmbeddingResolver(_embedding(), []),
+        retrieval,
+    )
+    execution = asyncio.create_task(service.execute_first_page("query", workspace_ids))
+    assert await asyncio.to_thread(all_slots_started.wait, 1)
+
+    execution.cancel()
+    await asyncio.sleep(0.02)
+    assert len(started) == 8
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(execution, timeout=1)
+    assert len(started) == 8
+
+
 class _CoverageExecutor:
     def __init__(
         self,
@@ -320,6 +349,27 @@ class _CandidateRetriever:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+class _CapacityBlockingRetriever:
+    def __init__(self, started: list[str], all_slots_started: Event, release: Event) -> None:
+        self.started = started
+        self.all_slots_started = all_slots_started
+        self.release = release
+
+    def candidates_for_admitted_workspace(
+        self,
+        admitted: AdmittedSearchWorkspace,
+        query: str,
+        *,
+        query_vector,
+    ) -> TransientGenerationCandidates:
+        assert query and query_vector is not None
+        self.started.append(admitted.workspace.workspace_id)
+        if len(self.started) == 8:
+            self.all_slots_started.set()
+        assert self.release.wait(timeout=1)
+        return _candidates(admitted.workspace.workspace_id, keyword=(), vector=())
 
 
 def _embedding(*, degraded: bool = False) -> QueryEmbeddingResolution:

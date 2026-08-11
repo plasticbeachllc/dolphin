@@ -82,26 +82,35 @@ class SearchExecutionService:
     ) -> tuple[TransientGenerationCandidates, ...]:
         async def retrieve(admitted: AdmittedSearchWorkspace) -> TransientGenerationCandidates:
             async with self._retrieval_slots:
-                return await asyncio.to_thread(
-                    self._retrieval.candidates_for_admitted_workspace,
-                    admitted,
-                    query,
-                    query_vector=embedding.vector,
+                backend = asyncio.create_task(
+                    asyncio.to_thread(
+                        self._retrieval.candidates_for_admitted_workspace,
+                        admitted,
+                        query,
+                        query_vector=embedding.vector,
+                    ),
+                    name=f"dolphin-search-retrieval-{admitted.workspace.workspace_id}",
                 )
+                try:
+                    return await asyncio.shield(backend)
+                except asyncio.CancelledError:
+                    await _drain_after_cancellation(backend)
+                    raise
 
-        async def collect() -> tuple[TransientGenerationCandidates | BaseException, ...]:
-            return tuple(
-                await asyncio.gather(
-                    *(retrieve(admitted) for admitted in coverage.workspaces),
-                    return_exceptions=True,
-                )
+        retrievals = tuple(
+            asyncio.create_task(
+                retrieve(admitted),
+                name=f"dolphin-search-admitted-{admitted.workspace.workspace_id}",
             )
-
-        group = asyncio.create_task(collect(), name="dolphin-search-retrieval")
+            for admitted in coverage.workspaces
+        )
+        group = asyncio.gather(*retrievals, return_exceptions=True)
         try:
             outcomes = await asyncio.shield(group)
         except BaseException:
             primary_failure = sys.exception()
+            for retrieval in retrievals:
+                retrieval.cancel()
             await _drain_after_cancellation(group)
             assert primary_failure is not None
             raise primary_failure
@@ -114,7 +123,7 @@ class SearchExecutionService:
         return tuple(candidates)
 
 
-async def _drain_after_cancellation[TaskResultT](task: asyncio.Task[TaskResultT]) -> None:
+async def _drain_after_cancellation[TaskResultT](task: asyncio.Future[TaskResultT]) -> None:
     """Keep admitted leases live until already-dispatched bounded retrieval finishes."""
 
     while not task.done():
@@ -124,3 +133,8 @@ async def _drain_after_cancellation[TaskResultT](task: asyncio.Task[TaskResultT]
             continue
         except BaseException:
             return
+    if not task.cancelled():
+        try:
+            task.result()
+        except BaseException:
+            pass

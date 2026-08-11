@@ -124,8 +124,8 @@ def build_first_page_search_plan(
     if len(set(workspace_ids)) != len(workspace_ids):
         raise SearchExecutionError("Dolphin search candidate workspace set contains duplicates")
 
-    keyword_candidates: list[tuple[tuple[str, str, str, str], float]] = []
-    vector_candidates: list[tuple[tuple[str, str, str, str], float]] = []
+    keyword_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
+    vector_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
     for item in ordered:
         if item.retrieval_mode != embedding.retrieval_mode:
             raise SearchExecutionError("Dolphin search candidate retrieval mode is inconsistent")
@@ -139,20 +139,18 @@ def build_first_page_search_plan(
             item.snapshot.publication_id,
             item.snapshot.generation_id,
         )
-        keyword_candidates.extend(((*authority, hit.chunk_instance_id), hit.score) for hit in keyword_hits)
+        keyword_candidates.extend(
+            (local_rank, (*authority, hit.chunk_instance_id)) for local_rank, hit in enumerate(keyword_hits, start=1)
+        )
         if vector_hits is not None:
-            vector_candidates.extend(((*authority, hit.chunk_instance_id), hit.score) for hit in vector_hits)
+            vector_candidates.extend(
+                (local_rank, (*authority, hit.chunk_instance_id)) for local_rank, hit in enumerate(vector_hits, start=1)
+            )
 
     branch_ranks: dict[tuple[str, str, str, str], dict[SearchRetrievalSource, int]] = {}
-    for rank, (identity, _score) in enumerate(
-        sorted(keyword_candidates, key=lambda item: (-item[1], item[0])),
-        start=1,
-    ):
+    for rank, (_local_rank, identity) in enumerate(sorted(keyword_candidates), start=1):
         branch_ranks.setdefault(identity, {})["keyword"] = rank
-    for rank, (identity, _score) in enumerate(
-        sorted(vector_candidates, key=lambda item: (-item[1], item[0])),
-        start=1,
-    ):
+    for rank, (_local_rank, identity) in enumerate(sorted(vector_candidates), start=1):
         branch_ranks.setdefault(identity, {})["vector"] = rank
 
     ranked = sorted(
