@@ -192,12 +192,16 @@ class SearchCoverageService:
                 if lease.snapshot.workspace_id != workspace.workspace_id:
                     raise SearchAdmissionUnavailable("Dolphin search reader lease has invalid workspace authority")
         except (WorkspaceRegistryError, GenerationCoordinatorError) as exc:
-            self._release_after_failed_admission(admitted)
-            admission_capacity.release()
+            try:
+                self._release_after_failed_admission(admitted)
+            finally:
+                admission_capacity.release()
             raise SearchAdmissionUnavailable("Dolphin could not pin complete search coverage") from exc
         except Exception:
-            self._release_after_failed_admission(admitted)
-            admission_capacity.release()
+            try:
+                self._release_after_failed_admission(admitted)
+            finally:
+                admission_capacity.release()
             raise
 
         keeper = _CoverageLeaseKeeper(self._coordinator, admitted, admission_capacity)
@@ -207,8 +211,10 @@ class SearchCoverageService:
         try:
             keeper.start()
         except Exception:
-            self._release_after_failed_admission(admitted)
-            admission_capacity.release()
+            try:
+                self._release_after_failed_admission(admitted)
+            finally:
+                admission_capacity.release()
             raise
 
         try:
@@ -267,6 +273,10 @@ class SearchCoverageService:
                 raise SearchWorkspaceResolutionFailed(current_resolution)
             values = (current_resolution.workspace.workspace_id,)
         else:
+            if isinstance(workspace_ids, (str, bytes)) or not isinstance(workspace_ids, Sequence):
+                raise SearchAdmissionInvalid("Dolphin search workspace scope must be a bounded sequence of IDs")
+            if not 1 <= len(workspace_ids) <= _MAX_SEARCH_SCOPE_WORKSPACES:
+                raise SearchAdmissionInvalid("Dolphin search workspace scope is empty or too large")
             values = tuple(workspace_ids)
         if not 1 <= len(values) <= _MAX_SEARCH_SCOPE_WORKSPACES:
             raise SearchAdmissionInvalid("Dolphin search workspace scope is empty or too large")
@@ -367,11 +377,11 @@ class SearchCoverageService:
             pass
 
     def _release_all(self, coverage: SearchCoverage) -> None:
-        first_failure: GenerationCoordinatorError | None = None
+        first_failure: Exception | None = None
         for item in reversed(coverage.workspaces):
             try:
                 self._coordinator.release_read(item.read_lease)
-            except GenerationCoordinatorError as exc:
+            except Exception as exc:
                 if first_failure is None:
                     first_failure = exc
         if first_failure is not None:

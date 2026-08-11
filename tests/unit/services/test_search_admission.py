@@ -6,6 +6,7 @@ import time
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from threading import BoundedSemaphore, Event
+from typing import cast
 
 import pytest
 
@@ -136,9 +137,14 @@ def test_missing_duplicate_empty_and_unresolved_scopes_fail_before_lease_work() 
             raise AssertionError
     assert missing.value.workspace_ids == ("ws_missing",)
 
-    for invalid in ([], ["ws_same", "ws_same"]):
+    for invalid in ([], ["ws_same", "ws_same"], [f"ws_{index}" for index in range(33)]):
         with pytest.raises(SearchAdmissionInvalid):
             with service.admit(invalid):
+                raise AssertionError
+
+    for invalid_container in ("ws_ready", cast(Sequence[str], iter(["ws_ready"]))):
+        with pytest.raises(SearchAdmissionInvalid, match="bounded sequence"):
+            with service.admit(invalid_container):
                 raise AssertionError
 
     with pytest.raises(SearchWorkspaceResolutionFailed):
@@ -212,6 +218,35 @@ def test_release_failure_does_not_mask_partial_acquisition_failure() -> None:
             raise AssertionError
 
     assert coordinator.released == ["read_ws_first"]
+
+
+def test_unexpected_release_failure_releases_remaining_leases_and_admission_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(search_admission_module, "_SEARCH_ADMISSION_CAPACITY", BoundedSemaphore(1))
+    first = _workspace("ws_first", state="ready")
+    second = _workspace("ws_second", state="ready")
+    third = _workspace("ws_third", state="ready")
+    workspaces = {item.workspace_id: item for item in (first, second, third)}
+    snapshots = {workspace_id: _published(workspace_id) for workspace_id in workspaces}
+    failing_coordinator = _Coordinator(
+        snapshots,
+        acquire_error_for=third.workspace_id,
+        raw_release_error_for="read_ws_second",
+    )
+
+    with pytest.raises(SearchAdmissionUnavailable, match="pin complete"):
+        with SearchCoverageService(_Registry(workspaces, {}), failing_coordinator).admit(tuple(workspaces)):
+            raise AssertionError
+
+    assert failing_coordinator.released == ["read_ws_second", "read_ws_first"]
+
+    recovery_coordinator = _Coordinator({first.workspace_id: _published(first.workspace_id)})
+    with SearchCoverageService(
+        _Registry({first.workspace_id: first}, {}),
+        recovery_coordinator,
+    ).admit([first.workspace_id]):
+        pass
 
 
 def test_validation_fails_closed_when_any_retained_snapshot_changes() -> None:
@@ -408,6 +443,7 @@ class _Coordinator:
         renew_error: Exception | None = None,
         renew_blocker: tuple[Event, Event] | None = None,
         release_failures: int = 0,
+        raw_release_error_for: str | None = None,
         validation_error: Exception | None = None,
     ) -> None:
         self.snapshots = snapshots
@@ -417,6 +453,7 @@ class _Coordinator:
         self.renew_error = renew_error
         self.renew_blocker = renew_blocker
         self.release_failures = release_failures
+        self.raw_release_error_for = raw_release_error_for
         self.validation_error = validation_error
         self.acquired: list[str] = []
         self.released: list[str] = []
@@ -471,6 +508,8 @@ class _Coordinator:
 
     def release_read(self, lease: GenerationReadLease) -> None:
         self.released.append(lease.lease_id)
+        if lease.lease_id == self.raw_release_error_for:
+            raise RuntimeError("unexpected release failure")
         if self.release_failures:
             self.release_failures -= 1
             raise GenerationCoordinatorError("transient release failure")
