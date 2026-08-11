@@ -269,6 +269,7 @@ async def test_different_query_misses_share_a_fixed_provider_concurrency_limit()
 async def test_distinct_admissions_and_cache_threads_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(query_embedding_module, "_MAX_CONCURRENT_QUERY_EMBEDDING_ADMISSIONS", 8)
     cache_release = threading.Event()
+    provider_release = asyncio.Event()
     four_cache_reads_started = threading.Event()
     cache_guard = threading.Lock()
     active_cache_reads = 0
@@ -290,21 +291,33 @@ async def test_distinct_admissions_and_cache_threads_are_bounded(monkeypatch: py
                 with cache_guard:
                     active_cache_reads -= 1
 
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            assert query.startswith("query ")
+            await provider_release.wait()
+            return _vector()
+
     cache = Cache()
-    services = tuple(QueryEmbeddingService(cache, _Provider(_vector())) for _index in range(8))
+    services = tuple(QueryEmbeddingService(cache, Provider()) for _index in range(8))
     tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index, service in enumerate(services))
     assert await asyncio.to_thread(four_cache_reads_started.wait, 1)
+
+    assert cache.get_calls == 4
+    cache_release.set()
+    runtime = query_embedding_module._runtime_admission()
+    async with asyncio.timeout(1):
+        while runtime.active < 8:
+            await asyncio.sleep(0)
 
     with pytest.raises(QueryEmbeddingOverloaded, match="temporarily full") as raised:
         await QueryEmbeddingService(cache, _Provider(_vector())).resolve("overflow query")
 
     assert raised.value.retryable is True
-    assert cache.get_calls == 4
-    cache_release.set()
+    provider_release.set()
     await asyncio.gather(*tasks)
 
     assert maximum_cache_reads == 4
-    assert cache.get_calls == 8
+    assert cache.get_calls == 9
     assert all(service._single_flights == {} for service in services)
 
 
@@ -335,6 +348,39 @@ async def test_identical_waiter_can_share_a_flight_when_distinct_admission_is_fu
     release.set()
     first_result, second_result = await asyncio.gather(first, second)
     assert first_result is second_result
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_bypasses_saturated_provider_admission(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(query_embedding_module, "_MAX_CONCURRENT_QUERY_EMBEDDING_ADMISSIONS", 2)
+    cache = _MemoryCache()
+    cached_identity = identify_embedding_input("cached query")
+    cache.entries[cached_identity.cache_key] = CachedEmbedding(identity=cached_identity, vector=_vector())
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            calls.append(query)
+            if len(calls) == 2:
+                both_started.set()
+            await release.wait()
+            return _vector()
+
+    provider = Provider()
+    misses = tuple(
+        asyncio.create_task(QueryEmbeddingService(cache, provider).resolve(f"miss {index}")) for index in range(2)
+    )
+    await asyncio.wait_for(both_started.wait(), timeout=1)
+
+    cached = await QueryEmbeddingService(cache, provider).resolve("cached query")
+
+    assert cached.source == "cache"
+    assert cached.vector == _vector()
+    assert calls == ["miss 0", "miss 1"]
+    release.set()
+    await asyncio.gather(*misses)
 
 
 @pytest.mark.asyncio

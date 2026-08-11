@@ -78,16 +78,10 @@ class QueryEmbeddingService:
         async with self._single_flights_guard:
             flight = self._single_flights.get(identity.cache_key)
             if flight is None:
-                if not runtime.try_acquire():
-                    raise QueryEmbeddingOverloaded("Dolphin query embedding admission is temporarily full")
-                try:
-                    flight = asyncio.create_task(
-                        self._run_flight(query, identity, runtime),
-                        name="dolphin-query-embedding",
-                    )
-                except BaseException:
-                    runtime.release()
-                    raise
+                flight = asyncio.create_task(
+                    self._run_flight(query, identity, runtime),
+                    name="dolphin-query-embedding",
+                )
                 self._single_flights[identity.cache_key] = flight
                 flight.add_done_callback(_consume_flight_exception)
         return await asyncio.shield(flight)
@@ -99,15 +93,21 @@ class QueryEmbeddingService:
         runtime: _RuntimeAdmission,
     ) -> QueryEmbeddingResolution:
         try:
-            return await self._resolve_admitted(query, identity, runtime)
-        finally:
+            cached = await self._cached(identity, runtime)
+            if cached is not None:
+                return _cached_resolution(identity, cached)
+
+            if not runtime.try_acquire():
+                raise QueryEmbeddingOverloaded("Dolphin query embedding admission is temporarily full")
             try:
-                runtime.release()
+                return await self._resolve_admitted(query, identity, runtime)
             finally:
-                flight = asyncio.current_task()
-                async with self._single_flights_guard:
-                    if self._single_flights.get(identity.cache_key) is flight:
-                        del self._single_flights[identity.cache_key]
+                runtime.release()
+        finally:
+            flight = asyncio.current_task()
+            async with self._single_flights_guard:
+                if self._single_flights.get(identity.cache_key) is flight:
+                    del self._single_flights[identity.cache_key]
 
     async def _resolve_admitted(
         self,
@@ -115,10 +115,6 @@ class QueryEmbeddingService:
         identity: EmbeddingInputIdentity,
         runtime: _RuntimeAdmission,
     ) -> QueryEmbeddingResolution:
-        cached = await self._cached(identity, runtime)
-        if cached is not None:
-            return _cached_resolution(identity, cached)
-
         try:
             async with runtime.provider_slots:
                 live_vector = await self._provider.embed_query(query)
