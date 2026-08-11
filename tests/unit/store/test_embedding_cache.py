@@ -63,7 +63,8 @@ def test_round_trip_persists_no_raw_embedding_input(tmp_path: Path) -> None:
     assert query.encode() not in database.read_bytes()
     with sqlite3.connect(database) as connection:
         row = connection.execute(
-            "SELECT provider, model, dimensions, contract_version, length(vector) FROM embedding_cache_entries"
+            "SELECT cache_key, provider, model, dimensions, contract_version, length(vector) "
+            "FROM embedding_cache_entries"
         ).fetchone()
         eviction_index = connection.execute(
             "SELECT name FROM pragma_index_list('embedding_cache_entries') "
@@ -72,7 +73,13 @@ def test_round_trip_persists_no_raw_embedding_input(tmp_path: Path) -> None:
         eviction_columns = connection.execute(
             "SELECT name FROM pragma_index_info('embedding_cache_entries_created') ORDER BY seqno"
         ).fetchall()
-    assert row == ("openai", "text-embedding-3-small", 1536, 1, 6144)
+        columns = {column[1] for column in connection.execute("PRAGMA table_info(embedding_cache_entries)")}
+    assert row is not None
+    assert row[1:] == ("openai", "text-embedding-3-small", 1536, 1, 6144)
+    assert row[0] != identity.cache_key
+    assert database.parent.joinpath("query-cache.key").stat().st_mode & 0o077 == 0
+    assert database.parent.joinpath("query-cache.key").read_bytes() not in database.read_bytes()
+    assert "input_utf8_bytes" not in columns
     assert eviction_index == ("embedding_cache_entries_created",)
     assert eviction_columns == [("created_at",), ("cache_key",)]
 
@@ -84,6 +91,37 @@ def test_exact_miss_does_not_accept_another_input(tmp_path: Path) -> None:
     cache.put(first, _vector())
 
     assert cache.get(second) is None
+
+
+def test_same_query_has_unlinkable_durable_keys_across_installations(tmp_path: Path) -> None:
+    roots = (tmp_path / "first", tmp_path / "second")
+    for root in roots:
+        root.mkdir()
+    first_cache, first_database = _cache(roots[0])
+    second_cache, second_database = _cache(roots[1])
+    identity = identify_embedding_input("likely sensitive query")
+
+    first_cache.put(identity, _vector())
+    second_cache.put(identity, _vector())
+
+    with sqlite3.connect(first_database) as connection:
+        first_key = connection.execute("SELECT cache_key FROM embedding_cache_entries").fetchone()[0]
+    with sqlite3.connect(second_database) as connection:
+        second_key = connection.execute("SELECT cache_key FROM embedding_cache_entries").fetchone()[0]
+    assert first_key != identity.cache_key
+    assert second_key != identity.cache_key
+    assert first_key != second_key
+
+
+def test_missing_secret_for_populated_cache_fails_closed(tmp_path: Path) -> None:
+    cache, database = _cache(tmp_path)
+    identity = identify_embedding_input("query")
+    cache.put(identity, _vector())
+    database.parent.joinpath("query-cache.key").unlink()
+    fresh = SQLiteEmbeddingCache(macos_storage_layout(home=database.parents[3]))
+
+    with pytest.raises(EmbeddingCacheCorrupt, match="identity secret is corrupt"):
+        fresh.get(identity)
 
 
 def test_first_valid_writer_wins_an_idempotent_or_racing_put(tmp_path: Path) -> None:
@@ -159,7 +197,7 @@ def test_expired_entry_is_a_read_miss_without_mutating_cache_state(tmp_path: Pat
         assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
 
 
-@pytest.mark.parametrize("column", ["vector_digest", "model", "input_utf8_bytes", "created_at"])
+@pytest.mark.parametrize("column", ["vector_digest", "model", "contract_version", "created_at"])
 def test_corrupt_persisted_binding_fails_closed(tmp_path: Path, column: str) -> None:
     cache, database = _cache(tmp_path)
     identity = identify_embedding_input("query")
@@ -167,7 +205,7 @@ def test_corrupt_persisted_binding_fails_closed(tmp_path: Path, column: str) -> 
     values: dict[str, object] = {
         "vector_digest": "0" * 64,
         "model": "text-embedding-3-large",
-        "input_utf8_bytes": identity.utf8_bytes + 1,
+        "contract_version": identity.contract_version + 1,
         "created_at": "not-a-timestamp",
     }
     with sqlite3.connect(database) as connection:

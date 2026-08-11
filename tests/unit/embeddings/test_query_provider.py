@@ -183,6 +183,67 @@ async def test_close_waits_for_active_embedding_request_to_release_its_client_le
 
 
 @pytest.mark.asyncio
+async def test_changed_environment_credential_drains_and_replaces_the_live_client() -> None:
+    rejected = _status_error(openai.AuthenticationError, 401, "expired credential")
+    old_client = _Client([rejected])
+    new_client = _Client([_response()])
+    environment = {"DOLPHIN_OPENAI_API_KEY": "old-secret"}
+    clients = {"old-secret": old_client, "new-secret": new_client}
+    created: list[str] = []
+
+    def factory(key: str) -> _Client:
+        created.append(key)
+        return clients[key]
+
+    provider = OpenAIQueryEmbeddingProvider(environment=environment, client_factory=factory)
+    with pytest.raises(CredentialRejected):
+        await provider.embed_query("query")
+
+    environment["DOLPHIN_OPENAI_API_KEY"] = "new-secret"
+    assert len(await provider.embed_query("query")) == EMBEDDING_DIMENSIONS
+
+    assert created == ["old-secret", "new-secret"]
+    assert old_client.closed is True
+    assert new_client.closed is False
+    await provider.close()
+    assert new_client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_credential_rotation_waits_for_active_old_client_request() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    old_client = _Client([])
+    old_client.embeddings = _BlockingEmbeddings(started, release)
+    new_client = _Client([_response()])
+    environment = {"DOLPHIN_OPENAI_API_KEY": "old-secret"}
+    clients = {"old-secret": old_client, "new-secret": new_client}
+    created: list[str] = []
+
+    def factory(key: str) -> _Client:
+        created.append(key)
+        return clients[key]
+
+    provider = OpenAIQueryEmbeddingProvider(environment=environment, client_factory=factory)
+    old_request = asyncio.create_task(provider.embed_query("old request"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    environment["DOLPHIN_OPENAI_API_KEY"] = "new-secret"
+    new_request = asyncio.create_task(provider.embed_query("new request"))
+    await asyncio.sleep(0)
+
+    assert old_client.closed is False
+    assert new_request.done() is False
+    assert created == ["old-secret"]
+    release.set()
+
+    assert len(await old_request) == EMBEDDING_DIMENSIONS
+    assert len(await new_request) == EMBEDDING_DIMENSIONS
+    assert old_client.closed is True
+    assert created == ["old-secret", "new-secret"]
+    await provider.close()
+
+
+@pytest.mark.asyncio
 async def test_transient_timeout_is_retried_once() -> None:
     request = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
     client = _Client([openai.APITimeoutError(request), _response()])

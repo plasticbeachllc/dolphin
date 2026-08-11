@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import sqlite3
 import struct
+import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -24,6 +26,7 @@ _MAX_CACHE_ENTRIES = 8_192
 _CACHE_ENTRY_MAX_AGE = timedelta(days=30)
 _VECTOR_BYTES = struct.Struct(f"!{EMBEDDING_DIMENSIONS}f")
 _VECTOR_DIGEST_DOMAIN = b"dolphin:embedding-cache-vector:v1\x00"
+_DURABLE_CACHE_KEY_DOMAIN = b"dolphin:query-cache-key:v1\x00"
 
 
 class EmbeddingCacheError(RuntimeError):
@@ -49,23 +52,26 @@ class SQLiteEmbeddingCache:
     ) -> None:
         self._layout = layout
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._identity_secret: bytes | None = None
+        self._identity_secret_guard = threading.Lock()
 
     def get(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
         _require_fixed_identity(identity)
         with self._connection(read_only=True) as connection:
+            durable_cache_key = self._durable_cache_key(connection, identity)
             row = connection.execute(
                 """
                 SELECT cache_key, format, provider, model, dimensions, contract_version,
-                       input_utf8_bytes, vector, vector_digest, created_at
+                       vector, vector_digest, created_at
                 FROM embedding_cache_entries
                 WHERE cache_key = ?
                 """,
-                (identity.cache_key,),
+                (durable_cache_key,),
             ).fetchone()
         if row is None:
             return None
-        cached = _cached_embedding(identity, row)
-        if _require_persisted_timestamp(row[9]) <= _utc_datetime(self._clock()) - _CACHE_ENTRY_MAX_AGE:
+        cached = _cached_embedding(identity, durable_cache_key, row)
+        if _require_persisted_timestamp(row[8]) <= _utc_datetime(self._clock()) - _CACHE_ENTRY_MAX_AGE:
             return None
         return cached
 
@@ -77,45 +83,67 @@ class SQLiteEmbeddingCache:
         except (TypeError, ValueError):
             raise EmbeddingCacheError("Dolphin embedding cache vector is invalid") from None
         payload = _VECTOR_BYTES.pack(*canonical)
-        digest = _vector_digest(identity.cache_key, payload)
         now = self._clock()
         created_at = _timestamp(now)
         with self._connection() as connection:
             try:
+                durable_cache_key = self._durable_cache_key(connection, identity)
+                digest = _vector_digest(durable_cache_key, payload)
                 connection.execute("BEGIN IMMEDIATE")
-                row = _embedding_row(connection, identity.cache_key)
+                row = _embedding_row(connection, durable_cache_key)
                 if row is not None:
                     connection.commit()
-                    return _cached_embedding(identity, row)
+                    return _cached_embedding(identity, durable_cache_key, row)
                 _prune_cache_for_insert(connection, now)
                 connection.execute(
                     """
                     INSERT INTO embedding_cache_entries (
                         cache_key, format, provider, model, dimensions, contract_version,
-                        input_utf8_bytes, vector, vector_digest, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        vector, vector_digest, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        identity.cache_key,
+                        durable_cache_key,
                         identity.format,
                         identity.provider,
                         identity.model,
                         identity.dimensions,
                         identity.contract_version,
-                        identity.utf8_bytes,
                         payload,
                         digest,
                         created_at,
                     ),
                 )
-                row = _embedding_row(connection, identity.cache_key)
+                row = _embedding_row(connection, durable_cache_key)
                 connection.commit()
             except Exception:
                 connection.rollback()
                 raise
         if row is None:
             raise EmbeddingCacheCorrupt("Dolphin embedding cache installation is missing")
-        return _cached_embedding(identity, row)
+        return _cached_embedding(identity, durable_cache_key, row)
+
+    def _durable_cache_key(
+        self,
+        connection: sqlite3.Connection,
+        identity: EmbeddingInputIdentity,
+    ) -> str:
+        with self._identity_secret_guard:
+            secret = self._identity_secret
+            if secret is None:
+                row = connection.execute("SELECT EXISTS(SELECT 1 FROM embedding_cache_entries LIMIT 1)").fetchone()
+                if row is None or row[0] not in (0, 1):
+                    raise EmbeddingCacheCorrupt("Dolphin embedding cache accounting is corrupt")
+                try:
+                    secret = self._layout.load_or_create_query_cache_secret(allow_create=row[0] == 0)
+                except StorageLayoutError:
+                    raise EmbeddingCacheCorrupt("Dolphin embedding cache identity secret is corrupt") from None
+                self._identity_secret = secret
+        return hmac.digest(
+            secret,
+            _DURABLE_CACHE_KEY_DOMAIN + bytes.fromhex(identity.cache_key),
+            "sha256",
+        ).hex()
 
     @contextmanager
     def _connection(self, *, read_only: bool = False) -> Iterator[sqlite3.Connection]:
@@ -145,23 +173,26 @@ class SQLiteEmbeddingCache:
                 connection.close()
 
 
-def _cached_embedding(identity: EmbeddingInputIdentity, row: tuple[object, ...]) -> CachedEmbedding:
-    if len(row) != 10 or tuple(row[:7]) != (
-        identity.cache_key,
+def _cached_embedding(
+    identity: EmbeddingInputIdentity,
+    durable_cache_key: str,
+    row: tuple[object, ...],
+) -> CachedEmbedding:
+    if len(row) != 9 or tuple(row[:6]) != (
+        durable_cache_key,
         identity.format,
         identity.provider,
         identity.model,
         identity.dimensions,
         identity.contract_version,
-        identity.utf8_bytes,
     ):
         raise EmbeddingCacheCorrupt("Dolphin embedding cache identity is corrupt")
-    raw_payload = row[7]
+    raw_payload = row[6]
     if not isinstance(raw_payload, bytes) or len(raw_payload) != _VECTOR_BYTES.size:
         raise EmbeddingCacheCorrupt("Dolphin embedding cache vector is corrupt")
-    if row[8] != _vector_digest(identity.cache_key, raw_payload):
+    if row[7] != _vector_digest(durable_cache_key, raw_payload):
         raise EmbeddingCacheCorrupt("Dolphin embedding cache vector digest is corrupt")
-    _require_persisted_timestamp(row[9])
+    _require_persisted_timestamp(row[8])
     try:
         vector = canonicalize_embedding_vector(_VECTOR_BYTES.unpack(raw_payload))
         return CachedEmbedding(identity=identity, vector=vector)
@@ -173,7 +204,7 @@ def _embedding_row(connection: sqlite3.Connection, cache_key: str) -> tuple[obje
     return connection.execute(
         """
         SELECT cache_key, format, provider, model, dimensions, contract_version,
-               input_utf8_bytes, vector, vector_digest, created_at
+               vector, vector_digest, created_at
         FROM embedding_cache_entries
         WHERE cache_key = ?
         """,

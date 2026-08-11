@@ -335,6 +335,41 @@ async def test_identical_waiter_can_share_a_flight_when_distinct_admission_is_fu
 
 
 @pytest.mark.asyncio
+async def test_cancellation_after_admission_transfers_capacity_to_the_registered_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = query_embedding_module._runtime_admission()
+    original_try_acquire = runtime.try_acquire
+    cancel_once = True
+
+    def acquire_then_cancel() -> bool:
+        nonlocal cancel_once
+        acquired = original_try_acquire()
+        if acquired and cancel_once:
+            cancel_once = False
+            task = asyncio.current_task()
+            assert task is not None
+            task.cancel()
+        return acquired
+
+    monkeypatch.setattr(runtime, "try_acquire", acquire_then_cancel)
+    provider = _Provider(_vector())
+    service = QueryEmbeddingService(_MemoryCache(), provider)
+
+    cancelled = asyncio.create_task(service.resolve("cancelled waiter"))
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+    async with asyncio.timeout(1):
+        while runtime.active:
+            await asyncio.sleep(0)
+
+    recovered = await service.resolve("later query")
+    assert recovered.source == "live"
+    assert runtime.active == 0
+    assert provider.calls == ["cancelled waiter", "later query"]
+
+
+@pytest.mark.asyncio
 async def test_optional_cache_outage_still_allows_correct_live_vector() -> None:
     cache = _Cache(
         get_failure=EmbeddingCacheUnavailable("unavailable"),

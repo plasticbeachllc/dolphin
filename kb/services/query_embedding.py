@@ -38,20 +38,20 @@ class _RuntimeAdmission:
     """One event-loop-wide capacity boundary shared by every service instance."""
 
     def __init__(self) -> None:
-        self.guard = asyncio.Lock()
+        self.guard = threading.Lock()
         self.active = 0
         self.provider_slots = asyncio.Semaphore(_MAX_CONCURRENT_QUERY_PROVIDER_CALLS)
         self.cache_slots = asyncio.Semaphore(_MAX_CONCURRENT_QUERY_CACHE_CALLS)
 
-    async def try_acquire(self) -> bool:
-        async with self.guard:
+    def try_acquire(self) -> bool:
+        with self.guard:
             if self.active >= _MAX_CONCURRENT_QUERY_EMBEDDING_ADMISSIONS:
                 return False
             self.active += 1
             return True
 
-    async def release(self) -> None:
-        async with self.guard:
+    def release(self) -> None:
+        with self.guard:
             if self.active <= 0:
                 raise RuntimeError("Dolphin query embedding admission accounting is invalid")
             self.active -= 1
@@ -78,12 +78,16 @@ class QueryEmbeddingService:
         async with self._single_flights_guard:
             flight = self._single_flights.get(identity.cache_key)
             if flight is None:
-                if not await runtime.try_acquire():
+                if not runtime.try_acquire():
                     raise QueryEmbeddingOverloaded("Dolphin query embedding admission is temporarily full")
-                flight = asyncio.create_task(
-                    self._run_flight(query, identity, runtime),
-                    name=f"dolphin-query-embedding-{identity.cache_key[:12]}",
-                )
+                try:
+                    flight = asyncio.create_task(
+                        self._run_flight(query, identity, runtime),
+                        name=f"dolphin-query-embedding-{identity.cache_key[:12]}",
+                    )
+                except BaseException:
+                    runtime.release()
+                    raise
                 self._single_flights[identity.cache_key] = flight
                 flight.add_done_callback(_consume_flight_exception)
         return await asyncio.shield(flight)
@@ -98,7 +102,7 @@ class QueryEmbeddingService:
             return await self._resolve_admitted(query, identity, runtime)
         finally:
             try:
-                await runtime.release()
+                runtime.release()
             finally:
                 flight = asyncio.current_task()
                 async with self._single_flights_guard:

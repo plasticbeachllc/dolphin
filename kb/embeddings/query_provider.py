@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import math
 import os
 import random
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import Any, Protocol, cast
+from typing import Any, Never, Protocol, cast
 
 import openai
 from openai import AsyncOpenAI
@@ -64,6 +66,13 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class _ClientLease:
+    __slots__ = ("acquired",)
+
+    def __init__(self) -> None:
+        self.acquired = False
+
+
 class OpenAIQueryEmbeddingProvider:
     """Make one redacted, fixed-model request under a short retry budget."""
 
@@ -82,6 +91,7 @@ class OpenAIQueryEmbeddingProvider:
         self._random_source = random_source
         self._clock = clock
         self._client: _AsyncOpenAIClient | None = None
+        self._client_key_digest: bytes | None = None
         self._client_condition = asyncio.Condition()
         self._active_requests = 0
         self._closing = False
@@ -92,8 +102,9 @@ class OpenAIQueryEmbeddingProvider:
         api_key = self._environment.get(DOLPHIN_OPENAI_API_KEY, "").strip()
         if not api_key:
             raise CredentialMissing("Dolphin requires DOLPHIN_OPENAI_API_KEY in the MCP server environment")
-        client = await self._acquire_client(api_key)
+        lease = _ClientLease()
         try:
+            client = await self._acquire_client(api_key, lease)
             for attempt in range(_MAX_ATTEMPTS):
                 try:
                     async with asyncio.timeout(_REQUEST_TIMEOUT_SECONDS):
@@ -115,7 +126,8 @@ class OpenAIQueryEmbeddingProvider:
                     raise failure from None
             raise PermanentProviderFailure("provider_error")
         finally:
-            await self._release_client()
+            if lease.acquired:
+                await self._release_client(lease)
 
     async def close(self) -> None:
         """Drain active request leases, then release the SDK client."""
@@ -130,6 +142,7 @@ class OpenAIQueryEmbeddingProvider:
                 self._client_condition.notify_all()
                 raise
             client, self._client = self._client, None
+            self._client_key_digest = None
         try:
             if client is not None:
                 await client.close()
@@ -140,25 +153,75 @@ class OpenAIQueryEmbeddingProvider:
                 self._closing = False
                 self._client_condition.notify_all()
 
-    async def _acquire_client(self, api_key: str) -> _AsyncOpenAIClient:
+    async def _acquire_client(self, api_key: str, lease: _ClientLease) -> _AsyncOpenAIClient:
+        key_digest = hashlib.sha256(api_key.encode("utf-8")).digest()
         async with self._client_condition:
             while self._closing:
                 await self._client_condition.wait()
             client = self._client
             if client is None:
-                try:
-                    client = self._client_factory(api_key)
-                except Exception as exc:
-                    _raise_classified(exc)
-                assert client is not None
+                client = self._create_client(api_key)
                 self._client = client
-            self._active_requests += 1
-            return client
+                self._client_key_digest = key_digest
+                self._active_requests += 1
+                lease.acquired = True
+                return client
+            elif self._client_key_digest is None or not hmac.compare_digest(self._client_key_digest, key_digest):
+                self._closing = True
+                try:
+                    await self._client_condition.wait_for(lambda: self._active_requests == 0)
+                except BaseException:
+                    self._closing = False
+                    self._client_condition.notify_all()
+                    raise
+                self._client = None
+                self._client_key_digest = None
+            else:
+                self._active_requests += 1
+                lease.acquired = True
+                return client
 
-    async def _release_client(self) -> None:
+        if client is not None and self._closing:
+            replacement: _AsyncOpenAIClient | None = None
+            installed = False
+            try:
+                await client.close()
+                replacement = self._create_client(api_key)
+                async with self._client_condition:
+                    self._client = replacement
+                    self._client_key_digest = key_digest
+                    self._active_requests += 1
+                    lease.acquired = True
+                    self._closing = False
+                    self._client_condition.notify_all()
+                    installed = True
+                    return replacement
+            except QueryEmbeddingError:
+                raise
+            except Exception:
+                raise PermanentProviderFailure("provider_error") from None
+            finally:
+                if not installed:
+                    async with self._client_condition:
+                        self._closing = False
+                        self._client_condition.notify_all()
+                    if replacement is not None:
+                        try:
+                            await replacement.close()
+                        except Exception:
+                            pass
+
+    def _create_client(self, api_key: str) -> _AsyncOpenAIClient:
+        try:
+            return self._client_factory(api_key)
+        except Exception as exc:
+            _raise_classified(exc)
+
+    async def _release_client(self, lease: _ClientLease) -> None:
         async with self._client_condition:
-            if self._active_requests <= 0:
+            if not lease.acquired or self._active_requests <= 0:
                 raise RuntimeError("Dolphin query embedding client lease accounting is invalid")
+            lease.acquired = False
             self._active_requests -= 1
             if self._active_requests == 0:
                 self._client_condition.notify_all()
@@ -201,7 +264,7 @@ def _vector_from_response(response: object) -> tuple[float, ...]:
         raise EmbeddingContractViolation("Dolphin query embedding response violates the fixed contract") from None
 
 
-def _raise_classified(exc: Exception) -> None:
+def _raise_classified(exc: Exception) -> Never:
     raise _classified_failure(exc) from None
 
 

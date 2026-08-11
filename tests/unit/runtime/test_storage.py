@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import os
 import stat
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def test_layout_uses_only_the_fixed_application_support_root(tmp_path: Path) -> 
     assert layout.root == tmp_path / "Library" / "Application Support" / "Dolphin"
     assert layout.metadata_db == layout.root / "metadata.sqlite3"
     assert layout.config_file == layout.root / "config.toml"
+    assert layout.query_cache_secret_file == layout.root / "query-cache.key"
     assert not (tmp_path / ".dolphin").exists()
 
 
@@ -85,6 +87,44 @@ def test_layout_creates_metadata_database_with_private_permissions(tmp_path: Pat
 
     assert layout.metadata_db.is_file()
     assert stat.S_IMODE(layout.metadata_db.stat().st_mode) == 0o600
+
+
+def test_query_cache_secret_is_private_stable_and_explicitly_created(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+
+    with pytest.raises(StorageLayoutError, match="secret is missing"):
+        layout.load_or_create_query_cache_secret(allow_create=False)
+    assert not layout.query_cache_secret_file.exists()
+
+    first = layout.load_or_create_query_cache_secret(allow_create=True)
+    second = layout.load_or_create_query_cache_secret(allow_create=False)
+
+    assert first == second
+    assert len(first) == 32
+    assert layout.query_cache_secret_file.read_bytes() == first
+    assert stat.S_IMODE(layout.query_cache_secret_file.stat().st_mode) == 0o600
+
+
+def test_concurrent_query_cache_secret_creation_has_one_atomic_winner(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        secrets = tuple(
+            executor.map(lambda _index: layout.load_or_create_query_cache_secret(allow_create=True), range(8))
+        )
+
+    assert len(set(secrets)) == 1
+    assert layout.query_cache_secret_file.read_bytes() == secrets[0]
+    assert tuple(layout.root.glob(".query-cache-key.*")) == ()
+
+
+def test_layout_rejects_an_exposed_query_cache_secret(tmp_path: Path) -> None:
+    layout = macos_storage_layout(home=tmp_path)
+    layout.load_or_create_query_cache_secret(allow_create=True)
+    layout.query_cache_secret_file.chmod(0o644)
+
+    with pytest.raises(StorageLayoutError, match="unsafe permissions"):
+        layout.ensure_private_directories()
 
 
 def test_metadata_inspection_is_observational_when_runtime_state_is_absent(tmp_path: Path) -> None:
