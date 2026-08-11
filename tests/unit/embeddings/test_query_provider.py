@@ -56,6 +56,17 @@ class _StallingEmbeddings:
         raise AssertionError("unreachable")
 
 
+class _BlockingEmbeddings:
+    def __init__(self, started: asyncio.Event, release: asyncio.Event) -> None:
+        self._started = started
+        self._release = release
+
+    async def create(self, **_kwargs: object) -> object:
+        self._started.set()
+        await self._release.wait()
+        return _response()
+
+
 def _response(
     *,
     model: str = EMBEDDING_MODEL,
@@ -144,6 +155,30 @@ async def test_concurrent_lazy_initialization_creates_and_closes_one_client() ->
 
     assert all(len(vector) == EMBEDDING_DIMENSIONS for vector in vectors)
     assert created == ["secret"]
+    assert client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_close_waits_for_active_embedding_request_to_release_its_client_lease() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    client = _Client([])
+    client.embeddings = _BlockingEmbeddings(started, release)
+    provider = OpenAIQueryEmbeddingProvider(
+        environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
+        client_factory=lambda _key: client,
+    )
+
+    request = asyncio.create_task(provider.embed_query("query"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    closing = asyncio.create_task(provider.close())
+    await asyncio.sleep(0)
+
+    assert closing.done() is False
+    assert client.closed is False
+    release.set()
+    assert len(await request) == EMBEDDING_DIMENSIONS
+    await closing
     assert client.closed is True
 
 

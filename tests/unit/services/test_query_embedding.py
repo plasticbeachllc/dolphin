@@ -247,8 +247,8 @@ async def test_different_query_misses_share_a_fixed_provider_concurrency_limit()
             finally:
                 active -= 1
 
-    service = QueryEmbeddingService(cache, Provider())
-    tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index in range(8))
+    services = tuple(QueryEmbeddingService(cache, Provider()) for _index in range(8))
+    tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index, service in enumerate(services))
     await asyncio.wait_for(four_started.wait(), timeout=1)
 
     assert active == 4
@@ -259,7 +259,7 @@ async def test_different_query_misses_share_a_fixed_provider_concurrency_limit()
 
     assert calls == 8
     assert maximum_active == 4
-    assert service._single_flights == {}
+    assert all(service._single_flights == {} for service in services)
 
 
 @pytest.mark.asyncio
@@ -288,12 +288,12 @@ async def test_distinct_admissions_and_cache_threads_are_bounded(monkeypatch: py
                     active_cache_reads -= 1
 
     cache = Cache()
-    service = QueryEmbeddingService(cache, _Provider(_vector()))
-    tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index in range(8))
+    services = tuple(QueryEmbeddingService(cache, _Provider(_vector())) for _index in range(8))
+    tasks = tuple(asyncio.create_task(service.resolve(f"query {index}")) for index, service in enumerate(services))
     assert await asyncio.to_thread(four_cache_reads_started.wait, 1)
 
     with pytest.raises(QueryEmbeddingOverloaded, match="temporarily full") as raised:
-        await service.resolve("overflow query")
+        await QueryEmbeddingService(cache, _Provider(_vector())).resolve("overflow query")
 
     assert raised.value.retryable is True
     assert cache.get_calls == 4
@@ -302,7 +302,7 @@ async def test_distinct_admissions_and_cache_threads_are_bounded(monkeypatch: py
 
     assert maximum_cache_reads == 4
     assert cache.get_calls == 8
-    assert service._single_flights == {}
+    assert all(service._single_flights == {} for service in services)
 
 
 @pytest.mark.asyncio

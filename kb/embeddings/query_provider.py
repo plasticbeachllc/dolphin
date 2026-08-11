@@ -82,7 +82,9 @@ class OpenAIQueryEmbeddingProvider:
         self._random_source = random_source
         self._clock = clock
         self._client: _AsyncOpenAIClient | None = None
-        self._client_lock = asyncio.Lock()
+        self._client_condition = asyncio.Condition()
+        self._active_requests = 0
+        self._closing = False
 
     async def embed_query(self, query: str) -> tuple[float, ...]:
         """Return one canonical vector or a closed, safe failure category."""
@@ -90,55 +92,76 @@ class OpenAIQueryEmbeddingProvider:
         api_key = self._environment.get(DOLPHIN_OPENAI_API_KEY, "").strip()
         if not api_key:
             raise CredentialMissing("Dolphin requires DOLPHIN_OPENAI_API_KEY in the MCP server environment")
-        client = await self._client_for(api_key)
-
-        for attempt in range(_MAX_ATTEMPTS):
-            try:
-                async with asyncio.timeout(_REQUEST_TIMEOUT_SECONDS):
-                    response = await client.embeddings.create(
-                        input=query,
-                        model=EMBEDDING_MODEL,
-                        dimensions=EMBEDDING_DIMENSIONS,
-                        encoding_format="float",
-                        timeout=_REQUEST_TIMEOUT_SECONDS,
-                    )
-                return _vector_from_response(response)
-            except QueryEmbeddingError:
-                raise
-            except Exception as exc:
-                failure = _classified_failure(exc)
-                if isinstance(failure, TransientProviderFailure) and attempt + 1 < _MAX_ATTEMPTS:
-                    await self._sleep(_safe_retry_delay(exc, self._random_source, self._clock))
-                    continue
-                raise failure from None
-        raise PermanentProviderFailure("provider_error")
+        client = await self._acquire_client(api_key)
+        try:
+            for attempt in range(_MAX_ATTEMPTS):
+                try:
+                    async with asyncio.timeout(_REQUEST_TIMEOUT_SECONDS):
+                        response = await client.embeddings.create(
+                            input=query,
+                            model=EMBEDDING_MODEL,
+                            dimensions=EMBEDDING_DIMENSIONS,
+                            encoding_format="float",
+                            timeout=_REQUEST_TIMEOUT_SECONDS,
+                        )
+                    return _vector_from_response(response)
+                except QueryEmbeddingError:
+                    raise
+                except Exception as exc:
+                    failure = _classified_failure(exc)
+                    if isinstance(failure, TransientProviderFailure) and attempt + 1 < _MAX_ATTEMPTS:
+                        await self._sleep(_safe_retry_delay(exc, self._random_source, self._clock))
+                        continue
+                    raise failure from None
+            raise PermanentProviderFailure("provider_error")
+        finally:
+            await self._release_client()
 
     async def close(self) -> None:
-        """Release the lazily created SDK client without retaining credential state."""
-        async with self._client_lock:
+        """Drain active request leases, then release the SDK client."""
+        async with self._client_condition:
+            while self._closing:
+                await self._client_condition.wait()
+            self._closing = True
+            try:
+                await self._client_condition.wait_for(lambda: self._active_requests == 0)
+            except BaseException:
+                self._closing = False
+                self._client_condition.notify_all()
+                raise
             client, self._client = self._client, None
-            if client is None:
-                return
-            try:
-                await client.close()
-            except Exception:
-                raise PermanentProviderFailure("provider_error") from None
-
-    async def _client_for(self, api_key: str) -> _AsyncOpenAIClient:
-        client = self._client
-        if client is not None:
-            return client
-        async with self._client_lock:
-            client = self._client
+        try:
             if client is not None:
-                return client
-            try:
-                client = self._client_factory(api_key)
-            except Exception as exc:
-                _raise_classified(exc)
-            assert client is not None
-            self._client = client
+                await client.close()
+        except Exception:
+            raise PermanentProviderFailure("provider_error") from None
+        finally:
+            async with self._client_condition:
+                self._closing = False
+                self._client_condition.notify_all()
+
+    async def _acquire_client(self, api_key: str) -> _AsyncOpenAIClient:
+        async with self._client_condition:
+            while self._closing:
+                await self._client_condition.wait()
+            client = self._client
+            if client is None:
+                try:
+                    client = self._client_factory(api_key)
+                except Exception as exc:
+                    _raise_classified(exc)
+                assert client is not None
+                self._client = client
+            self._active_requests += 1
             return client
+
+    async def _release_client(self) -> None:
+        async with self._client_condition:
+            if self._active_requests <= 0:
+                raise RuntimeError("Dolphin query embedding client lease accounting is invalid")
+            self._active_requests -= 1
+            if self._active_requests == 0:
+                self._client_condition.notify_all()
 
 
 def _default_client(api_key: str) -> _AsyncOpenAIClient:
