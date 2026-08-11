@@ -253,11 +253,47 @@ def test_pointer_swap_is_compare_and_set_and_old_reader_remains_pinned(
             expected_previous_generation_id=None,
         )
     assert coordinator.snapshot_for_lease(read_lease.lease_id) == first
+    clock.current = read_lease.expires_at - timedelta(seconds=1)
+    coordinator.renew_reads([read_lease], lease_duration=timedelta(seconds=10))
     clock.current = read_lease.expires_at
+    assert coordinator.snapshot_for_lease(read_lease.lease_id) == first
+    clock.advance(seconds=9)
     with pytest.raises(GenerationReadLeaseUnavailable, match="expired"):
         coordinator.snapshot_for_lease(read_lease.lease_id)
     coordinator.release_read(read_lease)
     coordinator.release_read(read_lease)
+
+
+def test_reader_lease_set_renewal_rolls_back_if_any_authority_expired(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    coordinator, _registry, layout, _worktree, operation_lease, clock = _coordinator_with_lease(monkeypatch, tmp_path)
+    generation_id = _ready_generation(coordinator, layout, operation_lease, clock, suffix="renewal-atomicity")
+    snapshot = coordinator.publish(
+        operation_lease,
+        generation_id,
+        expected_previous_generation_id=None,
+    )
+    expired = coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=2))
+    live = coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    clock.advance(seconds=2)
+
+    with pytest.raises(GenerationReadLeaseUnavailable, match="expired"):
+        coordinator.renew_reads([live, expired], lease_duration=timedelta(seconds=30))
+
+    with sqlite3.connect(layout.metadata_db) as connection:
+        persisted_expiry = connection.execute(
+            "SELECT expires_at FROM generation_reader_leases WHERE lease_id = ?",
+            (live.lease_id,),
+        ).fetchone()
+    assert persisted_expiry == (live.expires_at.isoformat(),)
+    assert coordinator.snapshot_for_lease(live.lease_id) == snapshot
+
+    with pytest.raises(GenerationCoordinatorError, match="renewal set is empty"):
+        coordinator.renew_reads([], lease_duration=timedelta(seconds=30))
+    with pytest.raises(GenerationCoordinatorError, match="duplicates"):
+        coordinator.renew_reads([live, live], lease_duration=timedelta(seconds=30))
 
 
 def test_expired_operation_lease_cannot_change_generation_visibility(

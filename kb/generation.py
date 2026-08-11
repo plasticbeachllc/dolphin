@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
 
@@ -207,5 +208,12 @@ class GenerationCoordinator(Protocol):
     ) -> GenerationReadLease: ...
 
     def snapshot_for_lease(self, lease_id: str) -> PublishedSnapshot: ...
+
+    def renew_reads(
+        self,
+        leases: Sequence[GenerationReadLease],
+        *,
+        lease_duration: timedelta,
+    ) -> None: ...
 
     def release_read(self, lease: GenerationReadLease) -> None: ...

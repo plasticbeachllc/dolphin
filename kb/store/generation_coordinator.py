@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -47,6 +47,7 @@ _WRITE_LOCK_DEADLINE_SECONDS = 3.0
 _WRITE_LOCK_INITIAL_BACKOFF_SECONDS = 0.025
 _WRITE_LOCK_MAX_BACKOFF_SECONDS = 0.25
 _EXPIRED_READ_LEASE_PRUNE_LIMIT = 256
+_READ_LEASE_RENEWAL_MAXIMUM = 32
 _PRIVATE_ID_MAX_LENGTH = 128
 _PRIVATE_VALUE_MAX_LENGTH = 256
 
@@ -519,6 +520,51 @@ class SQLiteGenerationCoordinator:
             if snapshot is None or snapshot.workspace_id != row[0] or snapshot.publication_id != row[2]:
                 raise GenerationReadLeaseUnavailable("Dolphin generation read lease no longer matches its snapshot")
             return snapshot
+
+    def renew_reads(
+        self,
+        leases: Sequence[GenerationReadLease],
+        *,
+        lease_duration: timedelta,
+    ) -> None:
+        """Atomically extend exact live reader authorities without changing their snapshots."""
+
+        if not 1 <= len(leases) <= _READ_LEASE_RENEWAL_MAXIMUM:
+            raise GenerationCoordinatorError("Dolphin generation read lease renewal set is empty or too large")
+        if not isinstance(lease_duration, timedelta) or not timedelta(0) < lease_duration <= _READ_LEASE_MAXIMUM:
+            raise GenerationCoordinatorError("Dolphin generation read lease renewal window is invalid")
+        if len({lease.lease_id for lease in leases}) != len(leases):
+            raise GenerationCoordinatorError("Dolphin generation read lease renewal set contains duplicates")
+
+        observed = _utc(self._clock())
+        expiry = observed + lease_duration
+        with self._connection() as connection:
+            _begin_write(connection)
+            try:
+                for lease in leases:
+                    updated = connection.execute(
+                        """
+                        UPDATE generation_reader_leases
+                        SET expires_at = CASE WHEN expires_at > ? THEN expires_at ELSE ? END
+                        WHERE lease_id = ? AND workspace_id = ? AND generation_id = ?
+                          AND publication_id = ? AND expires_at > ?
+                        """,
+                        (
+                            expiry.isoformat(),
+                            expiry.isoformat(),
+                            lease.lease_id,
+                            lease.snapshot.workspace_id,
+                            lease.snapshot.generation_id,
+                            lease.snapshot.publication_id,
+                            observed.isoformat(),
+                        ),
+                    )
+                    if updated.rowcount != 1:
+                        raise GenerationReadLeaseUnavailable("Dolphin generation read lease is unavailable or expired")
+            except Exception:
+                connection.rollback()
+                raise
+            connection.commit()
 
     def release_read(self, lease: GenerationReadLease) -> None:
         with self._connection() as connection:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,7 +27,9 @@ from kb.generation_retrieval import (
     rank_generation_candidates,
 )
 from kb.generation_vector import GenerationVectorTimeout, VectorSearchHit
+from kb.search_admission import AdmittedSearchWorkspace
 from kb.services.generation_retrieval import GenerationRetrievalService
+from kb.services.workspace_registry import WorkspaceSnapshot
 
 
 def test_fusion_is_deterministic_score_free_and_deduplicated() -> None:
@@ -120,7 +123,39 @@ def test_service_uses_one_live_snapshot_through_both_branches_and_fusion() -> No
     assert result.ranked_targets[0].sources == ("keyword", "vector")
     assert keyword.calls == [(coordinator.lease.lease_id, "where is alpha", GENERATION_BRANCH_CANDIDATE_LIMIT)]
     assert vector.calls == [(coordinator.lease.lease_id, (0.25,), GENERATION_BRANCH_CANDIDATE_LIMIT)]
-    assert coordinator.events == ["acquire", "snapshot", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "snapshot", "release"]
+
+
+def test_service_uses_caller_held_lease_without_releasing_it() -> None:
+    coordinator = _Coordinator()
+    service = GenerationRetrievalService(coordinator, _KeywordStore(()), _VectorStore(()))
+
+    result = service.retrieve_for_admitted_workspace(
+        _admitted(coordinator.lease),
+        "alpha",
+        query_vector=(0.25,),
+    )
+
+    assert result.snapshot == coordinator.lease.snapshot
+    assert coordinator.events == ["snapshot", "snapshot"]
+
+
+def test_caller_held_retrieval_stops_before_the_next_backend_after_deadline() -> None:
+    coordinator = _Coordinator()
+    keyword = _KeywordStore(())
+    vector = _VectorStore(())
+    deadline_checks = iter((False, True))
+    admitted = _admitted(coordinator.lease, deadline_exceeded=lambda: next(deadline_checks))
+
+    with pytest.raises(GenerationRetrievalTimeout, match="read deadline expired"):
+        GenerationRetrievalService(coordinator, keyword, vector).retrieve_for_admitted_workspace(
+            admitted,
+            "alpha",
+            query_vector=(0.25,),
+        )
+
+    assert len(keyword.calls) == 1
+    assert vector.calls == []
 
 
 def test_service_lexical_fallback_never_calls_vector_storage() -> None:
@@ -149,7 +184,7 @@ def test_service_normalizes_branch_failure_and_releases_the_reader() -> None:
         service.retrieve("workspace_1", "alpha", query_vector=(0.25,))
 
     assert isinstance(failure.value.__cause__, GenerationKeywordError)
-    assert coordinator.events == ["acquire", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "release"]
 
 
 def test_service_preserves_actionable_broad_query_guidance() -> None:
@@ -165,7 +200,7 @@ def test_service_preserves_actionable_broad_query_guidance() -> None:
 
     assert failure.value.retryable is False
     assert isinstance(failure.value.__cause__, GenerationKeywordQueryTooBroad)
-    assert coordinator.events == ["acquire", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "release"]
 
 
 @pytest.mark.parametrize(
@@ -192,7 +227,7 @@ def test_service_surfaces_branch_deadlines_as_retryable_timeouts(
 
     assert failure.value.retryable is True
     assert failure.value.__cause__ in (keyword_error, vector_error)
-    assert coordinator.events == ["acquire", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "release"]
 
 
 def test_service_preserves_the_primary_failure_when_reader_release_also_fails() -> None:
@@ -208,7 +243,7 @@ def test_service_preserves_the_primary_failure_when_reader_release_also_fails() 
         service.retrieve("workspace_1", "alpha", query_vector=(0.25,))
 
     assert failure.value.__cause__ is branch_error
-    assert coordinator.events == ["acquire", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "release"]
 
 
 def test_service_reports_reader_release_failure_after_successful_retrieval() -> None:
@@ -218,7 +253,7 @@ def test_service_reports_reader_release_failure_after_successful_retrieval() -> 
     with pytest.raises(GenerationRetrievalUnavailable, match="could not be released"):
         service.retrieve("workspace_1", "alpha", query_vector=())
 
-    assert coordinator.events == ["acquire", "snapshot", "release"]
+    assert coordinator.events == ["acquire", "snapshot", "snapshot", "release"]
 
 
 def test_service_fails_closed_when_lease_expires_before_fusion_finishes() -> None:
@@ -328,4 +363,25 @@ def _lease() -> GenerationReadLease:
         snapshot=snapshot,
         acquired_at=published_at,
         expires_at=published_at + timedelta(seconds=30),
+    )
+
+
+def _admitted(
+    lease: GenerationReadLease,
+    *,
+    deadline_exceeded: Callable[[], bool] = lambda: False,
+) -> AdmittedSearchWorkspace:
+    return AdmittedSearchWorkspace(
+        workspace=WorkspaceSnapshot(
+            workspace_id=lease.snapshot.workspace_id,
+            repository_id="repository_1",
+            repository_display_name="repository",
+            workspace_display_name="workspace",
+            root="/repos/workspace",
+            branch="develop",
+            head_commit="a" * 40,
+            state="ready",
+        ),
+        read_lease=lease,
+        deadline_exceeded=deadline_exceeded,
     )
