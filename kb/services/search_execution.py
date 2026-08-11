@@ -11,7 +11,7 @@ from kb.generation import GenerationReadLease
 from kb.generation_retrieval import TransientGenerationCandidates
 from kb.query_embedding import QueryEmbeddingResolution
 from kb.search_admission import AdmittedSearchWorkspace, SearchCoverage
-from kb.search_execution import FirstPageSearchPlan, build_first_page_search_plan
+from kb.search_execution import FirstPageSearchPlan, build_empty_scope_search_plan, build_first_page_search_plan
 from kb.search_scope import ResolvedSearchScope, SearchScope, SearchScopeError
 from kb.services.workspace_resolution import WorkspaceResolution
 
@@ -83,8 +83,13 @@ class SearchExecutionService:
 
         async def execute_admitted(coverage: SearchCoverage) -> FirstPageSearchPlan:
             resolved_scope = await self._resolve_scope(coverage, scope)
+            if resolved_scope.searchable_chunks == 0:
+                return build_empty_scope_search_plan(
+                    tuple(admitted.read_lease.snapshot for admitted in coverage.workspaces),
+                    resolved_scope,
+                )
             embedding = await self._embeddings.resolve(query)
-            candidates = await self._retrieve_all(coverage, query, embedding, scope)
+            candidates = await self._retrieve_all(coverage, query, embedding, scope, resolved_scope)
             return build_first_page_search_plan(candidates, embedding, resolved_scope)
 
         return await self._coverage.execute_async(
@@ -121,10 +126,21 @@ class SearchExecutionService:
         query: str,
         embedding: QueryEmbeddingResolution,
         scope: SearchScope,
+        resolved_scope: ResolvedSearchScope,
     ) -> tuple[TransientGenerationCandidates, ...]:
         stop_dispatch = asyncio.Event()
+        searchable_by_workspace = {
+            item.workspace_id: item.searchable_chunks for item in resolved_scope.workspace_counts
+        }
 
         async def retrieve(admitted: AdmittedSearchWorkspace) -> TransientGenerationCandidates:
+            if searchable_by_workspace[admitted.workspace.workspace_id] == 0:
+                return TransientGenerationCandidates(
+                    snapshot=admitted.read_lease.snapshot,
+                    retrieval_mode=embedding.retrieval_mode,
+                    keyword_hits=(),
+                    vector_hits=() if embedding.retrieval_mode == "hybrid" else None,
+                )
             async with self._retrieval_slots:
                 if stop_dispatch.is_set():
                     raise asyncio.CancelledError

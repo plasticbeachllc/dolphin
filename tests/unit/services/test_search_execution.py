@@ -229,6 +229,52 @@ async def test_scope_failure_performs_no_embedding_or_retrieval_work() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_scope_skips_embedding_and_all_retrieval() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a"), events),
+        _ScopeResolver(events, searchable_chunks={"ws_a": 0}),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever({}, events),
+    )
+
+    plan = await service.execute_first_page("private query", ["ws_a"], paths=["missing/**"])
+
+    assert events == ["coverage", "scope"]
+    assert plan.retrieval_mode == "not_needed"
+    assert plan.query_embedding_source == "not_needed"
+    assert plan.scope_searchable_chunks == 0
+    assert plan.ranked_targets == ()
+    assert plan.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_partial_empty_scope_skips_only_zero_count_workspace_retrieval() -> None:
+    events: list[str] = []
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage("ws_a", "ws_b"), events),
+        _ScopeResolver(events, searchable_chunks={"ws_a": 0, "ws_b": 1}),
+        _EmbeddingResolver(_embedding(), events),
+        _CandidateRetriever(
+            {
+                "ws_b": _candidates(
+                    "ws_b",
+                    keyword=(KeywordSearchHit(chunk_instance_id="match", score=1),),
+                    vector=(),
+                )
+            },
+            events,
+        ),
+    )
+
+    plan = await service.execute_first_page("query", ["ws_a", "ws_b"], paths=["src/**"])
+
+    assert events == ["coverage", "scope", "embedding", "retrieve:ws_b"]
+    assert [snapshot.workspace_id for snapshot in plan.snapshots] == ["ws_a", "ws_b"]
+    assert [(target.workspace_id, target.chunk_instance_id) for target in plan.ranked_targets] == [("ws_b", "match")]
+
+
+@pytest.mark.asyncio
 async def test_cancellation_drains_scope_resolution_before_coverage_can_close() -> None:
     events: list[str] = []
     started = Event()
@@ -406,9 +452,16 @@ class _CoverageExecutor:
 
 
 class _ScopeResolver:
-    def __init__(self, events: list[str], *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        error: Exception | None = None,
+        searchable_chunks: dict[str, int] | None = None,
+    ) -> None:
         self.events = events
         self.error = error
+        self.searchable_chunks = searchable_chunks
 
     def resolve(
         self,
@@ -421,6 +474,7 @@ class _ScopeResolver:
         return _resolved_scope(
             *(lease.snapshot.workspace_id for lease in leases),
             scope=scope,
+            searchable_chunks=self.searchable_chunks,
         )
 
 
@@ -581,13 +635,14 @@ def _coverage(*workspace_ids: str) -> SearchCoverage:
 def _resolved_scope(
     *workspace_ids: str,
     scope: SearchScope | None = None,
+    searchable_chunks: dict[str, int] | None = None,
 ) -> ResolvedSearchScope:
     resolved_scope = scope or SearchScope(paths=(), exclude_paths=(), languages=())
     counts = tuple(
         WorkspaceScopeCount(
             workspace_id=workspace_id,
             generation_id=f"generation_{workspace_id}",
-            searchable_chunks=1,
+            searchable_chunks=1 if searchable_chunks is None else searchable_chunks[workspace_id],
         )
         for workspace_id in sorted(workspace_ids)
     )
@@ -595,7 +650,7 @@ def _resolved_scope(
         scope_digest=resolved_scope.digest,
         filter_shape=resolved_scope.filter_shape,
         workspace_counts=counts,
-        searchable_chunks=len(counts),
+        searchable_chunks=sum(item.searchable_chunks for item in counts),
     )
 
 
