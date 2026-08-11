@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from itertools import groupby
@@ -27,12 +27,16 @@ from kb.generation_keyword import (
 )
 from kb.runtime.schema import METADATA_SCHEMA_VERSION
 from kb.runtime.storage import StorageLayout, StorageLayoutError
+from kb.search_scope import SearchScope
 
 _SQLITE_BUSY_TIMEOUT_MILLISECONDS = 1_000
 _KEYWORD_QUERY_TIMEOUT_SECONDS = 8.0
 _SQLITE_PROGRESS_STEPS = 1_000
 _PRIVATE_ID_MAX_LENGTH = 128
 _WORD_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
+_UNFILTERED_SCOPE = SearchScope(paths=(), exclude_paths=(), languages=())
+
+type _KeywordPostingRow = tuple[str, str, str, int] | tuple[str, str, str, int, str, str]
 
 
 class SQLiteGenerationKeywordStore:
@@ -49,8 +53,17 @@ class SQLiteGenerationKeywordStore:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._monotonic = monotonic or time.monotonic
 
-    def search(self, read_lease_id: str, query: str, *, limit: int) -> tuple[KeywordSearchHit, ...]:
+    def search(
+        self,
+        read_lease_id: str,
+        query: str,
+        *,
+        scope: SearchScope = _UNFILTERED_SCOPE,
+        limit: int,
+    ) -> tuple[KeywordSearchHit, ...]:
         _bounded_id(read_lease_id, "generation read lease ID")
+        if not isinstance(scope, SearchScope):
+            raise GenerationKeywordError("Dolphin keyword search scope is invalid")
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_KEYWORD_RESULTS:
             raise GenerationKeywordError("Dolphin keyword result limit is invalid")
         query_terms = _prepare_query(query)
@@ -69,12 +82,17 @@ class SQLiteGenerationKeywordStore:
             connection.set_progress_handler(interrupt_after_deadline, _SQLITE_PROGRESS_STEPS)
             try:
                 connection.execute("BEGIN")
-                scope = _require_live_published_scope(connection, read_lease_id, observed_at)
-                _require_validated_keyword_binding(connection, scope)
+                published_scope = _require_live_published_scope(connection, read_lease_id, observed_at)
+                _require_validated_keyword_binding(connection, published_scope)
                 if not query_terms:
                     connection.commit()
                     return ()
-                postings = _verified_query_postings(connection, scope.generation_id, query_terms)
+                postings = _verified_query_postings(
+                    connection,
+                    published_scope.generation_id,
+                    query_terms,
+                    search_scope=scope,
+                )
                 connection.commit()
             except sqlite3.OperationalError as exc:
                 if timed_out:
@@ -216,11 +234,13 @@ def _verified_query_postings(
     connection: sqlite3.Connection,
     generation_id: str,
     query_terms: tuple[str, ...],
+    *,
+    search_scope: SearchScope,
 ) -> tuple[tuple[str, str, str, int], ...]:
     placeholders = ", ".join("?" for _term in query_terms)
     rows = connection.execute(
         f"""
-        SELECT v.term, d.chunk_instance_id, v.col, v.offset
+        SELECT v.term, d.chunk_instance_id, v.col, v.offset, d.relative_path, d.language
         FROM generation_keyword_vocabulary AS v
         JOIN generation_keyword_documents AS d ON d.document_rowid = v.doc
         WHERE d.generation_id = ? AND v.term IN ({placeholders})
@@ -230,8 +250,20 @@ def _verified_query_postings(
     ).fetchall()
     if len(rows) > MAX_KEYWORD_POSTINGS_PER_QUERY:
         raise GenerationKeywordQueryTooBroad("Dolphin keyword query is too broad; use rarer or more specific terms")
-    postings = tuple(sorted((str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows))
-    observed = _term_commits_from_rows(generation_id, iter(postings))
+    scoped_rows = tuple(
+        sorted(
+            (
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                int(row[3]),
+                str(row[4]),
+                str(row[5]),
+            )
+            for row in rows
+        )
+    )
+    observed = _term_commits_from_rows(generation_id, iter(scoped_rows))
     expected_rows = connection.execute(
         f"""
         SELECT term, posting_digest, posting_count
@@ -243,7 +275,7 @@ def _verified_query_postings(
     expected = {str(row[0]): (str(row[1]), int(row[2])) for row in expected_rows}
     if observed != expected:
         raise GenerationKeywordError("Dolphin published keyword index is corrupt")
-    return postings
+    return tuple(row[:4] for row in scoped_rows if search_scope.matches(row[4], row[5]))
 
 
 def _prepare_query(query: str) -> tuple[str, ...]:
@@ -295,7 +327,7 @@ def _prepare_query(query: str) -> tuple[str, ...]:
 
 def _term_commits_from_rows(
     generation_id: str,
-    rows: Iterator[tuple[str, str, str, int]] | sqlite3.Cursor,
+    rows: Iterable[_KeywordPostingRow] | sqlite3.Cursor,
 ) -> dict[str, tuple[str, int]]:
     commits: dict[str, tuple[str, int]] = {}
     for term, grouped in groupby(rows, key=lambda row: row[0]):

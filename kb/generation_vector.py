@@ -7,6 +7,7 @@ import math
 import struct
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
+from pathlib import PurePosixPath
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -20,7 +21,9 @@ from kb.generation import (
     StagingGeneration,
     VerifiedVectorCommit,
 )
+from kb.generation_content import MAX_LANGUAGE_LENGTH, MAX_RELATIVE_PATH_LENGTH
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
+from kb.search_scope import SearchScope
 from kb.services.workspace_registry import OperationLease
 
 GENERATION_VECTOR_COMMIT_FORMAT = "dolphin-generation-vector-v1"
@@ -65,13 +68,30 @@ class StagedGenerationVector(_VectorModel):
 
     chunk_instance_id: str = Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)
     embedding_cache_key: str = Field(pattern=_SHA256_PATTERN)
+    relative_path: str = Field(min_length=1, max_length=MAX_RELATIVE_PATH_LENGTH)
+    language: str = Field(min_length=1, max_length=MAX_LANGUAGE_LENGTH)
     vector: tuple[float, ...] = Field(min_length=EMBEDDING_DIMENSIONS, max_length=EMBEDDING_DIMENSIONS)
 
-    @field_validator("chunk_instance_id")
+    @field_validator("chunk_instance_id", "language")
     @classmethod
-    def chunk_identity_has_no_nul(cls, value: str) -> str:
+    def metadata_has_no_nul(cls, value: str) -> str:
         if "\x00" in value:
-            raise ValueError("vector chunk identity cannot contain NUL")
+            raise ValueError("vector metadata cannot contain NUL")
+        return value
+
+    @field_validator("relative_path")
+    @classmethod
+    def relative_path_is_canonical(cls, value: str) -> str:
+        candidate = PurePosixPath(value)
+        if (
+            "\x00" in value
+            or "\\" in value
+            or not candidate.parts
+            or candidate.is_absolute()
+            or value != candidate.as_posix()
+            or any(part in {"", ".", ".."} for part in candidate.parts)
+        ):
+            raise ValueError("vector relative path must be canonical and contained")
         return value
 
     @field_validator("vector")
@@ -120,6 +140,7 @@ class GenerationVectorStore(GenerationVectorCommitVerifier, Protocol):
         read_lease_id: str,
         query_vector: Sequence[float],
         *,
+        scope: SearchScope,
         limit: int,
     ) -> tuple[VectorSearchHit, ...]: ...
 
@@ -155,6 +176,8 @@ def identify_generation_vector_row(vector: StagedGenerationVector) -> str:
     digest.update(_ROW_DOMAIN)
     _update_frame(digest, vector.chunk_instance_id.encode("utf-8"))
     _update_frame(digest, vector.embedding_cache_key.encode("ascii"))
+    _update_frame(digest, vector.relative_path.encode("utf-8"))
+    _update_frame(digest, vector.language.encode("utf-8"))
     for component in vector.vector:
         digest.update(_FLOAT32.pack(component))
     return digest.hexdigest()

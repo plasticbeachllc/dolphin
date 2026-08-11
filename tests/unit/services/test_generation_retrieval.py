@@ -332,7 +332,8 @@ class _KeywordStore:
         self.error = error
         self.calls: list[tuple[str, str, int]] = []
 
-    def search(self, read_lease_id: str, query: str, *, limit: int) -> tuple[KeywordSearchHit, ...]:
+    def search(self, read_lease_id: str, query: str, *, scope: Any, limit: int) -> tuple[KeywordSearchHit, ...]:
+        assert scope.filter_shape in {"none", "path", "language", "both"}
         self.calls.append((read_lease_id, query, limit))
         if self.error is not None:
             raise self.error
@@ -350,7 +351,15 @@ class _VectorStore:
         self.error = error
         self.calls: list[tuple[str, tuple[float, ...], int]] = []
 
-    def search(self, read_lease_id: str, query_vector: Any, *, limit: int) -> tuple[VectorSearchHit, ...]:
+    def search(
+        self,
+        read_lease_id: str,
+        query_vector: Any,
+        *,
+        scope: Any,
+        limit: int,
+    ) -> tuple[VectorSearchHit, ...]:
+        assert scope.filter_shape in {"none", "path", "language", "both"}
         vector = tuple(query_vector)
         self.calls.append((read_lease_id, vector, limit))
         if self.error is not None:

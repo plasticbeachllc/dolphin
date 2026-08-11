@@ -7,10 +7,12 @@ import sys
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Protocol
 
+from kb.generation import GenerationReadLease
 from kb.generation_retrieval import TransientGenerationCandidates
 from kb.query_embedding import QueryEmbeddingResolution
 from kb.search_admission import AdmittedSearchWorkspace, SearchCoverage
 from kb.search_execution import FirstPageSearchPlan, build_first_page_search_plan
+from kb.search_scope import ResolvedSearchScope, SearchScope, SearchScopeError
 from kb.services.workspace_resolution import WorkspaceResolution
 
 _MAX_CONCURRENT_WORKSPACE_RETRIEVALS = 8
@@ -37,7 +39,16 @@ class _CandidateRetriever(Protocol):
         query: str,
         *,
         query_vector: Sequence[float] | None,
+        scope: SearchScope,
     ) -> TransientGenerationCandidates: ...
+
+
+class _ScopeResolver(Protocol):
+    def resolve(
+        self,
+        leases: Sequence[GenerationReadLease],
+        scope: SearchScope,
+    ) -> ResolvedSearchScope: ...
 
 
 class SearchExecutionService:
@@ -46,10 +57,12 @@ class SearchExecutionService:
     def __init__(
         self,
         coverage: _CoverageExecutor,
+        scopes: _ScopeResolver,
         embeddings: _EmbeddingResolver,
         retrieval: _CandidateRetriever,
     ) -> None:
         self._coverage = coverage
+        self._scopes = scopes
         self._embeddings = embeddings
         self._retrieval = retrieval
         self._retrieval_slots = asyncio.Semaphore(_MAX_CONCURRENT_WORKSPACE_RETRIEVALS)
@@ -59,14 +72,20 @@ class SearchExecutionService:
         query: str,
         workspace_ids: Sequence[str] | None,
         *,
+        paths: Sequence[str] = (),
+        exclude_paths: Sequence[str] = (),
+        languages: Sequence[str] = (),
         current_resolution: WorkspaceResolution | None = None,
     ) -> FirstPageSearchPlan:
-        """Build one eager first-page plan; public filters and pagination remain upstream."""
+        """Build one scoped eager first-page plan; pagination remains upstream."""
+
+        scope = SearchScope.from_inputs(paths=paths, exclude_paths=exclude_paths, languages=languages)
 
         async def execute_admitted(coverage: SearchCoverage) -> FirstPageSearchPlan:
+            resolved_scope = await self._resolve_scope(coverage, scope)
             embedding = await self._embeddings.resolve(query)
-            candidates = await self._retrieve_all(coverage, query, embedding)
-            return build_first_page_search_plan(candidates, embedding)
+            candidates = await self._retrieve_all(coverage, query, embedding, scope)
+            return build_first_page_search_plan(candidates, embedding, resolved_scope)
 
         return await self._coverage.execute_async(
             workspace_ids,
@@ -74,11 +93,34 @@ class SearchExecutionService:
             current_resolution=current_resolution,
         )
 
+    async def _resolve_scope(self, coverage: SearchCoverage, scope: SearchScope) -> ResolvedSearchScope:
+        leases = tuple(admitted.read_lease for admitted in coverage.workspaces)
+        operation = asyncio.create_task(
+            asyncio.to_thread(self._scopes.resolve, leases, scope),
+            name="dolphin-search-scope-resolution",
+        )
+        try:
+            resolved = await asyncio.shield(operation)
+        except BaseException:
+            primary_failure = sys.exception()
+            await _drain_after_cancellation(operation)
+            assert primary_failure is not None
+            raise primary_failure
+        expected = tuple(
+            (admitted.workspace.workspace_id, admitted.read_lease.snapshot.generation_id)
+            for admitted in coverage.workspaces
+        )
+        observed = tuple((item.workspace_id, item.generation_id) for item in resolved.workspace_counts)
+        if resolved.scope_digest != scope.digest or observed != expected:
+            raise SearchScopeError("Dolphin resolved search scope does not match admitted coverage")
+        return resolved
+
     async def _retrieve_all(
         self,
         coverage: SearchCoverage,
         query: str,
         embedding: QueryEmbeddingResolution,
+        scope: SearchScope,
     ) -> tuple[TransientGenerationCandidates, ...]:
         stop_dispatch = asyncio.Event()
 
@@ -92,6 +134,7 @@ class SearchExecutionService:
                         admitted,
                         query,
                         query_vector=embedding.vector,
+                        scope=scope,
                     ),
                     name=f"dolphin-search-retrieval-{admitted.workspace.workspace_id}",
                 )

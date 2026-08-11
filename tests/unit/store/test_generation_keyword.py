@@ -26,6 +26,7 @@ from kb.generation_keyword import (
     GenerationKeywordUnavailable,
 )
 from kb.runtime.storage import StorageLayout, macos_storage_layout
+from kb.search_scope import SearchScope
 from kb.services.workspace_registry import OperationLease, WorkspaceRegistry
 from kb.services.worktree import GitWorktree
 from kb.store.chunk_artifacts import ChunkArtifactStore
@@ -83,6 +84,39 @@ def test_keyword_search_requires_a_live_reader_lease(
     context.coordinator.release_read(read_lease)
     with pytest.raises(GenerationKeywordUnavailable, match="read lease is unavailable or expired"):
         context.keyword.search(read_lease.lease_id, "bounded", limit=1)
+
+
+def test_keyword_search_applies_exact_path_exclusion_and_language_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(monkeypatch, tmp_path)
+    included = _membership(context.artifacts, suffix="included", text="needle", relative_path="src/main.py")
+    excluded = _membership(
+        context.artifacts,
+        suffix="excluded",
+        text="needle",
+        relative_path="src/generated/main.py",
+    )
+    wrong_language = _membership(
+        context.artifacts,
+        suffix="typescript",
+        text="needle",
+        relative_path="src/main.ts",
+        language="typescript",
+    )
+    manifest = context.content.stage_manifest(context.lease, context.generation, [included, excluded, wrong_language])
+    snapshot = _publish(context, manifest)
+    read_lease = context.coordinator.acquire_read(snapshot.workspace_id, lease_duration=timedelta(seconds=10))
+    scope = SearchScope.from_inputs(
+        paths=["src/**"],
+        exclude_paths=["src/generated/**"],
+        languages=["python"],
+    )
+
+    hits = context.keyword.search(read_lease.lease_id, "needle", scope=scope, limit=10)
+
+    assert [hit.chunk_instance_id for hit in hits] == [included.chunk_instance_id]
 
 
 def test_keyword_revision_invalidates_published_search_after_any_document_change(
@@ -406,15 +440,22 @@ def _context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Context:
     )
 
 
-def _membership(artifacts: ChunkArtifactStore, *, suffix: str, text: str) -> StagedChunkMembership:
+def _membership(
+    artifacts: ChunkArtifactStore,
+    *,
+    suffix: str,
+    text: str,
+    relative_path: str | None = None,
+    language: str = "python",
+) -> StagedChunkMembership:
     return StagedChunkMembership(
         chunk_instance_id=f"chunk_{suffix}",
         artifact=artifacts.put_exact_text(text),
-        relative_path=f"src/{suffix}.py",
+        relative_path=relative_path or f"src/{suffix}.py",
         source_file_fingerprint=hashlib.sha256(f"file:{suffix}".encode()).hexdigest(),
         start_line=1,
         end_line=max(1, text.count("\n") + 1),
-        language="python",
+        language=language,
         chunker_key="python-tree-sitter-v1",
         embedding_cache_key=identify_embedding_input(text).cache_key,
     )

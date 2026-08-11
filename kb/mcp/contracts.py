@@ -8,12 +8,24 @@ making automatic behavior unambiguous to application services.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from kb.cleanup_authority import CLEANUP_RECEIPT_LENGTH, CLEANUP_RECEIPT_PATTERN
-from kb.lifecycle_limits import OPERATION_ID_MAX_LENGTH, REPO_LIST_CURSOR_MAX_LENGTH
+from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH, OPERATION_ID_MAX_LENGTH, REPO_LIST_CURSOR_MAX_LENGTH
+from kb.search_scope import (
+    MAX_SEARCH_LANGUAGES,
+    MAX_SEARCH_PATH_PATTERN_LENGTH,
+    MAX_SEARCH_PATH_PATTERNS,
+    MAX_SEARCH_SCOPE_WORKSPACES,
+    SearchLanguage,
+    SearchScope,
+    SearchScopeError,
+)
+
+_SearchPathPattern = Annotated[str, Field(min_length=1, max_length=MAX_SEARCH_PATH_PATTERN_LENGTH)]
+_SearchWorkspaceId = Annotated[str, Field(min_length=1, max_length=ENTITY_ID_MAX_LENGTH)]
 
 
 class StrictInput(BaseModel):
@@ -83,12 +95,22 @@ class SearchQueryRequest(StrictInput):
 
     kind: Literal["query"]
     query: str = Field(min_length=1, max_length=2_000)
-    workspace_ids: list[str] | None = Field(
+    workspace_ids: list[_SearchWorkspaceId] | None = Field(
+        max_length=MAX_SEARCH_SCOPE_WORKSPACES,
         description="Explicit workspace scope; null requests deterministic current-workspace resolution.",
     )
-    paths: list[str] = Field(description="Workspace-relative include globs; [] means no narrowing.")
-    exclude_paths: list[str] = Field(description="Workspace-relative exclude globs; [] means none.")
-    languages: list[str] = Field(description="Normalized public language names; [] means all languages.")
+    paths: list[_SearchPathPattern] = Field(
+        max_length=MAX_SEARCH_PATH_PATTERNS,
+        description="Canonical workspace-relative include globs; [] means no narrowing.",
+    )
+    exclude_paths: list[_SearchPathPattern] = Field(
+        max_length=MAX_SEARCH_PATH_PATTERNS,
+        description="Canonical workspace-relative exclude globs; [] means none.",
+    )
+    languages: list[SearchLanguage] = Field(
+        max_length=MAX_SEARCH_LANGUAGES,
+        description="Normalized first-class language names; [] means all languages.",
+    )
     max_results: int | None = Field(
         ge=1,
         le=50,
@@ -99,6 +121,20 @@ class SearchQueryRequest(StrictInput):
         le=20_000,
         description="Null selects the adaptive per-page snippet budget.",
     )
+
+    @model_validator(mode="after")
+    def task_scope_is_safe_and_bounded(self) -> SearchQueryRequest:
+        try:
+            SearchScope.from_inputs(
+                paths=self.paths,
+                exclude_paths=self.exclude_paths,
+                languages=self.languages,
+            )
+        except SearchScopeError as exc:
+            raise ValueError(str(exc)) from exc
+        if self.workspace_ids is not None and len(set(self.workspace_ids)) != len(self.workspace_ids):
+            raise ValueError("workspace_ids must not contain duplicates")
+        return self
 
 
 class SearchContinuationRequest(StrictInput):

@@ -101,6 +101,32 @@ def test_search_rejects_mixed_query_and_continuation_fields() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("paths", ["../secret/**"]),
+        ("exclude_paths", ["/absolute/**"]),
+        ("languages", ["python", "brainfuck"]),
+        ("workspace_ids", ["ws_same", "ws_same"]),
+    ],
+)
+def test_search_query_rejects_unsafe_or_ambiguous_task_scope(field: str, value: list[str]) -> None:
+    request = {
+        "kind": "query",
+        "query": "find authentication",
+        "workspace_ids": None,
+        "paths": [],
+        "exclude_paths": [],
+        "languages": [],
+        "max_results": None,
+        "max_context_tokens": None,
+    }
+    request[field] = value
+
+    with pytest.raises(ValidationError):
+        SearchInput.model_validate({"request": request})
+
+
 def test_repo_add_rejects_relative_paths() -> None:
     with pytest.raises(ValidationError, match="path must be absolute"):
         RepoAddInput.model_validate({"path": ".", "cleanup_receipt": _valid_cleanup_receipt()})

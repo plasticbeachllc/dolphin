@@ -16,6 +16,7 @@ from kb.generation_retrieval import (
 )
 from kb.lifecycle_limits import ENTITY_ID_MAX_LENGTH
 from kb.query_embedding import QueryEmbeddingResolution, TransientProviderCategory
+from kb.search_scope import ResolvedSearchScope, SearchFilterShape
 
 SEARCH_RANKING_POLICY_VERSION = "search-global-rrf-v1"
 MAX_SEARCH_EXECUTION_WORKSPACES = 32
@@ -66,6 +67,9 @@ class FirstPageSearchPlan(_SearchExecutionModel):
         min_length=1,
         max_length=MAX_SEARCH_EXECUTION_WORKSPACES,
     )
+    scope_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    filter_shape: SearchFilterShape
+    scope_searchable_chunks: int = Field(ge=0)
     retrieval_mode: SearchRetrievalMode
     query_embedding_source: Literal["cache", "live", "unavailable"]
     degraded_reason: TransientProviderCategory | None
@@ -114,6 +118,7 @@ class FirstPageSearchPlan(_SearchExecutionModel):
 def build_first_page_search_plan(
     candidates: tuple[TransientGenerationCandidates, ...],
     embedding: QueryEmbeddingResolution,
+    resolved_scope: ResolvedSearchScope,
 ) -> FirstPageSearchPlan:
     """Fuse every workspace/branch list once, then permanently discard scores."""
 
@@ -123,6 +128,10 @@ def build_first_page_search_plan(
     workspace_ids = tuple(item.snapshot.workspace_id for item in ordered)
     if len(set(workspace_ids)) != len(workspace_ids):
         raise SearchExecutionError("Dolphin search candidate workspace set contains duplicates")
+    expected_counts = tuple((item.snapshot.workspace_id, item.snapshot.generation_id) for item in ordered)
+    observed_counts = tuple((item.workspace_id, item.generation_id) for item in resolved_scope.workspace_counts)
+    if observed_counts != expected_counts:
+        raise SearchExecutionError("Dolphin resolved search scope does not match candidate authority")
 
     keyword_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
     vector_candidates: list[tuple[int, tuple[str, str, str, str]]] = []
@@ -174,6 +183,9 @@ def build_first_page_search_plan(
     )
     return FirstPageSearchPlan(
         snapshots=tuple(item.snapshot for item in ordered),
+        scope_digest=resolved_scope.scope_digest,
+        filter_shape=resolved_scope.filter_shape,
+        scope_searchable_chunks=resolved_scope.searchable_chunks,
         retrieval_mode=embedding.retrieval_mode,
         query_embedding_source=embedding.source,
         degraded_reason=embedding.degraded_reason,
