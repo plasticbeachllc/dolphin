@@ -226,6 +226,32 @@ async def test_retrieval_failure_waits_for_every_dispatched_workspace() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retrieval_failure_cancels_capacity_waiters_and_drains_started_work(monkeypatch) -> None:
+    monkeypatch.setattr("kb.services.search_execution._MAX_CONCURRENT_WORKSPACE_RETRIEVALS", 2)
+    started: list[str] = []
+    both_started = Event()
+    release = Event()
+    retrieval = _FailFastRetriever(started, both_started, release)
+    workspace_ids = ("ws_a", "ws_b", "ws_c")
+    service = SearchExecutionService(
+        _CoverageExecutor(_coverage(*workspace_ids), []),
+        _EmbeddingResolver(_embedding(), []),
+        retrieval,
+    )
+    execution = asyncio.create_task(service.execute_first_page("query", workspace_ids))
+    assert await asyncio.to_thread(both_started.wait, 1)
+
+    await asyncio.sleep(0.02)
+    assert not execution.done()
+    assert set(started) == {"ws_a", "ws_b"}
+    release.set()
+
+    with pytest.raises(RuntimeError, match="first failed"):
+        await asyncio.wait_for(execution, timeout=1)
+    assert set(started) == {"ws_a", "ws_b"}
+
+
+@pytest.mark.asyncio
 async def test_cancellation_drains_dispatched_retrieval_before_returning() -> None:
     events: list[str] = []
     started = Event()
@@ -253,12 +279,13 @@ async def test_cancellation_drains_dispatched_retrieval_before_returning() -> No
 
 
 @pytest.mark.asyncio
-async def test_cancellation_does_not_start_workspace_retrievals_waiting_for_capacity() -> None:
-    workspace_ids = tuple(f"ws_{index:02d}" for index in range(9))
+async def test_cancellation_does_not_start_workspace_retrievals_waiting_for_capacity(monkeypatch) -> None:
+    monkeypatch.setattr("kb.services.search_execution._MAX_CONCURRENT_WORKSPACE_RETRIEVALS", 2)
+    workspace_ids = ("ws_00", "ws_01", "ws_02")
     started: list[str] = []
     all_slots_started = Event()
     release = Event()
-    retrieval = _CapacityBlockingRetriever(started, all_slots_started, release)
+    retrieval = _CapacityBlockingRetriever(started, all_slots_started, release, capacity=2)
     service = SearchExecutionService(
         _CoverageExecutor(_coverage(*workspace_ids), []),
         _EmbeddingResolver(_embedding(), []),
@@ -269,12 +296,12 @@ async def test_cancellation_does_not_start_workspace_retrievals_waiting_for_capa
 
     execution.cancel()
     await asyncio.sleep(0.02)
-    assert len(started) == 8
+    assert len(started) == 2
     release.set()
 
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(execution, timeout=1)
-    assert len(started) == 8
+    assert len(started) == 2
 
 
 class _CoverageExecutor:
@@ -352,10 +379,11 @@ class _CandidateRetriever:
 
 
 class _CapacityBlockingRetriever:
-    def __init__(self, started: list[str], all_slots_started: Event, release: Event) -> None:
+    def __init__(self, started: list[str], all_slots_started: Event, release: Event, *, capacity: int) -> None:
         self.started = started
         self.all_slots_started = all_slots_started
         self.release = release
+        self.capacity = capacity
 
     def candidates_for_admitted_workspace(
         self,
@@ -366,10 +394,35 @@ class _CapacityBlockingRetriever:
     ) -> TransientGenerationCandidates:
         assert query and query_vector is not None
         self.started.append(admitted.workspace.workspace_id)
-        if len(self.started) == 8:
+        if len(self.started) == self.capacity:
             self.all_slots_started.set()
         assert self.release.wait(timeout=1)
         return _candidates(admitted.workspace.workspace_id, keyword=(), vector=())
+
+
+class _FailFastRetriever:
+    def __init__(self, started: list[str], both_started: Event, release: Event) -> None:
+        self.started = started
+        self.both_started = both_started
+        self.release = release
+
+    def candidates_for_admitted_workspace(
+        self,
+        admitted: AdmittedSearchWorkspace,
+        query: str,
+        *,
+        query_vector,
+    ) -> TransientGenerationCandidates:
+        assert query and query_vector is not None
+        workspace_id = admitted.workspace.workspace_id
+        self.started.append(workspace_id)
+        if len(self.started) == 2:
+            self.both_started.set()
+        assert self.both_started.wait(timeout=1)
+        if workspace_id == "ws_a":
+            raise RuntimeError("first failed")
+        assert self.release.wait(timeout=1)
+        return _candidates(workspace_id, keyword=(), vector=())
 
 
 def _embedding(*, degraded: bool = False) -> QueryEmbeddingResolution:
