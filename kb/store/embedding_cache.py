@@ -64,7 +64,10 @@ class SQLiteEmbeddingCache:
             ).fetchone()
         if row is None:
             return None
-        return _cached_embedding(identity, row)
+        cached = _cached_embedding(identity, row)
+        if _require_persisted_timestamp(row[9]) <= _utc_datetime(self._clock()) - _CACHE_ENTRY_MAX_AGE:
+            return None
+        return cached
 
     def put(self, identity: EmbeddingInputIdentity, vector: Sequence[float]) -> CachedEmbedding:
         """Install once and return the immutable winner of a concurrent insertion."""
@@ -225,15 +228,20 @@ def _vector_digest(cache_key: str, payload: bytes) -> str:
 
 
 def _timestamp(value: datetime) -> str:
+    return _utc_datetime(value).isoformat()
+
+
+def _utc_datetime(value: datetime) -> datetime:
     if not isinstance(value, datetime) or value.tzinfo is None:
         raise EmbeddingCacheError("Dolphin embedding cache clock must return an aware timestamp")
-    return value.astimezone(UTC).isoformat()
+    return value.astimezone(UTC)
 
 
-def _require_persisted_timestamp(value: object) -> None:
+def _require_persisted_timestamp(value: object) -> datetime:
     try:
         parsed = datetime.fromisoformat(value) if isinstance(value, str) else None
     except ValueError:
         parsed = None
     if parsed is None or parsed.tzinfo is None:
         raise EmbeddingCacheCorrupt("Dolphin embedding cache timestamp is corrupt")
+    return parsed.astimezone(UTC)

@@ -61,13 +61,35 @@ class _Provider:
 class _MemoryCache:
     def __init__(self) -> None:
         self.entries: dict[str, CachedEmbedding] = {}
+        self.get_calls = 0
 
     def get(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
+        self.get_calls += 1
         return self.entries.get(identity.cache_key)
 
     def put(self, identity: EmbeddingInputIdentity, vector: tuple[float, ...]) -> CachedEmbedding:
         cached = CachedEmbedding(identity=identity, vector=vector)
         return self.entries.setdefault(identity.cache_key, cached)
+
+
+class _UnavailableCache:
+    def __init__(self) -> None:
+        self.get_calls = 0
+
+    def get(self, identity: EmbeddingInputIdentity) -> CachedEmbedding | None:
+        assert identity.cache_key
+        self.get_calls += 1
+        raise EmbeddingCacheUnavailable("unavailable")
+
+    def put(self, identity: EmbeddingInputIdentity, vector: tuple[float, ...]) -> CachedEmbedding:
+        assert identity.cache_key and vector
+        raise EmbeddingCacheUnavailable("unavailable")
+
+
+async def _wait_for_cache_reads(cache: _MemoryCache | _UnavailableCache, minimum: int) -> None:
+    async with asyncio.timeout(1):
+        while cache.get_calls < minimum:
+            await asyncio.sleep(0)
 
 
 @pytest.mark.asyncio
@@ -119,13 +141,77 @@ async def test_concurrent_identical_misses_make_one_provider_call_and_recheck_ca
     service = QueryEmbeddingService(cache, Provider())
     tasks = tuple(asyncio.create_task(service.resolve("same query")) for _index in range(10))
     await asyncio.wait_for(started.wait(), timeout=1)
+    await _wait_for_cache_reads(cache, 11)
     await asyncio.sleep(0)
     release.set()
     results = await asyncio.gather(*tasks)
+    await asyncio.sleep(0)
 
     assert calls == ["same query"]
-    assert [result.source for result in results].count("live") == 1
-    assert [result.source for result in results].count("cache") == 9
+    assert all(result.source == "live" for result in results)
+    assert all(result is results[0] for result in results)
+    assert service._single_flights == {}
+
+
+@pytest.mark.asyncio
+async def test_concurrent_transient_failure_is_shared_by_every_identical_waiter() -> None:
+    cache = _MemoryCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            nonlocal calls
+            assert query == "same query"
+            calls += 1
+            started.set()
+            await release.wait()
+            raise TransientProviderFailure("rate_limited")
+
+    service = QueryEmbeddingService(cache, Provider())
+    tasks = tuple(asyncio.create_task(service.resolve("same query")) for _index in range(10))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await _wait_for_cache_reads(cache, 11)
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*tasks)
+    await asyncio.sleep(0)
+
+    assert calls == 1
+    assert all(result.retrieval_mode == "lexical_structural" for result in results)
+    assert all(result is results[0] for result in results)
+    assert service._single_flights == {}
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cache_unavailable_live_result_is_shared_by_every_identical_waiter() -> None:
+    cache = _UnavailableCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    class Provider:
+        async def embed_query(self, query: str) -> tuple[float, ...]:
+            nonlocal calls
+            assert query == "same query"
+            calls += 1
+            started.set()
+            await release.wait()
+            return _vector()
+
+    service = QueryEmbeddingService(cache, Provider())
+    tasks = tuple(asyncio.create_task(service.resolve("same query")) for _index in range(10))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await _wait_for_cache_reads(cache, 11)
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*tasks)
+    await asyncio.sleep(0)
+
+    assert calls == 1
+    assert all(result.cache_write == "skipped_unavailable" for result in results)
+    assert all(result is results[0] for result in results)
     assert service._single_flights == {}
 
 
@@ -161,6 +247,7 @@ async def test_different_query_misses_share_a_fixed_provider_concurrency_limit()
     assert calls == 4
     release.set()
     await asyncio.gather(*tasks)
+    await asyncio.sleep(0)
 
     assert calls == 8
     assert maximum_active == 4

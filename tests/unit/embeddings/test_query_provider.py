@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -188,6 +190,33 @@ async def test_unsafe_retry_after_is_clamped_to_interactive_budget() -> None:
         client_factory=lambda _key: client,
         sleep=sleep,
         random_source=lambda: 0.5,
+    )
+
+    assert len(await provider.embed_query("query")) == EMBEDDING_DIMENSIONS
+    assert sleeps == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_http_date_retry_after_is_honored_within_bounded_budget() -> None:
+    observed_at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    failure = _status_error(
+        openai.RateLimitError,
+        429,
+        "rate limited",
+        headers={"retry-after": format_datetime(observed_at + timedelta(seconds=1), usegmt=True)},
+    )
+    client = _Client([failure, _response()])
+    sleeps: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    provider = OpenAIQueryEmbeddingProvider(
+        environment={"DOLPHIN_OPENAI_API_KEY": "secret"},
+        client_factory=lambda _key: client,
+        sleep=sleep,
+        random_source=lambda: 0.5,
+        clock=lambda: observed_at,
     )
 
     assert len(await provider.embed_query("query")) == EMBEDDING_DIMENSIONS

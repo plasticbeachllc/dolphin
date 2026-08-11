@@ -98,6 +98,9 @@ def test_new_entries_transactionally_prune_expired_and_oldest_cache_rows(
             datetime(2026, 8, 1, tzinfo=UTC),
             datetime(2026, 8, 2, tzinfo=UTC),
             datetime(2026, 8, 3, tzinfo=UTC),
+            datetime(2026, 8, 3, tzinfo=UTC),
+            datetime(2026, 8, 3, tzinfo=UTC),
+            datetime(2026, 8, 3, tzinfo=UTC),
         )
     )
     cache, database = _cache(tmp_path, clock=lambda: next(times))
@@ -118,6 +121,8 @@ def test_new_entry_prunes_expired_cache_rows(tmp_path: Path) -> None:
         (
             datetime(2026, 6, 1, tzinfo=UTC),
             datetime(2026, 8, 1, tzinfo=UTC),
+            datetime(2026, 8, 1, tzinfo=UTC),
+            datetime(2026, 8, 1, tzinfo=UTC),
         )
     )
     cache, database = _cache(tmp_path, clock=lambda: next(times))
@@ -129,6 +134,18 @@ def test_new_entry_prunes_expired_cache_rows(tmp_path: Path) -> None:
 
     assert cache.get(expired) is None
     assert cache.get(current) is not None
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
+
+
+def test_expired_entry_is_a_read_miss_without_mutating_cache_state(tmp_path: Path) -> None:
+    observed_at = [datetime(2026, 6, 1, tzinfo=UTC)]
+    cache, database = _cache(tmp_path, clock=lambda: observed_at[0])
+    identity = identify_embedding_input("expired query")
+    cache.put(identity, _vector())
+    observed_at[0] = datetime(2026, 7, 2, tzinfo=UTC)
+
+    assert cache.get(identity) is None
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) FROM embedding_cache_entries").fetchone() == (1,)
 

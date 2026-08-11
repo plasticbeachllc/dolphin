@@ -7,6 +7,8 @@ import math
 import os
 import random
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, Protocol, cast
 
 import openai
@@ -52,9 +54,14 @@ class _AsyncOpenAIClient(Protocol):
 ClientFactory = Callable[[str], _AsyncOpenAIClient]
 AsyncSleep = Callable[[float], Awaitable[None]]
 RandomSource = Callable[[], float]
+Clock = Callable[[], datetime]
 
 _RETRY_JITTER_FRACTION = 0.25
 _MAX_RETRY_DELAY_SECONDS = 1.0
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class OpenAIQueryEmbeddingProvider:
@@ -67,11 +74,13 @@ class OpenAIQueryEmbeddingProvider:
         client_factory: ClientFactory | None = None,
         sleep: AsyncSleep = asyncio.sleep,
         random_source: RandomSource = random.random,
+        clock: Clock = _utc_now,
     ) -> None:
         self._environment = os.environ if environment is None else environment
         self._client_factory = client_factory or _default_client
         self._sleep = sleep
         self._random_source = random_source
+        self._clock = clock
         self._client: _AsyncOpenAIClient | None = None
 
     async def embed_query(self, query: str) -> tuple[float, ...]:
@@ -105,7 +114,7 @@ class OpenAIQueryEmbeddingProvider:
             except Exception as exc:
                 failure = _classified_failure(exc)
                 if isinstance(failure, TransientProviderFailure) and attempt + 1 < _MAX_ATTEMPTS:
-                    await self._sleep(_safe_retry_delay(exc, self._random_source))
+                    await self._sleep(_safe_retry_delay(exc, self._random_source, self._clock))
                     continue
                 raise failure from None
         raise PermanentProviderFailure("provider_error")
@@ -183,7 +192,7 @@ def _classified_failure(exc: Exception) -> QueryEmbeddingError:
     return PermanentProviderFailure("provider_error")
 
 
-def _safe_retry_delay(exc: Exception, random_source: RandomSource) -> float:
+def _safe_retry_delay(exc: Exception, random_source: RandomSource, clock: Clock) -> float:
     try:
         sample = float(random_source())
     except (TypeError, ValueError, OverflowError):
@@ -192,27 +201,42 @@ def _safe_retry_delay(exc: Exception, random_source: RandomSource) -> float:
         sample = 0.5
     jitter = 1 + ((sample * 2) - 1) * _RETRY_JITTER_FRACTION
     delay = _RETRY_DELAY_SECONDS * jitter
-    retry_after = _safe_retry_after_seconds(exc)
+    retry_after = _safe_retry_after_seconds(exc, clock())
     if retry_after is not None:
         delay = max(delay, retry_after)
     return min(delay, _MAX_RETRY_DELAY_SECONDS)
 
 
-def _safe_retry_after_seconds(exc: Exception) -> float | None:
+def _safe_retry_after_seconds(exc: Exception, observed_at: datetime) -> float | None:
     if not isinstance(exc, openai.APIStatusError):
         return None
-    candidates = (
-        (exc.response.headers.get("retry-after"), 1.0),
-        (exc.response.headers.get("retry-after-ms"), 0.001),
-    )
     safe_values: list[float] = []
-    for raw_value, scale in candidates:
-        if raw_value is None or len(raw_value) > 32:
-            continue
+    retry_after = exc.response.headers.get("retry-after")
+    if retry_after is not None and len(retry_after) <= 128:
         try:
-            value = float(raw_value) * scale
+            value = float(retry_after)
         except (TypeError, ValueError, OverflowError):
-            continue
+            value = _http_date_retry_seconds(retry_after, observed_at)
+        if math.isfinite(value) and value >= 0:
+            safe_values.append(min(value, _MAX_RETRY_DELAY_SECONDS))
+    retry_after_ms = exc.response.headers.get("retry-after-ms")
+    if retry_after_ms is not None and len(retry_after_ms) <= 32:
+        try:
+            value = float(retry_after_ms) * 0.001
+        except (TypeError, ValueError, OverflowError):
+            value = -1
         if math.isfinite(value) and value >= 0:
             safe_values.append(min(value, _MAX_RETRY_DELAY_SECONDS))
     return max(safe_values, default=None)
+
+
+def _http_date_retry_seconds(value: str, observed_at: datetime) -> float:
+    if not isinstance(observed_at, datetime) or observed_at.tzinfo is None:
+        return -1
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return -1
+    if retry_at.tzinfo is None:
+        return -1
+    return (retry_at.astimezone(UTC) - observed_at.astimezone(UTC)).total_seconds()
