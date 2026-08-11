@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
+import secrets
 import stat
+import sys
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -12,6 +16,14 @@ from pathlib import Path
 
 class StorageLayoutError(RuntimeError):
     """The runtime state root cannot be used safely."""
+
+
+_QUERY_CACHE_SECRET_NAME = "query-cache.key"
+_QUERY_CACHE_SECRET_LOCK_NAME = "query-cache-key.lock"
+_QUERY_CACHE_SECRET_TEMPORARY_PREFIX = ".query-cache-key."
+_QUERY_CACHE_SECRET_BYTES = 32
+_PRIVATE_LOCK_TIMEOUT_SECONDS = 1.0
+_PRIVATE_LOCK_RETRY_SECONDS = 0.01
 
 
 def sync_directory(descriptor: int) -> None:
@@ -32,6 +44,10 @@ class StorageLayout:
     logs: Path
     temporary: Path
 
+    @property
+    def query_cache_secret_file(self) -> Path:
+        return self.root / _QUERY_CACHE_SECRET_NAME
+
     def ensure_private_directories(self) -> None:
         """Create state directories and validate existing sensitive runtime files."""
         with _open_runtime_root(self.root) as root_fd:
@@ -49,6 +65,22 @@ class StorageLayout:
             if root_fd is None:
                 return False
             return _private_file_exists(root_fd, self.metadata_db.name, label="metadata database")
+
+    def load_or_create_query_cache_secret(self, *, allow_create: bool) -> bytes:
+        """Read one private per-install cache key through held no-follow descriptors."""
+        with _open_runtime_root(self.root) as root_fd:
+            _ensure_runtime_members(self, root_fd)
+            locks_fd = _open_or_create_directory(root_fd, self.locks.name, private=True)
+            try:
+                lock_fd = _open_or_create_private_lock(locks_fd, _QUERY_CACHE_SECRET_LOCK_NAME)
+                try:
+                    _acquire_private_lock(lock_fd)
+                    return _read_or_create_query_cache_secret(root_fd, allow_create=allow_create)
+                finally:
+                    _release_private_lock_preserving_primary_error(lock_fd)
+                    os.close(lock_fd)
+            finally:
+                os.close(locks_fd)
 
     @contextmanager
     def open_artifacts_directory(self) -> Iterator[int]:
@@ -152,6 +184,7 @@ def _ensure_runtime_members(layout: StorageLayout, root_fd: int) -> None:
         os.close(descriptor)
     _validate_optional_private_file(root_fd, layout.config_file.name, label="configuration")
     _validate_optional_private_file(root_fd, layout.metadata_db.name, label="metadata database")
+    _validate_optional_private_file(root_fd, _QUERY_CACHE_SECRET_NAME, label="query cache secret")
 
 
 def _open_or_create_directory(parent_fd: int, name: str, *, private: bool) -> int:
@@ -267,6 +300,148 @@ def _create_or_validate_private_file(parent_fd: int, name: str, *, label: str) -
         _validate_private_descriptor(descriptor, os.fstat(descriptor), label=label, required_mode=0o600)
     finally:
         os.close(descriptor)
+
+
+def _open_or_create_private_lock(parent_fd: int, name: str) -> int:
+    created = False
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | _no_follow_flag(),
+            0o600,
+            dir_fd=parent_fd,
+        )
+        created = True
+    except FileExistsError:
+        try:
+            descriptor = os.open(name, os.O_RDWR | _no_follow_flag(), dir_fd=parent_fd)
+        except OSError as exc:
+            raise StorageLayoutError("Dolphin query cache secret lock is unavailable") from exc
+    except OSError as exc:
+        raise StorageLayoutError("Dolphin query cache secret lock is unavailable") from exc
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            raise StorageLayoutError("Dolphin query cache secret lock is invalid")
+        _validate_private_descriptor(descriptor, status, label="query cache secret lock", required_mode=0o600)
+        if created:
+            sync_directory(parent_fd)
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _acquire_private_lock(descriptor: int) -> None:
+    deadline = time.monotonic() + _PRIVATE_LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise StorageLayoutError("Dolphin query cache secret lock is unavailable") from None
+            time.sleep(min(_PRIVATE_LOCK_RETRY_SECONDS, remaining))
+        except OSError as exc:
+            raise StorageLayoutError("Dolphin query cache secret lock is unavailable") from exc
+
+
+def _release_private_lock_preserving_primary_error(descriptor: int) -> None:
+    primary_error_active = sys.exc_info()[0] is not None
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+    except OSError as exc:
+        if not primary_error_active:
+            raise StorageLayoutError("Dolphin query cache secret lock is unavailable") from exc
+
+
+def _read_or_create_query_cache_secret(root_fd: int, *, allow_create: bool) -> bytes:
+    existing = _read_query_cache_secret(root_fd)
+    if existing is not None:
+        return existing
+    if not allow_create:
+        raise StorageLayoutError("Dolphin query cache secret is missing")
+
+    secret = secrets.token_bytes(_QUERY_CACHE_SECRET_BYTES)
+    temporary_name = _QUERY_CACHE_SECRET_TEMPORARY_PREFIX + secrets.token_hex(16)
+    temporary_fd: int | None = None
+    try:
+        temporary_fd = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | _no_follow_flag(),
+            0o600,
+            dir_fd=root_fd,
+        )
+        _write_all(temporary_fd, secret)
+        os.fsync(temporary_fd)
+        status = os.fstat(temporary_fd)
+        if not stat.S_ISREG(status.st_mode) or status.st_size != _QUERY_CACHE_SECRET_BYTES:
+            raise StorageLayoutError("Dolphin query cache secret could not be created safely")
+        _validate_private_descriptor(temporary_fd, status, label="query cache secret", required_mode=0o600)
+        try:
+            os.link(
+                temporary_name,
+                _QUERY_CACHE_SECRET_NAME,
+                src_dir_fd=root_fd,
+                dst_dir_fd=root_fd,
+                follow_symlinks=False,
+            )
+        except FileExistsError:
+            winner = _read_query_cache_secret(root_fd)
+            if winner is None:
+                raise StorageLayoutError("Dolphin query cache secret is unavailable") from None
+            return winner
+        os.unlink(temporary_name, dir_fd=root_fd)
+        sync_directory(root_fd)
+        return secret
+    except StorageLayoutError:
+        raise
+    except OSError as exc:
+        raise StorageLayoutError("Dolphin query cache secret could not be created safely") from exc
+    finally:
+        if temporary_fd is not None:
+            os.close(temporary_fd)
+        try:
+            os.unlink(temporary_name, dir_fd=root_fd)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def _read_query_cache_secret(root_fd: int) -> bytes | None:
+    try:
+        descriptor = os.open(_QUERY_CACHE_SECRET_NAME, _file_open_flags(), dir_fd=root_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise StorageLayoutError("Dolphin query cache secret is unavailable") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size != _QUERY_CACHE_SECRET_BYTES:
+            raise StorageLayoutError("Dolphin query cache secret is invalid")
+        _validate_private_descriptor(descriptor, before, label="query cache secret", required_mode=0o600)
+        secret = os.read(descriptor, _QUERY_CACHE_SECRET_BYTES + 1)
+        after = os.fstat(descriptor)
+        if len(secret) != _QUERY_CACHE_SECRET_BYTES or _stable_file_identity(before) != _stable_file_identity(after):
+            raise StorageLayoutError("Dolphin query cache secret is invalid")
+        return secret
+    finally:
+        os.close(descriptor)
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    written = 0
+    while written < len(payload):
+        count = os.write(descriptor, payload[written:])
+        if count <= 0:
+            raise StorageLayoutError("Dolphin query cache secret could not be created safely")
+        written += count
+
+
+def _stable_file_identity(status: os.stat_result) -> tuple[int, int, int, int, int]:
+    return status.st_dev, status.st_ino, status.st_size, status.st_mtime_ns, status.st_ctime_ns
 
 
 def _validate_directory_descriptor(descriptor: int, status: os.stat_result, *, label: str, private: bool) -> None:

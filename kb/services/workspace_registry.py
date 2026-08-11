@@ -1351,6 +1351,27 @@ class WorkspaceRegistry:
                     )
                     connection.execute(
                         """
+                        CREATE TABLE embedding_cache_entries (
+                            cache_key TEXT PRIMARY KEY CHECK (length(cache_key) = 64),
+                            format TEXT NOT NULL CHECK (format = 'dolphin-embedding-input-v1'),
+                            provider TEXT NOT NULL CHECK (provider = 'openai'),
+                            model TEXT NOT NULL CHECK (model = 'text-embedding-3-small'),
+                            dimensions INTEGER NOT NULL CHECK (dimensions = 1536),
+                            contract_version INTEGER NOT NULL CHECK (contract_version = 1),
+                            vector BLOB NOT NULL CHECK (length(vector) = 6144),
+                            entry_mac TEXT NOT NULL CHECK (length(entry_mac) = 64),
+                            created_at TEXT NOT NULL CHECK (length(created_at) BETWEEN 1 AND 64)
+                        ) STRICT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        CREATE INDEX embedding_cache_entries_created
+                        ON embedding_cache_entries (created_at, cache_key)
+                        """
+                    )
+                    connection.execute(
+                        """
                         CREATE TABLE IF NOT EXISTS workspace_operations (
                             operation_id TEXT PRIMARY KEY,
                             workspace_id TEXT NOT NULL REFERENCES workspace_registrations(workspace_id),
